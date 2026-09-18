@@ -906,6 +906,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_team_income: {
+        Args: { _amount: number; _user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
