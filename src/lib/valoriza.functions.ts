@@ -201,6 +201,8 @@ export const spinLuckyWheel = createServerFn({ method: "POST" })
       }
     }
 
+    if (!won) throw new Error("NO_PRIZES_CONFIGURED");
+
     const value = Number(won.prize_value);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
