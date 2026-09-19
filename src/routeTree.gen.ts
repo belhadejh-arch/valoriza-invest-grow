@@ -13,10 +13,16 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthenticatedAccountRouteImport } from './routes/_authenticated/account'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedDepositRouteImport } from './routes/_authenticated/deposit'
 import { Route as AuthenticatedHomeRouteImport } from './routes/_authenticated/home'
 import { Route as AuthenticatedInvestmentRouteImport } from './routes/_authenticated/investment'
+import { Route as AuthenticatedRecordsRouteImport } from './routes/_authenticated/records'
 import { Route as AuthenticatedRewardsRouteImport } from './routes/_authenticated/rewards'
+import { Route as AuthenticatedSupportRouteImport } from './routes/_authenticated/support'
+import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedTeamRouteImport } from './routes/_authenticated/team'
+import { Route as AuthenticatedWithdrawalRouteImport } from './routes/_authenticated/withdrawal'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -37,6 +43,16 @@ const AuthenticatedAccountRoute = AuthenticatedAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedDepositRoute = AuthenticatedDepositRouteImport.update({
+  id: '/deposit',
+  path: '/deposit',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
   id: '/home',
   path: '/home',
@@ -47,9 +63,24 @@ const AuthenticatedInvestmentRoute = AuthenticatedInvestmentRouteImport.update({
   path: '/investment',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRecordsRoute = AuthenticatedRecordsRouteImport.update({
+  id: '/records',
+  path: '/records',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedRewardsRoute = AuthenticatedRewardsRouteImport.update({
   id: '/rewards',
   path: '/rewards',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSupportRoute = AuthenticatedSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTasksRoute = AuthenticatedTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedTeamRoute = AuthenticatedTeamRouteImport.update({
@@ -57,24 +88,41 @@ const AuthenticatedTeamRoute = AuthenticatedTeamRouteImport.update({
   path: '/team',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedWithdrawalRoute = AuthenticatedWithdrawalRouteImport.update({
+  id: '/withdrawal',
+  path: '/withdrawal',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AuthenticatedAccountRoute
+  '/admin': typeof AuthenticatedAdminRoute
+  '/deposit': typeof AuthenticatedDepositRoute
   '/home': typeof AuthenticatedHomeRoute
   '/investment': typeof AuthenticatedInvestmentRoute
+  '/records': typeof AuthenticatedRecordsRoute
   '/rewards': typeof AuthenticatedRewardsRoute
+  '/support': typeof AuthenticatedSupportRoute
+  '/tasks': typeof AuthenticatedTasksRoute
   '/team': typeof AuthenticatedTeamRoute
+  '/withdrawal': typeof AuthenticatedWithdrawalRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AuthenticatedAccountRoute
+  '/admin': typeof AuthenticatedAdminRoute
+  '/deposit': typeof AuthenticatedDepositRoute
   '/home': typeof AuthenticatedHomeRoute
   '/investment': typeof AuthenticatedInvestmentRoute
+  '/records': typeof AuthenticatedRecordsRoute
   '/rewards': typeof AuthenticatedRewardsRoute
+  '/support': typeof AuthenticatedSupportRoute
+  '/tasks': typeof AuthenticatedTasksRoute
   '/team': typeof AuthenticatedTeamRoute
+  '/withdrawal': typeof AuthenticatedWithdrawalRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -82,28 +130,64 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/about': typeof AboutRoute
   '/_authenticated/account': typeof AuthenticatedAccountRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/deposit': typeof AuthenticatedDepositRoute
   '/_authenticated/home': typeof AuthenticatedHomeRoute
   '/_authenticated/investment': typeof AuthenticatedInvestmentRoute
+  '/_authenticated/records': typeof AuthenticatedRecordsRoute
   '/_authenticated/rewards': typeof AuthenticatedRewardsRoute
+  '/_authenticated/support': typeof AuthenticatedSupportRoute
+  '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/_authenticated/team': typeof AuthenticatedTeamRoute
+  '/_authenticated/withdrawal': typeof AuthenticatedWithdrawalRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/about' | '/account' | '/home' | '/investment' | '/rewards' | '/team'
+    | '/'
+    | '/about'
+    | '/account'
+    | '/admin'
+    | '/deposit'
+    | '/home'
+    | '/investment'
+    | '/records'
+    | '/rewards'
+    | '/support'
+    | '/tasks'
+    | '/team'
+    | '/withdrawal'
   fileRoutesByTo: FileRoutesByTo
   to:
-    '/' | '/about' | '/account' | '/home' | '/investment' | '/rewards' | '/team'
+    | '/'
+    | '/about'
+    | '/account'
+    | '/admin'
+    | '/deposit'
+    | '/home'
+    | '/investment'
+    | '/records'
+    | '/rewards'
+    | '/support'
+    | '/tasks'
+    | '/team'
+    | '/withdrawal'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/about'
     | '/_authenticated/account'
+    | '/_authenticated/admin'
+    | '/_authenticated/deposit'
     | '/_authenticated/home'
     | '/_authenticated/investment'
+    | '/_authenticated/records'
     | '/_authenticated/rewards'
+    | '/_authenticated/support'
+    | '/_authenticated/tasks'
     | '/_authenticated/team'
+    | '/_authenticated/withdrawal'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -142,6 +226,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAccountRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/deposit': {
+      id: '/_authenticated/deposit'
+      path: '/deposit'
+      fullPath: '/deposit'
+      preLoaderRoute: typeof AuthenticatedDepositRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/home': {
       id: '/_authenticated/home'
       path: '/home'
@@ -156,11 +254,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInvestmentRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/records': {
+      id: '/_authenticated/records'
+      path: '/records'
+      fullPath: '/records'
+      preLoaderRoute: typeof AuthenticatedRecordsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/rewards': {
       id: '/_authenticated/rewards'
       path: '/rewards'
       fullPath: '/rewards'
       preLoaderRoute: typeof AuthenticatedRewardsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/support': {
+      id: '/_authenticated/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof AuthenticatedSupportRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tasks': {
+      id: '/_authenticated/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof AuthenticatedTasksRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/team': {
@@ -170,23 +289,42 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTeamRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/withdrawal': {
+      id: '/_authenticated/withdrawal'
+      path: '/withdrawal'
+      fullPath: '/withdrawal'
+      preLoaderRoute: typeof AuthenticatedWithdrawalRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAccountRoute: typeof AuthenticatedAccountRoute
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedDepositRoute: typeof AuthenticatedDepositRoute
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedInvestmentRoute: typeof AuthenticatedInvestmentRoute
+  AuthenticatedRecordsRoute: typeof AuthenticatedRecordsRoute
   AuthenticatedRewardsRoute: typeof AuthenticatedRewardsRoute
+  AuthenticatedSupportRoute: typeof AuthenticatedSupportRoute
+  AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
   AuthenticatedTeamRoute: typeof AuthenticatedTeamRoute
+  AuthenticatedWithdrawalRoute: typeof AuthenticatedWithdrawalRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAccountRoute: AuthenticatedAccountRoute,
+  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedDepositRoute: AuthenticatedDepositRoute,
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedInvestmentRoute: AuthenticatedInvestmentRoute,
+  AuthenticatedRecordsRoute: AuthenticatedRecordsRoute,
   AuthenticatedRewardsRoute: AuthenticatedRewardsRoute,
+  AuthenticatedSupportRoute: AuthenticatedSupportRoute,
+  AuthenticatedTasksRoute: AuthenticatedTasksRoute,
   AuthenticatedTeamRoute: AuthenticatedTeamRoute,
+  AuthenticatedWithdrawalRoute: AuthenticatedWithdrawalRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
