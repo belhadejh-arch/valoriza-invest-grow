@@ -347,9 +347,7 @@ export const getAdminDeposits = createServerFn({ method: "GET" })
       }
     }
 
-    return merged.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   });
 
 export const reviewDeposit = createServerFn({ method: "POST" })
@@ -377,10 +375,7 @@ export const reviewDeposit = createServerFn({ method: "POST" })
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         await supabaseAdmin.from("notifications").insert({
           user_id: storeResult.deposit.userId,
-          title_ar:
-            data.action === "approve"
-              ? "تمت الموافقة على الإيداع"
-              : "تم رفض طلب الإيداع",
+          title_ar: data.action === "approve" ? "تمت الموافقة على الإيداع" : "تم رفض طلب الإيداع",
           body_ar:
             data.action === "approve"
               ? `تمت الموافقة على طلب إيداعك بمبلغ $${storeResult.deposit.amount.toFixed(2)} (${storeResult.deposit.network}) وتمت إضافته إلى رصيدك بنجاح.`

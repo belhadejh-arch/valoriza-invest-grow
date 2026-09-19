@@ -608,9 +608,7 @@ class ValorizaStore {
     if (userId) {
       return this.db.deposits
         .filter((d) => d.userId === userId)
-        .sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     return this.db.deposits.sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),

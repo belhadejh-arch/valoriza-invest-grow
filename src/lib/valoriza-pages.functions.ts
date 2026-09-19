@@ -605,7 +605,9 @@ export const createDepositRequest = createServerFn({ method: "POST" })
     }) => {
       if (
         !data ||
-        !["USDT-ERC20", "USDT-BEP20", "USDT-TRC20", "ERC20", "BEP20", "TRC20"].includes(data.network) ||
+        !["USDT-ERC20", "USDT-BEP20", "USDT-TRC20", "ERC20", "BEP20", "TRC20"].includes(
+          data.network,
+        ) ||
         typeof data.amount !== "number"
       ) {
         throw new Error("INVALID_INPUT");
@@ -627,7 +629,7 @@ export const createDepositRequest = createServerFn({ method: "POST" })
     }
 
     const netKey = data.network.replace("USDT-", "");
-    const normalizedNetwork = (`USDT-${netKey}`) as "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20";
+    const normalizedNetwork = `USDT-${netKey}` as "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20";
 
     const depositAddress =
       settings[`deposit_address_${netKey}`] ||

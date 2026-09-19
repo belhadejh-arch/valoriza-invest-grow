@@ -141,6 +141,27 @@
       "activatedAt": "2026-09-19T11:32:48.363Z",
       "expiresAt": "2027-09-19T11:32:48.363Z",
       "status": "active"
+    },
+    "user-vip-trial-1789820024500": {
+      "userId": "user-vip-trial-1789820024500",
+      "vipLevel": 3,
+      "activatedAt": "2026-09-19T12:13:44.500Z",
+      "expiresAt": "2027-09-19T12:13:44.500Z",
+      "status": "active"
+    },
+    "user-vip4-1789820024500": {
+      "userId": "user-vip4-1789820024500",
+      "vipLevel": 4,
+      "activatedAt": "2026-09-19T12:13:44.500Z",
+      "expiresAt": "2027-09-19T12:13:44.500Z",
+      "status": "active"
+    },
+    "user-limit-test-1789820024503": {
+      "userId": "user-limit-test-1789820024503",
+      "vipLevel": 1,
+      "activatedAt": "2026-09-19T12:13:44.503Z",
+      "expiresAt": "2027-09-19T12:13:44.503Z",
+      "status": "active"
     }
   },
   "userTrials": {
@@ -201,6 +222,28 @@
       "dailyProfit": 1.2,
       "startedAt": "2026-09-19T11:32:48.360Z",
       "expiresAt": "2026-09-19T11:32:38.360Z",
+      "hasUsedTrial": true
+    },
+    "user-trial-test-1789820024498": {
+      "userId": "user-trial-test-1789820024498",
+      "isActive": true,
+      "status": "active",
+      "durationDays": 3,
+      "dailyTasks": 3,
+      "dailyProfit": 1.2,
+      "startedAt": "2026-09-19T12:13:44.498Z",
+      "expiresAt": "2026-09-22T12:13:44.498Z",
+      "hasUsedTrial": true
+    },
+    "user-expired-trial-1789820024499": {
+      "userId": "user-expired-trial-1789820024499",
+      "isActive": false,
+      "status": "expired",
+      "durationDays": 3,
+      "dailyTasks": 3,
+      "dailyProfit": 1.2,
+      "startedAt": "2026-09-19T12:13:44.499Z",
+      "expiresAt": "2026-09-19T12:13:34.499Z",
       "hasUsedTrial": true
     }
   },
@@ -457,9 +500,69 @@
       "status": "REWARDED",
       "reward": 1.25,
       "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789820024501-1cpm",
+      "userId": "user-dup-test-1789820024500",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T12:13:44.500Z",
+      "completedAt": "2026-09-19T12:13:44.500Z",
+      "status": "REWARDED",
+      "reward": 0.4,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789820024504-z4ae",
+      "userId": "user-limit-test-1789820024503",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T12:13:44.504Z",
+      "completedAt": "2026-09-19T12:13:44.504Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789820024505-eoog",
+      "userId": "user-limit-test-1789820024503",
+      "taskId": "task-yt-2",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T12:13:44.505Z",
+      "completedAt": "2026-09-19T12:13:44.505Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789820024506-q082",
+      "userId": "user-reward-test-1789820024506",
+      "taskId": "task-yt-5",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T12:13:44.506Z",
+      "completedAt": "2026-09-19T12:13:44.506Z",
+      "status": "REWARDED",
+      "reward": 1.25,
+      "watchedSeconds": 10
     }
   ],
   "deposits": [
+    {
+      "id": "dep-1789820024507-cz1z",
+      "userId": "user-dep-1789820024507",
+      "userEmail": "dep@test.com",
+      "username": "DepositUser",
+      "network": "USDT-TRC20",
+      "amount": 100,
+      "depositAddress": "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+      "screenshotUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "txHash": "TXID987654321",
+      "status": "approved",
+      "createdAt": "2026-09-19T12:13:44.507Z",
+      "reviewedAt": "2026-09-19T12:13:44.508Z",
+      "reviewedBy": "admin-tester",
+      "rejectReason": "Approved by QA test"
+    },
     {
       "id": "dep-1789817568368-w5lz",
       "userId": "user-dep-1789817568368",
@@ -577,6 +680,42 @@
     },
     "user-dep-1789817568368": {
       "userId": "user-dep-1789817568368",
+      "balance": 100,
+      "totalDeposited": 100,
+      "totalWithdrawn": 0,
+      "totalEarned": 0,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-dup-test-1789820024500": {
+      "userId": "user-dup-test-1789820024500",
+      "balance": 0.4,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.4,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-limit-test-1789820024503": {
+      "userId": "user-limit-test-1789820024503",
+      "balance": 0.5,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.5,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-reward-test-1789820024506": {
+      "userId": "user-reward-test-1789820024506",
+      "balance": 1.25,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 1.25,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-dep-1789820024507": {
+      "userId": "user-dep-1789820024507",
       "balance": 100,
       "totalDeposited": 100,
       "totalWithdrawn": 0,

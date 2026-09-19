@@ -60,7 +60,7 @@ export const getTasksData = createServerFn({ method: "GET" })
 
     // 3. Check Trial status
     const trialInfo = store.getUserTrial(userId);
-    let isTrial = trialInfo.isActive || Boolean(profile?.trial_active);
+    const isTrial = trialInfo.isActive || Boolean(profile?.trial_active);
 
     // If VIP expired, reset level to 0
     if (userVip && userVip.status === "expired" && vipLevel === userVip.vipLevel) {
@@ -158,18 +158,12 @@ export const getTasksData = createServerFn({ method: "GET" })
 
 export const completeTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator(
-    (data: {
-      taskId: string;
-      watchedSeconds: number;
-      startedAt?: string;
-    }) => {
-      if (!data || typeof data.taskId !== "string" || typeof data.watchedSeconds !== "number") {
-        throw new Error("INVALID_INPUT");
-      }
-      return data;
-    },
-  )
+  .validator((data: { taskId: string; watchedSeconds: number; startedAt?: string }) => {
+    if (!data || typeof data.taskId !== "string" || typeof data.watchedSeconds !== "number") {
+      throw new Error("INVALID_INPUT");
+    }
+    return data;
+  })
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { taskId, watchedSeconds } = data;
@@ -189,8 +183,8 @@ export const completeTask = createServerFn({ method: "POST" })
 
     const userVip = store.getUserVip(userId);
     const trialInfo = store.getUserTrial(userId);
-    let vipLevel = profile?.vip_level ?? userVip?.vipLevel ?? 0;
-    let isTrial = trialInfo.isActive || Boolean(profile?.trial_active);
+    const vipLevel = profile?.vip_level ?? userVip?.vipLevel ?? 0;
+    const isTrial = trialInfo.isActive || Boolean(profile?.trial_active);
 
     let videoCommission = 0.4;
     let dailyLimit = 3;
@@ -438,10 +432,7 @@ export const markNotificationAsRead = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     try {
       if (data.markAll) {
-        await supabase
-          .from("notifications")
-          .update({ is_read: true })
-          .eq("user_id", userId);
+        await supabase.from("notifications").update({ is_read: true }).eq("user_id", userId);
       } else if (data.notificationId) {
         await supabase
           .from("notifications")

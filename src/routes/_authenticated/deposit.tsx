@@ -19,10 +19,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
-import {
-  createDepositRequest,
-  getCompanySettingsAndSupport,
-} from "@/lib/valoriza-pages.functions";
+import { createDepositRequest, getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
   head: () => ({
@@ -68,8 +65,7 @@ function DepositPage() {
       configData?.settings?.["deposit_address_BEP20"] ||
       "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
     "USDT-TRC20":
-      configData?.settings?.["deposit_address_TRC20"] ||
-      "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+      configData?.settings?.["deposit_address_TRC20"] || "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
   };
 
   const currentAddress = depositAddresses[network];
@@ -118,11 +114,8 @@ function DepositPage() {
   };
 
   const depositMutation = useMutation({
-    mutationFn: (vals: {
-      network: NetworkType;
-      amount: number;
-      screenshotUrl: string;
-    }) => submitDeposit({ data: vals }),
+    mutationFn: (vals: { network: NetworkType; amount: number; screenshotUrl: string }) =>
+      submitDeposit({ data: vals }),
     onSuccess: (res) => {
       if (res.ok) {
         toast.success("تم تقديم طلب الإيداع بنجاح! سيتم مراجعته وتأكيد الرصيد بعد الفحص.");
@@ -371,7 +364,9 @@ function DepositPage() {
                 <ImageIcon className="h-6 w-6" />
               </div>
               <span className="text-xs font-bold text-[#00d2ff]">اختر لقطة الشاشة</span>
-              <span className="text-[10px] text-gray-400">انقر هنا لاختيار الصورة من الهاتف أو السحب والإفلات</span>
+              <span className="text-[10px] text-gray-400">
+                انقر هنا لاختيار الصورة من الهاتف أو السحب والإفلات
+              </span>
             </label>
           ) : (
             <div className="space-y-3">
