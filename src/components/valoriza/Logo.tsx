@@ -7,7 +7,13 @@ export function Logo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
 
   return (
     <div className="flex items-center gap-2">
-      <img src={mark} alt="Valoriza" className={`${dims} shrink-0 object-contain`} width={816} height={816} />
+      <img
+        src={mark}
+        alt="Valoriza"
+        className={`${dims} shrink-0 object-contain`}
+        width={816}
+        height={816}
+      />
       <div className="leading-none" dir="ltr">
         <div className={`${title} font-extrabold tracking-tight text-gold-gradient`}>Valoriza</div>
         <div className={`${sub} mt-1 font-medium tracking-wide text-muted-foreground`}>

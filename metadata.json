@@ -1,0 +1,6 @@
+{
+  "name": "Valoriza",
+  "description": "منصة Valoriza للاستثمار: صناديق توفير، باقات VIP، مهام يومية ومكافآت الفريق.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

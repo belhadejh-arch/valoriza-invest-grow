@@ -127,7 +127,12 @@ function AuthPage() {
 
           <form onSubmit={handleSubmit} className="mt-5 space-y-3">
             {mode === "register" && (
-              <Field icon={User} placeholder="اسم المستخدم" value={form.username} onChange={set("username")} />
+              <Field
+                icon={User}
+                placeholder="اسم المستخدم"
+                value={form.username}
+                onChange={set("username")}
+              />
             )}
             <Field
               icon={Mail}
@@ -138,7 +143,12 @@ function AuthPage() {
               required
             />
             {mode === "register" && (
-              <Field icon={Phone} placeholder="رقم الهاتف" value={form.phone} onChange={set("phone")} />
+              <Field
+                icon={Phone}
+                placeholder="رقم الهاتف"
+                value={form.phone}
+                onChange={set("phone")}
+              />
             )}
             <Field
               icon={Lock}
@@ -186,7 +196,9 @@ function AuthPage() {
           ].map(({ icon: Icon, label }) => (
             <li key={label} className="surface-card px-2 py-3">
               <Icon className="mx-auto h-5 w-5 text-cyan-glow" />
-              <span className="mt-1.5 block text-[11px] font-semibold text-foreground">{label}</span>
+              <span className="mt-1.5 block text-[11px] font-semibold text-foreground">
+                {label}
+              </span>
             </li>
           ))}
         </ul>
