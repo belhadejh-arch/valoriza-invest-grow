@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,13 +8,8 @@ import {
   Clock,
   Crown,
   Sparkles,
-  ArrowRight,
   ShieldCheck,
-  AlertCircle,
   X,
-  Volume2,
-  VolumeX,
-  TrendingUp,
   Gift,
   RefreshCw,
 } from "lucide-react";
@@ -32,6 +27,14 @@ export const Route = createFileRoute("/_authenticated/tasks")({
   component: TasksPage,
 });
 
+function getYouTubeEmbedUrl(url: string): string {
+  const match = url?.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/,
+  );
+  const id = match ? match[1] : "kYJvM9l_83w";
+  return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1`;
+}
+
 function TasksPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"tasks" | "daily">("tasks");
@@ -39,10 +42,7 @@ function TasksPage() {
   // Video Watching Modal State
   const [activeWatchTask, setActiveWatchTask] = useState<TaskItem | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(10);
-  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [watchedSeconds, setWatchedSeconds] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const { data, isLoading, refetch } = useQuery<TasksPageData>({
     queryKey: ["tasks-data"],
@@ -94,13 +94,12 @@ function TasksPage() {
     setActiveWatchTask(task);
     setSecondsRemaining(duration);
     setWatchedSeconds(0);
-    setIsVideoPlaying(false);
   };
 
-  // Video timer effect
+  // Video timer effect - automatically counts down when modal opens
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (activeWatchTask && isVideoPlaying && secondsRemaining > 0) {
+    if (activeWatchTask && secondsRemaining > 0) {
       interval = setInterval(() => {
         setSecondsRemaining((prev) => {
           if (prev <= 1) {
@@ -115,7 +114,7 @@ function TasksPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [activeWatchTask, isVideoPlaying, secondsRemaining]);
+  }, [activeWatchTask, secondsRemaining]);
 
   const handleClaimReward = async () => {
     if (!activeWatchTask) return;
@@ -410,37 +409,21 @@ function TasksPage() {
               </button>
             </div>
 
-            {/* Video Player Box */}
+            {/* Video Player Box with YouTube iframe (Instruction 8: playsinline, no external navigation) */}
             <div className="relative mt-3 aspect-video w-full overflow-hidden rounded-2xl bg-black border border-border">
-              <video
-                ref={videoRef}
-                src={activeWatchTask.videoUrl}
-                className="h-full w-full object-cover"
-                autoPlay
-                playsInline
-                muted={isMuted}
-                onPlay={() => setIsVideoPlaying(true)}
-                onPause={() => setIsVideoPlaying(false)}
-                onEnded={() => {
-                  setIsVideoPlaying(false);
-                  setSecondsRemaining(0);
-                }}
+              <iframe
+                src={getYouTubeEmbedUrl(activeWatchTask.videoUrl)}
+                title={activeWatchTask.title}
+                className="h-full w-full object-cover border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
               />
 
-              {/* Mute/Unmute control */}
-              <button
-                type="button"
-                onClick={() => setIsMuted((prev) => !prev)}
-                className="absolute top-2.5 left-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 backdrop-blur-md text-white hover:bg-black/80"
-              >
-                {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-              </button>
-
               {/* Live Overlay Timer */}
-              <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 rounded-full bg-black/70 backdrop-blur-md px-3 py-1 border border-white/20">
+              <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 rounded-full bg-black/80 backdrop-blur-md px-3 py-1 border border-cyan-glow/40 shadow-lg">
                 <Clock className="h-3.5 w-3.5 text-cyan-glow animate-spin" />
                 <span className="text-xs font-black text-white">
-                  {secondsRemaining > 0 ? `${secondsRemaining} ثانية` : "اكتمل المشاهدة!"}
+                  {secondsRemaining > 0 ? `${secondsRemaining} ثانية` : "اكتملت المشاهدة!"}
                 </span>
               </div>
             </div>

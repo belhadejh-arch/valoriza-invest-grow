@@ -1,26 +1,27 @@
-import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useRef } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  ArrowDownLeft,
-  ArrowRight,
-  Check,
-  Clock,
+  ChevronRight,
+  Headphones,
   Copy,
-  Info,
+  Check,
   QrCode,
-  ShieldCheck,
-  Sparkles,
+  Coins,
+  Camera,
+  Image as ImageIcon,
+  Trash2,
+  Send,
+  RotateCcw,
+  Info,
+  CheckCircle2,
 } from "lucide-react";
 
-import { AppHeader } from "@/components/valoriza/AppHeader";
-import { BottomNav } from "@/components/valoriza/BottomNav";
 import {
   createDepositRequest,
   getCompanySettingsAndSupport,
-  getUserFinancialRecords,
 } from "@/lib/valoriza-pages.functions";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
@@ -38,17 +39,20 @@ export const Route = createFileRoute("/_authenticated/deposit")({
   component: DepositPage,
 });
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+type NetworkType = "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20";
 
 function DepositPage() {
   const qc = useQueryClient();
-  const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
+  const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [network, setNetwork] = useState<NetworkType>("USDT-ERC20");
   const [amount, setAmount] = useState<string>("");
-  const [txHash, setTxHash] = useState<string>("");
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const fetchSettings = useServerFn(getCompanySettingsAndSupport);
-  const fetchRecords = useServerFn(getUserFinancialRecords);
   const submitDeposit = useServerFn(createDepositRequest);
 
   const { data: configData } = useQuery({
@@ -56,19 +60,16 @@ function DepositPage() {
     queryFn: () => fetchSettings(),
   });
 
-  const { data: recordsData, isLoading: recordsLoading } = useQuery({
-    queryKey: ["financial-records"],
-    queryFn: () => fetchRecords(),
-  });
-
-  const depositAddresses: Record<string, string> = {
-    ERC20:
+  const depositAddresses: Record<NetworkType, string> = {
+    "USDT-ERC20":
       configData?.settings?.["deposit_address_ERC20"] ||
       "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
-    BEP20:
+    "USDT-BEP20":
       configData?.settings?.["deposit_address_BEP20"] ||
       "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
-    TRC20: configData?.settings?.["deposit_address_TRC20"] || "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+    "USDT-TRC20":
+      configData?.settings?.["deposit_address_TRC20"] ||
+      "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
   };
 
   const currentAddress = depositAddresses[network];
@@ -85,288 +86,380 @@ function DepositPage() {
     }
   };
 
+  // Handle Screenshot file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("يرجى اختيار ملف صورة صالح (PNG, JPG, JPEG)");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("حجم الصورة كبير جداً، الحد الأقصى 5 ميجابايت");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setScreenshotPreview(reader.result as string);
+      toast.success("تم تحميل لقطة الشاشة بنجاح");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveScreenshot = () => {
+    setScreenshotPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    toast.info("تمت إزالة لقطة الشاشة");
+  };
+
   const depositMutation = useMutation({
-    mutationFn: (vals: { network: "ERC20" | "BEP20" | "TRC20"; amount: number; txHash?: string }) =>
-      submitDeposit({ data: vals }),
+    mutationFn: (vals: {
+      network: NetworkType;
+      amount: number;
+      screenshotUrl: string;
+    }) => submitDeposit({ data: vals }),
     onSuccess: (res) => {
       if (res.ok) {
         toast.success("تم تقديم طلب الإيداع بنجاح! سيتم مراجعته وتأكيد الرصيد بعد الفحص.");
         setAmount("");
-        setTxHash("");
+        setScreenshotPreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         qc.invalidateQueries({ queryKey: ["financial-records"] });
+        qc.invalidateQueries({ queryKey: ["user-wallet"] });
+        setTimeout(() => {
+          navigate({ to: "/account" });
+        }, 1200);
+      } else if (res.reason === "SCREENSHOT_REQUIRED") {
+        toast.error("يجب تحميل لقطة شاشة لعملية التحويل لإتمام الطلب");
+      } else if (res.reason === "BELOW_MIN_DEPOSIT") {
+        toast.error(`الحد الأدنى للإيداع هو ${minDeposit} دولارات`);
       } else {
-        toast.error("تعذر إتمام الطلب: المبلغ أقل من الحد الأدنى");
+        toast.error("تعذر إتمام طلب الإيداع، يرجى التحقق من البيانات");
       }
     },
-    onError: () => toast.error("حدث خطأ أثناء معالجة الطلب"),
+    onError: () => toast.error("حدث خطأ في الاتصال، يرجى المحاولة لاحقاً"),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseFloat(amount);
+
     if (isNaN(num) || num < minDeposit) {
-      toast.error(`الحد الأدنى للإيداع هو ${minDeposit} دولارات`);
+      toast.error(`يرجى إدخال مبلغ صحيح. الحد الأدنى للإيداع هو ${minDeposit} دولارات`);
       return;
     }
+
+    if (!screenshotPreview) {
+      toast.error("يجب تحميل لقطة شاشة لعملية التحويل لإرسال الطلب");
+      return;
+    }
+
     depositMutation.mutate({
       network,
       amount: num,
-      txHash: txHash.trim() || undefined,
+      screenshotUrl: screenshotPreview,
     });
   };
 
   return (
-    <div className="min-h-screen bg-background pb-28" dir="rtl">
-      <AppHeader />
+    <div className="min-h-screen bg-[#071328] text-white pb-20 font-sans select-none" dir="rtl">
+      {/* Top App Header as in PDF Page 4 */}
+      <header className="sticky top-0 z-40 flex items-center justify-between px-4 py-3 bg-[#071328]/95 backdrop-blur-md border-b border-[#122b52]">
+        <Link
+          to="/account"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0d2242] text-white hover:bg-[#153463] transition-colors"
+          aria-label="العودة"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </Link>
+        <h1 className="text-lg font-bold text-white tracking-wide">الإيداع</h1>
+        <Link
+          to="/support"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0d2242] text-[#00e5ff] hover:bg-[#153463] transition-colors"
+          aria-label="خدمة العملاء"
+        >
+          <Headphones className="h-5 w-5" />
+        </Link>
+      </header>
 
-      <main className="mx-auto w-full max-w-lg px-4 pt-4">
-        {/* Navigation Breadcrumb */}
-        <div className="mb-4 flex items-center justify-between">
-          <Link
-            to="/account"
-            className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+      <main className="mx-auto w-full max-w-md px-4 pt-4 space-y-4">
+        {/* Network Selection - 3 Cards exactly as in PDF Page 4 */}
+        <div className="grid grid-cols-3 gap-2.5">
+          {/* ERC20 */}
+          <button
+            type="button"
+            onClick={() => setNetwork("USDT-ERC20")}
+            className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border transition-all duration-200 ${
+              network === "USDT-ERC20"
+                ? "bg-[#0b2247] border-[#00d2ff] shadow-[0_0_15px_rgba(0,210,255,0.3)] ring-1 ring-[#00d2ff]"
+                : "bg-[#0a1b36] border-[#132c54] text-gray-300 hover:border-[#1e427b]"
+            }`}
           >
-            <ArrowRight className="h-4 w-4" />
-            <span>العودة للحساب</span>
-          </Link>
-          <span className="text-xs font-extrabold text-cyan-glow flex items-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5" /> بوابة إيداع آمنة
-          </span>
+            {network === "USDT-ERC20" && (
+              <span className="absolute top-1.5 left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00d2ff] text-[#071328]">
+                <Check className="h-2.5 w-2.5 stroke-[3]" />
+              </span>
+            )}
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#26a17b]/20 border border-[#26a17b]/40 text-[#26a17b] mb-1.5">
+              <span className="font-extrabold text-sm tracking-tighter">₮</span>
+            </div>
+            <span className="text-xs font-bold text-white">USDT-ERC20</span>
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] text-gray-400">
+              <span className="h-2 w-2 rounded-full bg-indigo-400 inline-block" />
+              <span>ERC20</span>
+            </div>
+          </button>
+
+          {/* BEP20 */}
+          <button
+            type="button"
+            onClick={() => setNetwork("USDT-BEP20")}
+            className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border transition-all duration-200 ${
+              network === "USDT-BEP20"
+                ? "bg-[#0b2247] border-[#00d2ff] shadow-[0_0_15px_rgba(0,210,255,0.3)] ring-1 ring-[#00d2ff]"
+                : "bg-[#0a1b36] border-[#132c54] text-gray-300 hover:border-[#1e427b]"
+            }`}
+          >
+            {network === "USDT-BEP20" && (
+              <span className="absolute top-1.5 left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00d2ff] text-[#071328]">
+                <Check className="h-2.5 w-2.5 stroke-[3]" />
+              </span>
+            )}
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#26a17b]/20 border border-[#26a17b]/40 text-[#26a17b] mb-1.5">
+              <span className="font-extrabold text-sm tracking-tighter">₮</span>
+            </div>
+            <span className="text-xs font-bold text-white">USDT-BEP20</span>
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] text-yellow-400">
+              <span className="h-2 w-2 rotate-45 bg-yellow-400 inline-block" />
+              <span>BEP20</span>
+            </div>
+          </button>
+
+          {/* TRC20 */}
+          <button
+            type="button"
+            onClick={() => setNetwork("USDT-TRC20")}
+            className={`relative flex flex-col items-center justify-center p-3 rounded-2xl border transition-all duration-200 ${
+              network === "USDT-TRC20"
+                ? "bg-[#0b2247] border-[#00d2ff] shadow-[0_0_15px_rgba(0,210,255,0.3)] ring-1 ring-[#00d2ff]"
+                : "bg-[#0a1b36] border-[#132c54] text-gray-300 hover:border-[#1e427b]"
+            }`}
+          >
+            {network === "USDT-TRC20" && (
+              <span className="absolute top-1.5 left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00d2ff] text-[#071328]">
+                <Check className="h-2.5 w-2.5 stroke-[3]" />
+              </span>
+            )}
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#26a17b]/20 border border-[#26a17b]/40 text-[#26a17b] mb-1.5">
+              <span className="font-extrabold text-sm tracking-tighter">₮</span>
+            </div>
+            <span className="text-xs font-bold text-white">USDT-TRC20</span>
+            <div className="flex items-center gap-1 mt-0.5 text-[10px] text-red-400">
+              <span className="h-2 w-2 rounded-sm bg-red-500 inline-block" />
+              <span>TRC20</span>
+            </div>
+          </button>
         </div>
 
-        {/* Page Title Card matching PDF Page 6 */}
-        <section className="surface-card glow-border p-5 text-center relative overflow-hidden">
-          <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-cyan-glow/10 blur-2xl pointer-events-none" />
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-surface border border-gold/40 text-gold mb-2 shadow-glow">
-            <ArrowDownLeft className="h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-extrabold text-foreground">الإيداع</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            شحن الرصيد الفوري عبر شبكات العملات الرقمية المستقرة USDT
-          </p>
-        </section>
-
-        {/* Network Selection matching PDF Page 6 */}
-        <div className="mt-4">
-          <label className="block text-xs font-bold text-foreground mb-2">اختر شبكة الإيداع</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(["ERC20", "BEP20", "TRC20"] as const).map((net) => {
-              const isSelected = network === net;
-              return (
-                <button
-                  key={net}
-                  id={`btn-network-${net}`}
-                  type="button"
-                  onClick={() => setNetwork(net)}
-                  className={`relative flex flex-col items-center justify-center rounded-2xl border p-3 transition-all ${
-                    isSelected
-                      ? "border-cyan-glow bg-surface shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
-                      : "border-border/60 bg-navy hover:bg-surface/50"
-                  }`}
-                >
-                  {isSelected && (
-                    <span className="absolute top-1.5 left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-glow text-navy-deep">
-                      <Check className="h-2.5 w-2.5 stroke-[3]" />
-                    </span>
-                  )}
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-bold">
-                    ₮
-                  </div>
-                  <span className="mt-1.5 text-xs font-bold text-foreground">USDT-{net}</span>
-                  <span className="text-[10px] text-muted-foreground">{net}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Deposit Address Box matching PDF Page 6 */}
-        <div className="mt-4 surface-card p-4 glow-border">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-foreground">عنوان المحفظة للإيداع</span>
-            <span className="text-[11px] text-cyan-glow font-bold">شبكة {network}</span>
+        {/* Deposit Address Box - matching PDF Page 4 */}
+        <div className="rounded-2xl bg-[#091b38] border border-[#132d56] p-4 shadow-lg">
+          <div className="flex items-center gap-2 mb-2 text-[#00d2ff]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00d2ff]/15">
+              <Coins className="h-4 w-4" />
+            </div>
+            <span className="text-sm font-bold text-white">عنوان الإيداع</span>
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-navy-deep border border-border/80 p-3">
-            <code className="text-[11px] text-foreground font-mono truncate select-all" dir="ltr">
-              {currentAddress}
-            </code>
+          <div className="flex items-center gap-2 rounded-xl bg-[#051124] border border-[#12274b] p-2.5">
+            <div className="flex-1 overflow-hidden">
+              <p className="truncate text-xs font-mono text-gray-200 text-left" dir="ltr">
+                {currentAddress}
+              </p>
+            </div>
             <button
-              id="copy-deposit-address"
               type="button"
               onClick={copyAddress}
-              className="flex shrink-0 items-center gap-1.5 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow active:scale-95 transition-all"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0c2850] border border-[#00d2ff]/40 text-[#00d2ff] text-xs font-bold hover:bg-[#00d2ff] hover:text-[#071328] transition-all whitespace-nowrap"
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              <span>{copied ? "تم النسخ" : "نسخ"}</span>
+              <span>نسخ العنوان</span>
             </button>
           </div>
 
-          <div className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-surface/50 py-2 text-xs text-cyan-glow font-medium border border-cyan-glow/20">
-            <QrCode className="h-4 w-4" />
-            <span>امسح رمز الاستجابة السريعة (QR) أو انسخ العنوان للتحويل</span>
-          </div>
-        </div>
-
-        {/* Deposit Form */}
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-foreground mb-1.5">
-              مبلغ الإيداع (USDT)
-            </label>
-            <div className="relative">
-              <input
-                id="deposit-amount-input"
-                type="number"
-                min={minDeposit}
-                step="0.01"
-                placeholder={`أدخل المبلغ (الحد الأدنى ${minDeposit}$)`}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-                className="w-full rounded-2xl border border-border bg-navy px-4 py-3.5 text-sm font-bold text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
-              />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-extrabold text-gold">
-                USDT
-              </span>
-            </div>
-
-            {/* Presets */}
-            <div className="mt-2 flex items-center gap-2">
-              {[10, 50, 100, 250, 500].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => setAmount(preset.toString())}
-                  className="rounded-xl border border-border/70 bg-surface/60 px-2.5 py-1 text-xs font-bold text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow/50 transition-colors"
-                >
-                  ${preset}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-foreground mb-1.5">
-              معرّف المعاملة TXID (اختياري لتسريع التأكيد)
-            </label>
-            <input
-              id="deposit-txhash-input"
-              type="text"
-              placeholder="ضع رمز تجزئة التحويل (Hash/TxID) هنا"
-              value={txHash}
-              onChange={(e) => setTxHash(e.target.value)}
-              dir="ltr"
-              className="w-full rounded-2xl border border-border bg-navy px-4 py-3 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
-            />
-          </div>
-
+          {/* QR Code prompt button */}
           <button
-            id="submit-deposit-button"
-            type="submit"
-            disabled={depositMutation.isPending}
-            className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+            type="button"
+            onClick={() => setShowQrModal(!showQrModal)}
+            className="mt-3 flex items-center justify-center gap-2 w-full text-center text-xs font-medium text-[#00d2ff] hover:text-[#80e5ff] transition-colors"
           >
-            {depositMutation.isPending ? (
-              <span>جاري تقديم الطلب...</span>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                <span>تقديم طلب الإيداع</span>
-              </>
-            )}
+            <QrCode className="h-4 w-4" />
+            <span>يمكنك مسح رمز الاستجابة السريعة (QR) للإرسال الإيداع بسهولة</span>
           </button>
-        </form>
 
-        {/* Important Notes matching PDF Page 6 */}
-        <div className="mt-5 rounded-2xl border border-cyan-glow/30 bg-surface/70 p-4 text-xs leading-relaxed space-y-2">
-          <div className="flex items-center gap-1.5 font-bold text-cyan-glow">
-            <Info className="h-4 w-4 shrink-0" />
-            <span>ملاحظات هامة:</span>
-          </div>
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            <span>الإيداع متاح على مدار 24 ساعة يومياً.</span>
-          </p>
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            <span>الحد الأدنى للإيداع هو {minDeposit} دولارات.</span>
-          </p>
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
-            <span>يتم التأكيد وإضافة الرصيد بمجرد مراجعة العملية عبر البلوكشين.</span>
-          </p>
-        </div>
-
-        {/* Recent Deposits History */}
-        <section className="mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-extrabold text-foreground">سجل الإيداعات الأخيرة</h2>
-            <Link
-              to="/records"
-              search={{ tab: "deposits" }}
-              className="text-xs font-bold text-cyan-glow hover:underline"
-            >
-              عرض الكل ›
-            </Link>
-          </div>
-
-          {recordsLoading ? (
-            <p className="py-6 text-center text-xs text-muted-foreground">جارٍ التحميل...</p>
-          ) : !recordsData?.deposits || recordsData.deposits.length === 0 ? (
-            <div className="surface-card p-6 text-center text-xs text-muted-foreground">
-              لا توجد طلبات إيداع سابقة حتى الآن.
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {recordsData.deposits.slice(0, 5).map((dep) => (
-                <div
-                  key={dep.id}
-                  className="surface-card p-3 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-emerald-500/40 text-emerald-400 font-bold">
-                      ₮
-                    </div>
-                    <div>
-                      <p className="font-extrabold text-foreground">
-                        +{money(dep.amount)}{" "}
-                        <span className="text-[10px] text-muted-foreground">
-                          USDT-{dep.network}
-                        </span>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {new Date(dep.createdAt).toLocaleString("ar-EG", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    {dep.status === "approved" ? (
-                      <span className="rounded-full bg-success/20 border border-success/40 px-2.5 py-0.5 text-[10px] font-bold text-success">
-                        مكتمل ومؤكد
-                      </span>
-                    ) : dep.status === "rejected" ? (
-                      <span className="rounded-full bg-danger/20 border border-danger/40 px-2.5 py-0.5 text-[10px] font-bold text-danger">
-                        مرفوض
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-gold/20 border border-gold/40 px-2.5 py-0.5 text-[10px] font-bold text-gold">
-                        قيد المراجعة
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+          {/* QR Code Inline toggle */}
+          {showQrModal && (
+            <div className="mt-3 flex flex-col items-center justify-center p-3 rounded-xl bg-white text-black max-w-[200px] mx-auto animate-in fade-in duration-200">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                  currentAddress,
+                )}`}
+                alt="QR Code"
+                className="h-36 w-36"
+              />
+              <span className="text-[11px] font-bold text-gray-700 mt-1">{network}</span>
             </div>
           )}
-        </section>
-      </main>
+        </div>
 
-      <BottomNav />
+        {/* Amount Input Box - matching PDF Page 4 */}
+        <div className="rounded-2xl bg-[#091b38] border border-[#132d56] p-4 shadow-lg">
+          <div className="flex items-center gap-2 mb-2 text-[#00d2ff]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00d2ff]/15">
+              <Coins className="h-4 w-4" />
+            </div>
+            <span className="text-sm font-bold text-white">المبلغ</span>
+          </div>
+
+          <div className="relative flex items-center rounded-xl bg-[#051124] border border-[#12274b] px-3 py-2.5 focus-within:border-[#00d2ff] transition-colors">
+            <input
+              type="number"
+              step="any"
+              min={minDeposit}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="أدخل المبلغ بالدولار"
+              className="w-full bg-transparent text-sm font-bold text-white placeholder-gray-500 focus:outline-none"
+            />
+            <span className="text-xs font-extrabold text-[#00d2ff] bg-[#0c2850] px-2.5 py-1 rounded-md border border-[#00d2ff]/30">
+              USDT
+            </span>
+          </div>
+        </div>
+
+        {/* Screenshot Upload Box - Strictly in Deposit Page only (Instructions 12 & 13) */}
+        <div className="rounded-2xl bg-[#091b38] border border-[#132d56] p-4 shadow-lg">
+          <div className="flex items-center gap-2 mb-1 text-[#00d2ff]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#00d2ff]/15">
+              <Camera className="h-4 w-4" />
+            </div>
+            <span className="text-sm font-bold text-white">تحميل لقطة شاشة</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mb-3 pr-9">
+            قم بتحميل لقطة شاشة لعملية الإيداع الخاصة بك
+          </p>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*"
+            onChange={handleFileChange}
+            className="hidden"
+            id="screenshot-input"
+          />
+
+          {!screenshotPreview ? (
+            <label
+              htmlFor="screenshot-input"
+              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#1a3865] bg-[#051124]/70 p-6 cursor-pointer hover:border-[#00d2ff]/60 hover:bg-[#081833] transition-all group"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#0c2448] text-[#00d2ff] group-hover:scale-110 transition-transform">
+                <ImageIcon className="h-6 w-6" />
+              </div>
+              <span className="text-xs font-bold text-[#00d2ff]">اختر لقطة الشاشة</span>
+              <span className="text-[10px] text-gray-400">انقر هنا لاختيار الصورة من الهاتف أو السحب والإفلات</span>
+            </label>
+          ) : (
+            <div className="space-y-3">
+              {/* Preview Container */}
+              <div className="relative rounded-xl overflow-hidden border border-[#00d2ff]/40 bg-[#051124] max-h-56 flex items-center justify-center">
+                <img
+                  src={screenshotPreview}
+                  alt="Deposit Screenshot Preview"
+                  className="w-full h-auto max-h-56 object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveScreenshot}
+                  className="absolute top-2 left-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-600/90 text-white shadow-md hover:bg-red-700 transition-colors"
+                  title="حذف الصورة"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Action Buttons for Preview */}
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="screenshot-input"
+                  className="flex-1 text-center py-2 rounded-lg bg-[#0c2850] border border-[#00d2ff]/40 text-[#00d2ff] text-xs font-bold cursor-pointer hover:bg-[#00d2ff] hover:text-[#071328] transition-colors"
+                >
+                  تغيير لقطة الشاشة
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRemoveScreenshot}
+                  className="py-2 px-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-colors"
+                >
+                  حذف
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Submit Button - matching PDF Page 4 */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={depositMutation.isPending || !screenshotPreview || !amount}
+            className={`w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl text-sm font-extrabold text-white transition-all shadow-lg ${
+              depositMutation.isPending || !screenshotPreview || !amount
+                ? "bg-[#0f2c57] text-gray-400 cursor-not-allowed border border-[#183a6f]"
+                : "bg-gradient-to-r from-[#00b4db] to-[#0083b0] hover:from-[#00c6ff] hover:to-[#0072ff] active:scale-[0.99] shadow-[0_0_20px_rgba(0,180,219,0.4)]"
+            }`}
+          >
+            <Send className="h-4 w-4 rotate-180" />
+            <span>{depositMutation.isPending ? "جاري الإرسال..." : "تقديم"}</span>
+          </button>
+          <p className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400 text-center mt-2.5">
+            <RotateCcw className="h-3 w-3 text-[#00d2ff]" />
+            <span>بعد الضغط على تقديم سيتم إرسال طلب الإيداع</span>
+          </p>
+        </div>
+
+        {/* Notes Card - matching PDF Page 4 */}
+        <div className="rounded-2xl bg-[#091b38] border border-[#132d56] p-4 flex items-center justify-between shadow-lg">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#00d2ff] text-[#071328]">
+                <Info className="h-4 w-4" />
+              </div>
+              <span className="text-sm font-bold text-white">ملاحظات</span>
+            </div>
+            <div className="space-y-1.5 text-xs text-gray-300 pr-1">
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[#00d2ff] shrink-0" />
+                <span>الإيداع يكون على مدار 24 ساعة.</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[#00d2ff] shrink-0" />
+                <span>الحد الأدنى للإيداع هو 10 دولارات.</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Graphic badge */}
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#26a17b]/30 to-[#00d2ff]/20 border border-[#26a17b]/40 text-[#26a17b] shadow-[0_0_15px_rgba(38,161,123,0.3)] shrink-0">
+            <span className="text-3xl font-black">₮</span>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

@@ -20,6 +20,7 @@ export function AdminDepositsTab() {
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
 
   const {
     data: deposits = [],
@@ -190,6 +191,37 @@ export function AdminDepositsTab() {
                 </div>
               </div>
 
+              {/* Screenshot Display if available */}
+              {dep.screenshotUrl && (
+                <div className="mt-3 flex items-center justify-between rounded-xl bg-[#071730] p-2.5 border border-[#00d2ff]/30">
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewScreenshotUrl(dep.screenshotUrl)}
+                      className="relative h-12 w-12 rounded-lg overflow-hidden border border-[#00d2ff]/50 hover:scale-105 transition-transform shrink-0"
+                    >
+                      <img
+                        src={dep.screenshotUrl}
+                        alt="Screenshot"
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                    <div>
+                      <p className="text-xs font-bold text-white">لقطة شاشة التحويل</p>
+                      <p className="text-[10px] text-gray-400">انقر لمعاينة الصورة بالحجم الكامل</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewScreenshotUrl(dep.screenshotUrl)}
+                    className="flex items-center gap-1 text-xs font-bold text-[#00d2ff] bg-[#0c2850] px-2.5 py-1.5 rounded-lg border border-[#00d2ff]/30 hover:bg-[#00d2ff] hover:text-[#071328] transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span>معاينة الصورة</span>
+                  </button>
+                </div>
+              )}
+
               {dep.adminNote && (
                 <p className="mt-2 text-[10px] text-muted-foreground bg-surface/80 p-2 rounded-lg border border-border/50">
                   ملاحظة الإدارة: {dep.adminNote}
@@ -275,6 +307,31 @@ export function AdminDepositsTab() {
               >
                 {reviewMutation.isPending ? "جارٍ الرفض..." : "تأكيد الرفض"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Screenshot Preview Modal */}
+      {previewScreenshotUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="relative max-w-2xl w-full max-h-[90vh] flex flex-col items-center bg-[#071730] border border-[#00d2ff]/40 rounded-3xl p-4 overflow-hidden">
+            <div className="flex items-center justify-between w-full pb-3 border-b border-[#14325e]">
+              <span className="text-sm font-bold text-white">معاينة لقطة شاشة التحويل</span>
+              <button
+                type="button"
+                onClick={() => setPreviewScreenshotUrl(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-[#0c2448] text-white hover:bg-red-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-3 w-full flex-1 flex items-center justify-center overflow-auto max-h-[75vh]">
+              <img
+                src={previewScreenshotUrl}
+                alt="Deposit Proof"
+                className="max-w-full max-h-[72vh] object-contain rounded-xl border border-[#14325e]"
+              />
             </div>
           </div>
         </div>

@@ -4,16 +4,13 @@ import { Gift, Home, TrendingUp, User, Users, Video } from "lucide-react";
 export function BottomNav() {
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
-  const isTasksPage = currentPath.includes("/tasks");
 
-  // Dynamic 4th tab depending on route context matching PDF requirements
   const items = [
     { to: "/home", label: "الرئيسية", icon: Home },
     { to: "/investment", label: "الاستثمار", icon: TrendingUp },
     { to: "/team", label: "فريقي", icon: Users },
-    isTasksPage
-      ? { to: "/tasks", label: "المهام", icon: Video }
-      : { to: "/rewards", label: "المكافآت", icon: Gift },
+    { to: "/tasks", label: "المهام", icon: Video },
+    { to: "/rewards", label: "المكافآت", icon: Gift },
     { to: "/account", label: "حسابي", icon: User },
   ] as const;
 

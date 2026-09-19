@@ -1,0 +1,588 @@
+{
+  "vipPlans": [
+    {
+      "level": 1,
+      "name": "VIP 1",
+      "price": 13,
+      "dailyProfit": 0.5,
+      "dailyTasks": 2,
+      "taskReward": 0.25,
+      "durationDays": 365,
+      "accent": "green",
+      "isActive": true
+    },
+    {
+      "level": 2,
+      "name": "VIP 2",
+      "price": 27,
+      "dailyProfit": 1.2,
+      "dailyTasks": 3,
+      "taskReward": 0.4,
+      "durationDays": 365,
+      "accent": "blue",
+      "isActive": true
+    },
+    {
+      "level": 3,
+      "name": "VIP 3",
+      "price": 61,
+      "dailyProfit": 2.9,
+      "dailyTasks": 4,
+      "taskReward": 0.725,
+      "durationDays": 365,
+      "accent": "purple",
+      "isActive": true
+    },
+    {
+      "level": 4,
+      "name": "VIP 4",
+      "price": 131,
+      "dailyProfit": 6.4,
+      "dailyTasks": 5,
+      "taskReward": 1.28,
+      "durationDays": 365,
+      "accent": "gold",
+      "isActive": true
+    },
+    {
+      "level": 5,
+      "name": "VIP 5",
+      "price": 273,
+      "dailyProfit": 13.5,
+      "dailyTasks": 6,
+      "taskReward": 2.25,
+      "durationDays": 365,
+      "accent": "pink",
+      "isActive": true
+    },
+    {
+      "level": 6,
+      "name": "VIP 6",
+      "price": 569,
+      "dailyProfit": 28.5,
+      "dailyTasks": 7,
+      "taskReward": 4.071,
+      "durationDays": 365,
+      "accent": "emerald",
+      "isActive": true
+    },
+    {
+      "level": 7,
+      "name": "VIP 7",
+      "price": 1188,
+      "dailyProfit": 60,
+      "dailyTasks": 8,
+      "taskReward": 7.5,
+      "durationDays": 365,
+      "accent": "gold",
+      "isActive": true
+    }
+  ],
+  "userVips": {
+    "user-vip-trial-1789817496489": {
+      "userId": "user-vip-trial-1789817496489",
+      "vipLevel": 3,
+      "activatedAt": "2026-09-19T11:31:36.489Z",
+      "expiresAt": "2027-09-19T11:31:36.489Z",
+      "status": "active"
+    },
+    "user-vip4-1789817496489": {
+      "userId": "user-vip4-1789817496489",
+      "vipLevel": 4,
+      "activatedAt": "2026-09-19T11:31:36.489Z",
+      "expiresAt": "2027-09-19T11:31:36.489Z",
+      "status": "active"
+    },
+    "user-limit-test-1789817496491": {
+      "userId": "user-limit-test-1789817496491",
+      "vipLevel": 1,
+      "activatedAt": "2026-09-19T11:31:36.491Z",
+      "expiresAt": "2027-09-19T11:31:36.491Z",
+      "status": "active"
+    },
+    "user-vip-trial-1789817540162": {
+      "userId": "user-vip-trial-1789817540162",
+      "vipLevel": 3,
+      "activatedAt": "2026-09-19T11:32:20.162Z",
+      "expiresAt": "2027-09-19T11:32:20.162Z",
+      "status": "active"
+    },
+    "user-vip4-1789817540163": {
+      "userId": "user-vip4-1789817540163",
+      "vipLevel": 4,
+      "activatedAt": "2026-09-19T11:32:20.163Z",
+      "expiresAt": "2027-09-19T11:32:20.163Z",
+      "status": "active"
+    },
+    "user-limit-test-1789817540168": {
+      "userId": "user-limit-test-1789817540168",
+      "vipLevel": 1,
+      "activatedAt": "2026-09-19T11:32:20.168Z",
+      "expiresAt": "2027-09-19T11:32:20.168Z",
+      "status": "active"
+    },
+    "user-vip-trial-1789817568360": {
+      "userId": "user-vip-trial-1789817568360",
+      "vipLevel": 3,
+      "activatedAt": "2026-09-19T11:32:48.361Z",
+      "expiresAt": "2027-09-19T11:32:48.361Z",
+      "status": "active"
+    },
+    "user-vip4-1789817568361": {
+      "userId": "user-vip4-1789817568361",
+      "vipLevel": 4,
+      "activatedAt": "2026-09-19T11:32:48.361Z",
+      "expiresAt": "2027-09-19T11:32:48.361Z",
+      "status": "active"
+    },
+    "user-limit-test-1789817568363": {
+      "userId": "user-limit-test-1789817568363",
+      "vipLevel": 1,
+      "activatedAt": "2026-09-19T11:32:48.363Z",
+      "expiresAt": "2027-09-19T11:32:48.363Z",
+      "status": "active"
+    }
+  },
+  "userTrials": {
+    "user-trial-test-1789817496487": {
+      "userId": "user-trial-test-1789817496487",
+      "isActive": true,
+      "startedAt": "2026-09-19T11:31:36.487Z",
+      "expiresAt": "2026-09-22T11:31:36.487Z",
+      "hasUsedTrial": true
+    },
+    "user-expired-trial-1789817496488": {
+      "userId": "user-expired-trial-1789817496488",
+      "isActive": false,
+      "startedAt": "2026-09-19T11:31:36.488Z",
+      "expiresAt": "2026-09-19T11:31:26.489Z",
+      "hasUsedTrial": true,
+      "status": "expired"
+    },
+    "user-trial-test-1789817540160": {
+      "userId": "user-trial-test-1789817540160",
+      "isActive": true,
+      "status": "active",
+      "durationDays": 3,
+      "dailyTasks": 3,
+      "dailyProfit": 1.2,
+      "startedAt": "2026-09-19T11:32:20.160Z",
+      "expiresAt": "2026-09-22T11:32:20.160Z",
+      "hasUsedTrial": true
+    },
+    "user-expired-trial-1789817540162": {
+      "userId": "user-expired-trial-1789817540162",
+      "isActive": true,
+      "status": "active",
+      "durationDays": 3,
+      "dailyTasks": 3,
+      "dailyProfit": 1.2,
+      "startedAt": "2026-09-19T11:32:20.162Z",
+      "expiresAt": "2026-09-22T11:32:20.162Z",
+      "hasUsedTrial": true
+    },
+    "user-trial-test-1789817568358": {
+      "userId": "user-trial-test-1789817568358",
+      "isActive": true,
+      "status": "active",
+      "durationDays": 3,
+      "dailyTasks": 3,
+      "dailyProfit": 1.2,
+      "startedAt": "2026-09-19T11:32:48.358Z",
+      "expiresAt": "2026-09-22T11:32:48.358Z",
+      "hasUsedTrial": true
+    },
+    "user-expired-trial-1789817568360": {
+      "userId": "user-expired-trial-1789817568360",
+      "isActive": false,
+      "status": "expired",
+      "durationDays": 3,
+      "dailyTasks": 3,
+      "dailyProfit": 1.2,
+      "startedAt": "2026-09-19T11:32:48.360Z",
+      "expiresAt": "2026-09-19T11:32:38.360Z",
+      "hasUsedTrial": true
+    }
+  },
+  "tasks": [
+    {
+      "id": "task-yt-1",
+      "taskNumber": 1,
+      "title": "اكتشف أجمل الوجهات السياحية",
+      "description": "تعرف على أجمل الأماكن السياحية حول العالم وكيف تبني مستقبلك المالي.",
+      "youtubeId": "-RuSqMYcQK0",
+      "videoUrl": "https://www.youtube.com/embed/-RuSqMYcQK0",
+      "thumbnailUrl": "https://img.youtube.com/vi/-RuSqMYcQK0/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 1,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-2",
+      "taskNumber": 2,
+      "title": "تطوير مهاراتك المهنية",
+      "description": "تعلم كيف تستثمر بذكاء وتحقق أهدافك مع فالوريزا بخطوات عملية ومدروسة.",
+      "youtubeId": "66Z_Rgwrh7E",
+      "videoUrl": "https://www.youtube.com/embed/66Z_Rgwrh7E",
+      "thumbnailUrl": "https://img.youtube.com/vi/66Z_Rgwrh7E/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 2,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-3",
+      "taskNumber": 3,
+      "title": "مستقبل أفضل بيدك",
+      "description": "انضم إلى مجتمع فالوريزا وابدأ رحلتك نحو الحرية المالية اليوم.",
+      "youtubeId": "ELF0AM4Jrm0",
+      "videoUrl": "https://www.youtube.com/embed/ELF0AM4Jrm0",
+      "thumbnailUrl": "https://img.youtube.com/vi/ELF0AM4Jrm0/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 3,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-4",
+      "taskNumber": 4,
+      "title": "استراتيجيات الاستثمار الذكي",
+      "description": "قواعد تنويع الأصول وإدارة المخاطر لتحقيق عوائد سنوية ويومية مستمرة.",
+      "youtubeId": "SfXQw0hu73Y",
+      "videoUrl": "https://www.youtube.com/embed/SfXQw0hu73Y",
+      "thumbnailUrl": "https://img.youtube.com/vi/SfXQw0hu73Y/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 4,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-5",
+      "taskNumber": 5,
+      "title": "التحول الرقمي والذكاء المالي",
+      "description": "كيف تواكب الاقتصاد الرقمي الحديث وتستفيد من الفرص الاستثمارية الناشئة.",
+      "youtubeId": "Tlnl6w8OtQs",
+      "videoUrl": "https://www.youtube.com/embed/Tlnl6w8OtQs",
+      "thumbnailUrl": "https://img.youtube.com/vi/Tlnl6w8OtQs/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 5,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-6",
+      "taskNumber": 6,
+      "title": "إدارة الوقت والنمو المستدام",
+      "description": "خطوات تنظيم الأولويات وتحقيق التوازن المالي والشخصي لرواد الأعمال.",
+      "youtubeId": "ygLLiNT2AIQ",
+      "videoUrl": "https://www.youtube.com/embed/ygLLiNT2AIQ",
+      "thumbnailUrl": "https://img.youtube.com/vi/ygLLiNT2AIQ/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 6,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-7",
+      "taskNumber": 7,
+      "title": "بناء المحفظة الاستثمارية المتوازنة",
+      "description": "كيفية توزيع المدخرات بين الصناديق لتأمين أرباح شهرية تراكمية ومضمونة.",
+      "youtubeId": "DhRKKs71xP8",
+      "videoUrl": "https://www.youtube.com/embed/DhRKKs71xP8",
+      "thumbnailUrl": "https://img.youtube.com/vi/DhRKKs71xP8/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 7,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-8",
+      "taskNumber": 8,
+      "title": "التخطيط المالي والادخار الذكي",
+      "description": "أساليب الادخار التلقائي وبناء صندوق الطوارئ وتعزيز العوائد الاستثمارية.",
+      "youtubeId": "eaPCE8XqaRA",
+      "videoUrl": "https://www.youtube.com/embed/eaPCE8XqaRA",
+      "thumbnailUrl": "https://img.youtube.com/vi/eaPCE8XqaRA/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 8,
+      "isActive": true
+    },
+    {
+      "id": "task-yt-9",
+      "taskNumber": 9,
+      "title": "ريادة الأعمال والحرية المالية",
+      "description": "نصائح ملهمة للبدء في الاستثمار وبناء مصادر دخل إضافية ومستقلة.",
+      "youtubeId": "z4LaVLItrKc",
+      "videoUrl": "https://www.youtube.com/embed/z4LaVLItrKc",
+      "thumbnailUrl": "https://img.youtube.com/vi/z4LaVLItrKc/hqdefault.jpg",
+      "durationSeconds": 10,
+      "sortOrder": 9,
+      "isActive": true
+    }
+  ],
+  "taskCompletions": [
+    {
+      "id": "tc-1789817496490-7wk6",
+      "userId": "user-dup-test-1789817496490",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:31:36.490Z",
+      "completedAt": "2026-09-19T11:31:36.490Z",
+      "status": "REWARDED",
+      "reward": 0.4,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817496491-q1s7",
+      "userId": "user-limit-test-1789817496491",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:31:36.491Z",
+      "completedAt": "2026-09-19T11:31:36.491Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817496492-99m9",
+      "userId": "user-limit-test-1789817496491",
+      "taskId": "task-yt-2",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:31:36.492Z",
+      "completedAt": "2026-09-19T11:31:36.492Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817496492-py94",
+      "userId": "user-limit-test-1789817496491",
+      "taskId": "task-yt-3",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:31:36.492Z",
+      "completedAt": "2026-09-19T11:31:36.492Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817540167-sccn",
+      "userId": "user-dup-test-1789817540166",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:20.166Z",
+      "completedAt": "2026-09-19T11:32:20.166Z",
+      "status": "REWARDED",
+      "reward": 0.4,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817540168-exk9",
+      "userId": "user-limit-test-1789817540168",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:20.168Z",
+      "completedAt": "2026-09-19T11:32:20.168Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817540168-e00k",
+      "userId": "user-limit-test-1789817540168",
+      "taskId": "task-yt-2",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:20.168Z",
+      "completedAt": "2026-09-19T11:32:20.168Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817540169-aelo",
+      "userId": "user-limit-test-1789817540168",
+      "taskId": "task-yt-3",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:20.169Z",
+      "completedAt": "2026-09-19T11:32:20.169Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817540172-g7l7",
+      "userId": "user-reward-test-1789817540170",
+      "taskId": "task-yt-5",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:20.172Z",
+      "completedAt": "2026-09-19T11:32:20.172Z",
+      "status": "REWARDED",
+      "reward": 1.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817568362-pcs9",
+      "userId": "user-dup-test-1789817568361",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:48.361Z",
+      "completedAt": "2026-09-19T11:32:48.361Z",
+      "status": "REWARDED",
+      "reward": 0.4,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817568364-s9je",
+      "userId": "user-limit-test-1789817568363",
+      "taskId": "task-yt-1",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:48.364Z",
+      "completedAt": "2026-09-19T11:32:48.364Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817568366-7c39",
+      "userId": "user-limit-test-1789817568363",
+      "taskId": "task-yt-2",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:48.366Z",
+      "completedAt": "2026-09-19T11:32:48.366Z",
+      "status": "REWARDED",
+      "reward": 0.25,
+      "watchedSeconds": 10
+    },
+    {
+      "id": "tc-1789817568367-pm3w",
+      "userId": "user-reward-test-1789817568367",
+      "taskId": "task-yt-5",
+      "completionDate": "2026-09-19",
+      "startedAt": "2026-09-19T11:32:48.367Z",
+      "completedAt": "2026-09-19T11:32:48.367Z",
+      "status": "REWARDED",
+      "reward": 1.25,
+      "watchedSeconds": 10
+    }
+  ],
+  "deposits": [
+    {
+      "id": "dep-1789817568368-w5lz",
+      "userId": "user-dep-1789817568368",
+      "userEmail": "dep@test.com",
+      "username": "DepositUser",
+      "network": "USDT-TRC20",
+      "amount": 100,
+      "depositAddress": "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+      "screenshotUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "txHash": "TXID987654321",
+      "status": "approved",
+      "createdAt": "2026-09-19T11:32:48.368Z",
+      "reviewedAt": "2026-09-19T11:32:48.369Z",
+      "reviewedBy": "admin-tester",
+      "rejectReason": "Approved by QA test"
+    },
+    {
+      "id": "dep-1789817540172-kyoq",
+      "userId": "user-dep-1789817540172",
+      "userEmail": "dep@test.com",
+      "username": "DepositUser",
+      "network": "USDT-TRC20",
+      "amount": 100,
+      "depositAddress": "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+      "screenshotUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "txHash": "TXID987654321",
+      "status": "approved",
+      "createdAt": "2026-09-19T11:32:20.172Z",
+      "reviewedAt": "2026-09-19T11:32:20.173Z",
+      "reviewedBy": "admin-tester",
+      "rejectReason": "Approved by QA test"
+    }
+  ],
+  "wallets": {
+    "user-dup-test-1789817496490": {
+      "userId": "user-dup-test-1789817496490",
+      "balance": 0.4,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.4,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-limit-test-1789817496491": {
+      "userId": "user-limit-test-1789817496491",
+      "balance": 0.75,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.75,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-dup-test-1789817540166": {
+      "userId": "user-dup-test-1789817540166",
+      "balance": 0.4,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.4,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-limit-test-1789817540168": {
+      "userId": "user-limit-test-1789817540168",
+      "balance": 0.75,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.75,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-reward-test-1789817540170": {
+      "userId": "user-reward-test-1789817540170",
+      "balance": 1.25,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 1.25,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-dep-1789817540172": {
+      "userId": "user-dep-1789817540172",
+      "balance": 100,
+      "totalDeposited": 100,
+      "totalWithdrawn": 0,
+      "totalEarned": 0,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-dup-test-1789817568361": {
+      "userId": "user-dup-test-1789817568361",
+      "balance": 0.4,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.4,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-limit-test-1789817568363": {
+      "userId": "user-limit-test-1789817568363",
+      "balance": 0.5,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 0.5,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-reward-test-1789817568367": {
+      "userId": "user-reward-test-1789817568367",
+      "balance": 1.25,
+      "totalDeposited": 0,
+      "totalWithdrawn": 0,
+      "totalEarned": 1.25,
+      "investedBalance": 0,
+      "teamIncome": 0
+    },
+    "user-dep-1789817568368": {
+      "userId": "user-dep-1789817568368",
+      "balance": 100,
+      "totalDeposited": 100,
+      "totalWithdrawn": 0,
+      "totalEarned": 0,
+      "investedBalance": 0,
+      "teamIncome": 0
+    }
+  }
+}

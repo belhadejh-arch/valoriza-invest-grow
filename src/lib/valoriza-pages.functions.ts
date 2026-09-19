@@ -597,10 +597,15 @@ export const investInSavingsFund = createServerFn({ method: "POST" })
 export const createDepositRequest = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: { network: "ERC20" | "BEP20" | "TRC20"; amount: number; txHash?: string }) => {
+    (data: {
+      network: "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20" | "ERC20" | "BEP20" | "TRC20";
+      amount: number;
+      screenshotUrl?: string;
+      txHash?: string;
+    }) => {
       if (
         !data ||
-        !["ERC20", "BEP20", "TRC20"].includes(data.network) ||
+        !["USDT-ERC20", "USDT-BEP20", "USDT-TRC20", "ERC20", "BEP20", "TRC20"].includes(data.network) ||
         typeof data.amount !== "number"
       ) {
         throw new Error("INVALID_INPUT");
@@ -617,37 +622,63 @@ export const createDepositRequest = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "BELOW_MIN_DEPOSIT", minDeposit };
     }
 
+    if (!data.screenshotUrl || !data.screenshotUrl.trim()) {
+      return { ok: false as const, reason: "SCREENSHOT_REQUIRED" };
+    }
+
+    const netKey = data.network.replace("USDT-", "");
+    const normalizedNetwork = (`USDT-${netKey}`) as "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20";
+
     const depositAddress =
-      settings[`deposit_address_${data.network}`] ||
-      (data.network === "TRC20"
+      settings[`deposit_address_${netKey}`] ||
+      (netKey === "TRC20"
         ? "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk"
         : "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // Fetch user details
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, username")
+      .eq("id", userId)
+      .maybeSingle();
 
-    // Insert pending deposit - NO balance addition until Admin review!
-    const { data: dep, error } = await supabaseAdmin
-      .from("deposits")
-      .insert({
+    // Store in Valoriza Persistent Store
+    const { getValorizaStore } = await import("./valoriza-store");
+    const store = getValorizaStore();
+    const storeDep = store.createDeposit({
+      userId,
+      userEmail: profile?.email,
+      username: profile?.username,
+      network: normalizedNetwork,
+      amount: data.amount,
+      depositAddress,
+      screenshotUrl: data.screenshotUrl,
+      txHash: data.txHash?.trim() || undefined,
+    });
+
+    // Also attempt inserting into Supabase if accessible
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("deposits").insert({
+        id: storeDep.id,
         user_id: userId,
-        network: data.network,
+        network: netKey,
         amount: data.amount,
         deposit_address: depositAddress,
         tx_hash: data.txHash?.trim() || null,
         status: "pending",
-      })
-      .select("id, created_at")
-      .single();
-
-    if (error) throw new Error(error.message);
+      });
+    } catch {
+      // Non-blocking fallback handled by store
+    }
 
     return {
       ok: true as const,
-      depositId: dep.id,
+      depositId: storeDep.id,
       amount: data.amount,
-      network: data.network,
+      network: normalizedNetwork,
       depositAddress,
-      createdAt: dep.created_at,
+      createdAt: storeDep.createdAt,
     };
   });
 

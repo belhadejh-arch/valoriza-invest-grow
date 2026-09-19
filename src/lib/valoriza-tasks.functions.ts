@@ -1,27 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getValorizaStore, VideoTask } from "./valoriza-store";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
+export type TaskStatus = "LOCKED" | "AVAILABLE" | "WATCHING" | "COMPLETED" | "REWARDED";
 
 export type TaskItem = {
   id: string;
   taskNumber: number;
   title: string;
   description: string;
+  youtubeId: string;
   videoUrl: string;
   thumbnailUrl: string;
   durationSeconds: number;
   vipRequirement: string;
   reward: number;
   isCompletedToday: boolean;
+  status: TaskStatus;
 };
 
 export type TasksPageData = {
   vipLevel: number;
   vipName: string;
   isTrial: boolean;
+  trialExpiresAt: string | null;
   videoCommission: number;
   dailyLimit: number;
   completedCount: number;
@@ -29,80 +35,8 @@ export type TasksPageData = {
   videoDuration: number;
   tasks: TaskItem[];
   userBalance: number;
+  allDailyTasksCompleted: boolean;
 };
-
-const DEFAULT_REFERENCE_TASKS = [
-  {
-    id: "task-ref-1",
-    title_ar: "اكتشف أجمل الوجهات السياحية",
-    description_ar:
-      "استكشف أروع المعالم السياحية والمنتجعات العالمية وتعرف على فرص الاستثمار السياحي الرائدة في المدن التاريخية.",
-    video_url:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    thumbnail_url:
-      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
-    duration_seconds: 10,
-    sort_order: 1,
-  },
-  {
-    id: "task-ref-2",
-    title_ar: "تطوير مهاراتك المهنية",
-    description_ar:
-      "أهم استراتيجيات النمو الذاتي واكتساب مهارات القيادة وإدارة الأعمال الرقمية وتحقيق النجاح المؤسسي.",
-    video_url:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    thumbnail_url:
-      "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&auto=format&fit=crop&q=80",
-    duration_seconds: 10,
-    sort_order: 2,
-  },
-  {
-    id: "task-ref-3",
-    title_ar: "مستقبل أفضل بيدك",
-    description_ar:
-      "طرق التخطيط المالي الذكي وبناء الثروة المستدامة من خلال خيارات الاستثمار المتنوعة والادخار المنظم.",
-    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-    thumbnail_url:
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&auto=format&fit=crop&q=80",
-    duration_seconds: 10,
-    sort_order: 3,
-  },
-  {
-    id: "task-ref-4",
-    title_ar: "استراتيجيات الاستثمار الحديثة",
-    description_ar:
-      "تعلم أسرار تنويع المحفظة المالية وإدارة المخاطر لتحقيق عوائد سنوية ثابتة ومضمونة.",
-    video_url:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
-    thumbnail_url:
-      "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&auto=format&fit=crop&q=80",
-    duration_seconds: 10,
-    sort_order: 4,
-  },
-  {
-    id: "task-ref-5",
-    title_ar: "التحول الرقمي والذكاء الاصطناعي",
-    description_ar:
-      "كيف يغير الذكاء الاصطناعي والتكنولوجيا المالية مسار الاقتصاد العالمي وفرص العمل المستقبلية.",
-    video_url:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
-    thumbnail_url:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&auto=format&fit=crop&q=80",
-    duration_seconds: 10,
-    sort_order: 5,
-  },
-  {
-    id: "task-ref-6",
-    title_ar: "إدارة الوقت والإنتاجية الشخصية",
-    description_ar:
-      "خطوات عملية لتنظيم المهام اليومية وزيادة التركيز لتحقيق التوازن بين الحياة المهنية والمالية.",
-    video_url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
-    thumbnail_url:
-      "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&auto=format&fit=crop&q=80",
-    duration_seconds: 10,
-    sort_order: 6,
-  },
-];
 
 /* ---------------- GET TASKS DATA ---------------- */
 
@@ -110,133 +44,113 @@ export const getTasksData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<TasksPageData> => {
     const { supabase, userId } = context;
+    const store = getValorizaStore();
+    const currentDate = today();
 
-    // 1. Fetch user profile, wallet, platform settings, VIP packages
-    const [profileRes, walletRes, settingsRes, packagesRes, completionsRes, tasksRes] =
-      await Promise.all([
-        supabase
-          .from("profiles")
-          .select("vip_level, trial_active, trial_expires_at")
-          .eq("id", userId)
-          .single(),
-        supabase.from("wallets").select("balance").eq("user_id", userId).single(),
-        supabase.from("platform_settings").select("key, value"),
-        supabase
-          .from("vip_packages")
-          .select("level, name, daily_tasks, task_reward, daily_profit, is_active")
-          .order("level"),
-        supabase
-          .from("task_completions")
-          .select("task_id, reward, watched_seconds, created_at")
-          .eq("user_id", userId)
-          .eq("completion_date", today()),
-        supabase
-          .from("tasks")
-          .select(
-            "id, title_ar, description_ar, video_url, thumbnail_url, duration_seconds, sort_order, is_active",
-          )
-          .order("sort_order"),
-      ]);
+    // 1. Fetch user profile from Supabase if available
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("vip_level, trial_active, trial_expires_at, is_blocked")
+      .eq("id", userId)
+      .maybeSingle();
 
-    const settings: Record<string, string> = {};
-    for (const s of (settingsRes.data ?? []) as { key: string; value: string }[]) {
-      settings[s.key] = s.value;
+    // 2. Check VIP status from store & profile
+    const userVip = store.getUserVip(userId);
+    let vipLevel = profile?.vip_level ?? userVip?.vipLevel ?? 0;
+
+    // 3. Check Trial status
+    const trialInfo = store.getUserTrial(userId);
+    let isTrial = trialInfo.isActive || Boolean(profile?.trial_active);
+
+    // If VIP expired, reset level to 0
+    if (userVip && userVip.status === "expired" && vipLevel === userVip.vipLevel) {
+      vipLevel = 0;
     }
 
-    const vipLevel = profileRes.data?.vip_level ?? 0;
-    const isTrial = Boolean(profileRes.data?.trial_active);
-
-    // 2. Determine Video Commission and Daily Limit
+    // 4. Determine Commission, Limits & VIP Name
     let videoCommission = 0.4;
     let dailyLimit = 3;
-    let vipName = `VIP ${vipLevel}`;
+    let vipName = "VIP 2";
 
     if (vipLevel > 0) {
-      const userPkg = packagesRes.data?.find((p: any) => p.level === vipLevel);
-      if (userPkg) {
-        videoCommission = Number(userPkg.task_reward);
-        dailyLimit = userPkg.daily_tasks;
-        vipName = userPkg.name;
+      const plan = store.getVipPlan(vipLevel);
+      if (plan) {
+        videoCommission = plan.taskReward;
+        dailyLimit = plan.dailyTasks;
+        vipName = plan.name;
       } else {
-        // Fallback calculation
-        videoCommission = vipLevel === 1 ? 0.25 : vipLevel === 2 ? 0.4 : 0.725;
-        dailyLimit = vipLevel === 1 ? 2 : vipLevel === 2 ? 3 : 4;
+        videoCommission = 0.4;
+        dailyLimit = 3;
+        vipName = `VIP ${vipLevel}`;
       }
     } else if (isTrial) {
-      videoCommission = Number(settings["trial_task_reward"] ?? "0.5");
-      dailyLimit = Number(settings["trial_daily_tasks"] ?? "3");
-      vipName = "عضوية تجريبية";
-    } else {
-      // Default standard/demo tier
-      videoCommission = 0.4;
+      // Trial: 3 days, 3 daily tasks, $0.5 reward per task
+      videoCommission = 0.5;
       dailyLimit = 3;
-      vipName = "VIP 2 (تجريبي)";
+      vipName = "الفترة التجريبية";
+    } else {
+      // Default demo state
+      vipLevel = 2; // Default visual preview tier for demo per PDF
+      const plan = store.getVipPlan(2);
+      videoCommission = plan?.taskReward ?? 0.4;
+      dailyLimit = plan?.dailyTasks ?? 3;
+      vipName = "VIP 2";
     }
 
-    // 3. Completed task IDs today
-    const completedList = (completionsRes.data ?? []) as { task_id: string }[];
-    const completedTaskIds = new Set(completedList.map((c) => c.task_id));
+    // 5. Get completions for today
+    const completionsToday = store.getCompletionsForUserOnDate(userId, currentDate);
+    const completedTaskIds = new Set(completionsToday.map((c) => c.taskId));
     const completedCount = completedTaskIds.size;
     const remainingTasks = Math.max(0, dailyLimit - completedCount);
+    const allDailyTasksCompleted = completedCount >= dailyLimit;
 
-    // 4. Ensure tasks exist (fallback to reference tasks if empty in DB)
-    let rawTasks = tasksRes.data;
-    if (!rawTasks || rawTasks.length === 0) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        // Seed reference tasks
-        const { data: inserted } = await supabaseAdmin
-          .from("tasks")
-          .insert(
-            DEFAULT_REFERENCE_TASKS.map((t) => ({
-              title_ar: t.title_ar,
-              description_ar: t.description_ar,
-              video_url: t.video_url,
-              thumbnail_url: t.thumbnail_url,
-              duration_seconds: t.duration_seconds,
-              sort_order: t.sort_order,
-              is_active: true,
-            })),
-          )
-          .select();
-        if (inserted && inserted.length > 0) {
-          rawTasks = inserted;
-        }
-      } catch (err) {
-        console.warn("[getTasksData] Auto-seed tasks error:", err);
+    // 6. Map 9 YouTube Tasks
+    const allTasks = store.getTasks();
+
+    const tasks: TaskItem[] = allTasks.map((t, idx) => {
+      const isCompleted = completedTaskIds.has(t.id);
+      let status: TaskStatus = "AVAILABLE";
+
+      if (isCompleted) {
+        status = "REWARDED";
+      } else if (allDailyTasksCompleted) {
+        status = "LOCKED";
+      } else {
+        status = "AVAILABLE";
       }
-    }
 
-    const taskPool = rawTasks && rawTasks.length > 0 ? rawTasks : DEFAULT_REFERENCE_TASKS;
+      return {
+        id: t.id,
+        taskNumber: t.taskNumber || idx + 1,
+        title: t.title,
+        description: t.description,
+        youtubeId: t.youtubeId,
+        videoUrl: `https://www.youtube.com/embed/${t.youtubeId}?enablejsapi=1&playsinline=1&rel=0&modestbranding=1`,
+        thumbnailUrl: t.thumbnailUrl || `https://img.youtube.com/vi/${t.youtubeId}/hqdefault.jpg`,
+        durationSeconds: t.durationSeconds || 10,
+        vipRequirement: vipName,
+        reward: videoCommission,
+        isCompletedToday: isCompleted,
+        status,
+      };
+    });
 
-    const taskItems: TaskItem[] = taskPool.map((t: any, idx: number) => ({
-      id: t.id,
-      taskNumber: idx + 1,
-      title: t.title_ar,
-      description: t.description_ar || "شاهد الفيديو المخصص واكسب عمولتك اليومية فوراً.",
-      videoUrl:
-        t.video_url ||
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-      thumbnailUrl:
-        t.thumbnail_url ||
-        "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&auto=format&fit=crop&q=80",
-      durationSeconds: t.duration_seconds || 10,
-      vipRequirement: vipLevel > 0 ? `VIP ${vipLevel}` : isTrial ? "عضوية تجريبية" : "VIP 2",
-      reward: videoCommission,
-      isCompletedToday: completedTaskIds.has(t.id),
-    }));
+    // 7. Get user wallet balance
+    const wallet = store.getWallet(userId);
 
     return {
       vipLevel,
       vipName,
       isTrial,
+      trialExpiresAt: trialInfo.expiresAt,
       videoCommission,
       dailyLimit,
       completedCount,
       remainingTasks,
       videoDuration: 10,
-      tasks: taskItems,
-      userBalance: Number(walletRes.data?.balance ?? 0),
+      tasks,
+      userBalance: wallet.balance,
+      allDailyTasksCompleted,
     };
   });
 
@@ -244,224 +158,299 @@ export const getTasksData = createServerFn({ method: "GET" })
 
 export const completeTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: { taskId: string; watchedSeconds: number }) => {
-    if (!data || typeof data.taskId !== "string" || typeof data.watchedSeconds !== "number") {
-      throw new Error("INVALID_INPUT");
-    }
-    return data;
-  })
+  .validator(
+    (data: {
+      taskId: string;
+      watchedSeconds: number;
+      startedAt?: string;
+    }) => {
+      if (!data || typeof data.taskId !== "string" || typeof data.watchedSeconds !== "number") {
+        throw new Error("INVALID_INPUT");
+      }
+      return data;
+    },
+  )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const { taskId, watchedSeconds } = data;
+    const store = getValorizaStore();
+    const currentDate = today();
 
-    // 1. Fetch user & trial & package info
-    const [profileRes, settingsRes, packagesRes, completionsRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("vip_level, trial_active, is_blocked")
-        .eq("id", userId)
-        .single(),
-      supabase.from("platform_settings").select("key, value"),
-      supabase.from("vip_packages").select("level, daily_tasks, task_reward"),
-      supabase
-        .from("task_completions")
-        .select("task_id")
-        .eq("user_id", userId)
-        .eq("completion_date", today()),
-    ]);
+    // 1. Verify user status
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("vip_level, trial_active, is_blocked")
+      .eq("id", userId)
+      .maybeSingle();
 
-    if (profileRes.data?.is_blocked) {
+    if (profile?.is_blocked) {
       return { ok: false as const, reason: "ACCOUNT_BLOCKED" };
     }
 
-    const settings: Record<string, string> = {};
-    for (const s of (settingsRes.data ?? []) as { key: string; value: string }[]) {
-      settings[s.key] = s.value;
-    }
-
-    const vipLevel = profileRes.data?.vip_level ?? 0;
-    const isTrial = Boolean(profileRes.data?.trial_active);
+    const userVip = store.getUserVip(userId);
+    const trialInfo = store.getUserTrial(userId);
+    let vipLevel = profile?.vip_level ?? userVip?.vipLevel ?? 0;
+    let isTrial = trialInfo.isActive || Boolean(profile?.trial_active);
 
     let videoCommission = 0.4;
     let dailyLimit = 3;
 
     if (vipLevel > 0) {
-      const userPkg = packagesRes.data?.find((p: any) => p.level === vipLevel);
-      if (userPkg) {
-        videoCommission = Number(userPkg.task_reward);
-        dailyLimit = userPkg.daily_tasks;
+      const plan = store.getVipPlan(vipLevel);
+      if (plan) {
+        videoCommission = plan.taskReward;
+        dailyLimit = plan.dailyTasks;
       }
     } else if (isTrial) {
-      videoCommission = Number(settings["trial_task_reward"] ?? "0.5");
-      dailyLimit = Number(settings["trial_daily_tasks"] ?? "3");
+      videoCommission = 0.5;
+      dailyLimit = 3;
+    } else {
+      // Default tier VIP 2
+      const plan = store.getVipPlan(2);
+      videoCommission = plan?.taskReward ?? 0.4;
+      dailyLimit = plan?.dailyTasks ?? 3;
     }
 
     // 2. Check Daily Limit
-    const completedTasks = completionsRes.data ?? [];
-    if (completedTasks.length >= dailyLimit) {
+    const completionsToday = store.getCompletionsForUserOnDate(userId, currentDate);
+    if (completionsToday.length >= dailyLimit) {
       return { ok: false as const, reason: "DAILY_LIMIT_REACHED", remainingTasks: 0 };
     }
 
-    // 3. Prevent duplicate completion of the same task in the same day
-    const alreadyCompleted = completedTasks.some((c: any) => c.task_id === taskId);
-    if (alreadyCompleted) {
+    // 3. Prevent duplicate completion
+    if (store.isTaskCompletedToday(userId, taskId, currentDate)) {
       return { ok: false as const, reason: "ALREADY_COMPLETED_TODAY" };
     }
 
-    // 4. Verify watch duration (allow small network tolerance: >= 8s for 10s video)
+    // 4. Verify watch duration
     if (watchedSeconds < 8) {
       return { ok: false as const, reason: "INSUFFICIENT_WATCH_TIME", required: 10 };
     }
 
-    // 5. Fetch task title
-    let taskTitle = "مشاهدة فيديو مهمة يومية";
-    const { data: dbTask } = await supabase
-      .from("tasks")
-      .select("title_ar, id")
-      .eq("id", taskId)
-      .maybeSingle();
-    if (dbTask?.title_ar) {
-      taskTitle = dbTask.title_ar;
+    // 5. Record task completion in store (Unique enforcement & Wallet credit)
+    const startedAt = data.startedAt || new Date(Date.now() - watchedSeconds * 1000).toISOString();
+    const completedAt = new Date().toISOString();
+
+    const recordResult = store.recordTaskCompletion({
+      userId,
+      taskId,
+      dateStr: currentDate,
+      reward: videoCommission,
+      watchedSeconds,
+      startedAt,
+      completedAt,
+    });
+
+    if (!recordResult.ok) {
+      return { ok: false as const, reason: recordResult.reason || "ERROR" };
     }
 
-    // 6. Execute ledger and completion records via Supabase Admin
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const newRemaining = Math.max(0, dailyLimit - (completionsToday.length + 1));
+    const wallet = store.getWallet(userId);
 
-    // Insert task completion record
-    const { data: compRecord, error: compErr } = await supabaseAdmin
-      .from("task_completions")
-      .insert({
+    // Try also recording in Supabase database if tables permit
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("notifications").insert({
         user_id: userId,
-        task_id: dbTask?.id ?? taskId,
-        reward: videoCommission,
-        completion_date: today(),
-        watched_seconds: watchedSeconds,
-      })
-      .select("id")
-      .single();
-
-    if (compErr) {
-      if (compErr.code === "23505") {
-        return { ok: false as const, reason: "ALREADY_COMPLETED_TODAY" };
-      }
-      throw new Error(compErr.message);
+        title_ar: "مكافأة إكمال مهمة",
+        body_ar: `تمت إضافة عمولة $${videoCommission.toFixed(2)} بنجاح لمشاهدة فيديو المهمة.`,
+        is_read: false,
+      });
+    } catch {
+      // non-blocking
     }
-
-    // Apply balance update to user's wallet
-    const { data: tx, error: txError } = await supabaseAdmin.rpc("apply_balance_change", {
-      _user_id: userId,
-      _amount: videoCommission,
-      _type: "task_reward",
-      _description: `مكافأة إكمال مهمة: ${taskTitle}`,
-      _reference_id: compRecord.id,
-    });
-
-    if (txError) {
-      console.error("[completeTask] Balance update error:", txError);
-      throw new Error(txError.message);
-    }
-
-    // Record in rewards ledger
-    await supabaseAdmin.from("rewards").insert({
-      user_id: userId,
-      source: "task_reward",
-      amount: videoCommission,
-      description_ar: `مكافأة إكمال مهمة: ${taskTitle}`,
-    });
-
-    // Send in-app notification
-    await supabaseAdmin.from("notifications").insert({
-      user_id: userId,
-      title_ar: "مكافأة إكمال مهمة",
-      body_ar: `تمت إضافة عمولة $${videoCommission.toFixed(2)} بنجاح لمشاهدة فيديو: ${taskTitle}.`,
-      is_read: false,
-    });
-
-    const newRemaining = Math.max(0, dailyLimit - (completedTasks.length + 1));
 
     return {
       ok: true as const,
       reward: videoCommission,
       remainingTasks: newRemaining,
-      newBalance: tx ? Number(tx.balance_after) : undefined,
+      newBalance: wallet.balance,
+      completionId: recordResult.completion?.id,
     };
   });
 
-/* ---------------- NOTIFICATIONS SYSTEM ---------------- */
+/* ---------------- ACTIVATE TRIAL PERIOD ---------------- */
 
-export type AppNotification = {
+export const activateTrialPeriod = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const store = getValorizaStore();
+
+    const result = store.activateUserTrial(userId);
+    if (!result.ok) {
+      return { ok: false as const, message: result.message };
+    }
+
+    // Also update Supabase profile if possible
+    try {
+      await supabase
+        .from("profiles")
+        .update({
+          trial_active: true,
+          trial_started_at: result.trial.startedAt,
+          trial_expires_at: result.trial.expiresAt,
+        })
+        .eq("id", userId);
+    } catch {
+      // non-blocking
+    }
+
+    return {
+      ok: true as const,
+      message: result.message,
+      trial: result.trial,
+    };
+  });
+
+/* ---------------- BUY / ACTIVATE VIP ---------------- */
+
+export const activateVipPlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { level: number }) => {
+    if (!data || typeof data.level !== "number") {
+      throw new Error("INVALID_LEVEL");
+    }
+    return data;
+  })
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const store = getValorizaStore();
+
+    const plan = store.getVipPlan(data.level);
+    if (!plan) {
+      return { ok: false as const, message: "الباقة غير موجودة" };
+    }
+    if (!plan.isActive) {
+      return { ok: false as const, message: "هذه الباقة مقفلة وغير مفعلة حالياً" };
+    }
+
+    // Check balance
+    const wallet = store.getWallet(userId);
+    if (wallet.balance < plan.price) {
+      return {
+        ok: false as const,
+        message: `رصيدك الحالي ($${wallet.balance.toFixed(2)}) لا يكفي لشراء هذه الباقة ($${plan.price}). يرجى شحن الرصيد أولاً.`,
+        required: plan.price,
+        current: wallet.balance,
+      };
+    }
+
+    // Deduct price and set VIP
+    store.debitBalance(userId, plan.price);
+    const sub = store.setUserVip(userId, plan.level, plan.durationDays);
+
+    // Update Supabase profile
+    try {
+      await supabase
+        .from("profiles")
+        .update({
+          vip_level: plan.level,
+          vip_expires_at: sub.expiresAt,
+        })
+        .eq("id", userId);
+    } catch {
+      // non-blocking
+    }
+
+    return {
+      ok: true as const,
+      message: `تهانينا! تم تفعيل ${plan.name} بنجاح لمدة ${plan.durationDays} يوم!`,
+      vipLevel: plan.level,
+      newBalance: store.getWallet(userId).balance,
+    };
+  });
+
+/* ---------------- GET VIP PLANS LIST ---------------- */
+
+export const getVipPlansData = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { userId } = context;
+    const store = getValorizaStore();
+    const plans = store.getVipPlans();
+    const userVip = store.getUserVip(userId);
+    const trial = store.getUserTrial(userId);
+    const wallet = store.getWallet(userId);
+
+    return {
+      plans,
+      userVipLevel: userVip?.status === "active" ? userVip.vipLevel : 0,
+      userVipExpiresAt: userVip?.expiresAt ?? null,
+      trial,
+      walletBalance: wallet.balance,
+    };
+  });
+
+/* ---------------- NOTIFICATIONS ---------------- */
+
+export interface AppNotification {
   id: string;
+  userId: string;
   title: string;
   body: string;
   isRead: boolean;
   createdAt: string;
-  relatedPage: string;
-};
+  relatedPage?: string;
+}
 
 export const getUserNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(
-    async ({ context }): Promise<{ notifications: AppNotification[]; unreadCount: number }> => {
-      const { supabase, userId } = context;
-
-      const { data: rows } = await supabase
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    try {
+      const { data } = await supabase
         .from("notifications")
-        .select("id, title_ar, body_ar, is_read, created_at, user_id")
-        .or(`user_id.eq.${userId},user_id.is.null`)
+        .select("*")
+        .eq("user_id", userId)
         .order("created_at", { ascending: false })
-        .limit(40);
+        .limit(30);
 
-      const notifications: AppNotification[] = (rows ?? []).map((n: any) => {
-        const title = n.title_ar || "إشعار من المنصة";
-        const body = n.body_ar || "";
+      const notifs: AppNotification[] = (data ?? []).map((n: any) => ({
+        id: n.id,
+        userId: n.user_id,
+        title: n.title_ar || n.title || "إشعار جديد",
+        body: n.body_ar || n.body || "",
+        isRead: Boolean(n.is_read),
+        createdAt: n.created_at,
+        relatedPage: n.link || undefined,
+      }));
 
-        // Deduce related page based on notification type
-        let relatedPage = "/home";
-        if (title.includes("إيداع") || body.includes("إيداع")) {
-          relatedPage = "/records";
-        } else if (title.includes("سحب") || body.includes("سحب")) {
-          relatedPage = "/records";
-        } else if (title.includes("VIP") || body.includes("VIP") || title.includes("استثمار")) {
-          relatedPage = "/investment";
-        } else if (title.includes("مهمة") || body.includes("مهمة")) {
-          relatedPage = "/tasks";
-        } else if (title.includes("إحالة") || body.includes("فريق")) {
-          relatedPage = "/team";
-        } else if (title.includes("عجلة") || title.includes("مكافأة")) {
-          relatedPage = "/rewards";
-        }
+      const unreadCount = notifs.filter((n) => !n.isRead).length;
 
-        return {
-          id: n.id,
-          title,
-          body,
-          isRead: Boolean(n.is_read),
-          createdAt: n.created_at,
-          relatedPage,
-        };
-      });
-
-      const unreadCount = notifications.filter((n) => !n.isRead).length;
-
-      return { notifications, unreadCount };
-    },
-  );
+      return {
+        notifications: notifs,
+        unreadCount,
+      };
+    } catch {
+      return {
+        notifications: [],
+        unreadCount: 0,
+      };
+    }
+  });
 
 export const markNotificationAsRead = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { notificationId?: string; markAll?: boolean }) => data)
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-
-    if (data.markAll) {
-      await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("user_id", userId)
-        .eq("is_read", false);
-    } else if (data.notificationId) {
-      await supabase.from("notifications").update({ is_read: true }).eq("id", data.notificationId);
+    try {
+      if (data.markAll) {
+        await supabase
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("user_id", userId);
+      } else if (data.notificationId) {
+        await supabase
+          .from("notifications")
+          .update({ is_read: true })
+          .eq("id", data.notificationId)
+          .eq("user_id", userId);
+      }
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const };
     }
-
-    return { ok: true as const };
   });
