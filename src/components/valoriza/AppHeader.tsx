@@ -22,6 +22,9 @@ import {
 import { toast } from "sonner";
 import { Logo } from "./Logo";
 import { NotificationsDrawer } from "./NotificationsDrawer";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { ThemeToggle } from "./ThemeToggle";
+import { useI18n } from "@/lib/i18n";
 import { getUserNotifications } from "@/lib/valoriza-tasks.functions";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -49,6 +52,7 @@ export function AppHeader({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navigate = useNavigate();
+  const { t, isRTL } = useI18n();
 
   // Query unread notifications count
   const { data: notifData } = useQuery({
@@ -70,7 +74,7 @@ export function AppHeader({
   const handleLogout = async () => {
     try {
       await supabase.auth.signOut();
-      toast.success("تم تسجيل الخروج بنجاح");
+      toast.success(t("common.success"));
       navigate({ to: "/", replace: true });
     } catch {
       navigate({ to: "/", replace: true });
@@ -81,27 +85,107 @@ export function AppHeader({
     <>
       <header
         id="app-main-header"
-        className="sticky top-0 z-40 border-b border-border/80 bg-navy-deep/95 backdrop-blur-md"
+        className="sticky top-0 z-40 border-b border-border/80 bg-background/95 backdrop-blur-md transition-colors"
       >
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-3 py-2.5">
-          {/* Hamburger Menu Button */}
-          <button
-            id="header-hamburger-btn"
-            type="button"
-            onClick={handleToggleMenu}
-            aria-label="القائمة الجانبية"
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface/80 border border-border text-foreground hover:border-cyan-glow transition-all active:scale-95"
-          >
-            <Menu className="h-5 w-5 text-cyan-glow" />
-          </button>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 py-2 sm:py-2.5">
+          {/* Left section: Hamburger (mobile) + Brand Logo */}
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Hamburger Menu Button (Mobile only) */}
+            <button
+              id="header-hamburger-btn"
+              type="button"
+              onClick={handleToggleMenu}
+              aria-label={t("nav.home")}
+              className="flex md:hidden h-8 w-8 items-center justify-center rounded-xl bg-surface/80 border border-border text-foreground hover:border-cyan-glow transition-all active:scale-95"
+            >
+              <Menu className="h-4 w-4 text-cyan-glow" />
+            </button>
 
-          {/* Valoriza Brand Logo */}
-          <Link to="/home" className="flex items-center">
-            <Logo size="sm" />
-          </Link>
+            {/* Valoriza Brand Logo */}
+            <Link to="/home" className="flex items-center">
+              <Logo size="sm" />
+            </Link>
+          </div>
 
-          {/* Right Side Controls */}
-          <div className="flex items-center gap-1.5">
+          {/* Center section: Desktop Navigation Bar (Visible on md+ screens) */}
+          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
+            <Link
+              to="/home"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              activeProps={{
+                className: "bg-surface text-cyan-glow font-black border-b-2 border-cyan-glow",
+              }}
+            >
+              <Home className="h-3.5 w-3.5 text-cyan-glow" />
+              <span>{t("nav.home")}</span>
+            </Link>
+
+            <Link
+              to="/investment"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              activeProps={{
+                className: "bg-surface text-gold font-black border-b-2 border-gold",
+              }}
+            >
+              <TrendingUp className="h-3.5 w-3.5 text-gold" />
+              <span>{t("nav.investment")}</span>
+            </Link>
+
+            <Link
+              to="/team"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              activeProps={{
+                className: "bg-surface text-primary font-black border-b-2 border-primary",
+              }}
+            >
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span>{t("nav.team")}</span>
+            </Link>
+
+            <Link
+              to="/tasks"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              activeProps={{
+                className: "bg-surface text-purple-400 font-black border-b-2 border-purple-400",
+              }}
+            >
+              <Video className="h-3.5 w-3.5 text-purple-400" />
+              <span>{t("nav.tasks")}</span>
+            </Link>
+
+            <Link
+              to="/rewards"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              activeProps={{
+                className: "bg-surface text-pink-400 font-black border-b-2 border-pink-400",
+              }}
+            >
+              <Gift className="h-3.5 w-3.5 text-pink-400" />
+              <span>{t("nav.rewards")}</span>
+            </Link>
+
+            <Link
+              to="/admin"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-300 hover:bg-surface transition-all border border-amber-500/25 bg-amber-500/5"
+              activeProps={{
+                className: "bg-surface text-amber-300 font-black border-b-2 border-amber-400",
+              }}
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
+              <span>{t("nav.admin")}</span>
+            </Link>
+          </nav>
+
+          {/* Right Side Controls: Balance snapshot (desktop), VIP, Theme, Language, Notifications */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Desktop Balance Snapshot */}
+            {balance !== undefined && (
+              <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/60 px-3 py-1 text-xs">
+                <span className="text-muted-foreground text-[11px]">{t("common.balance")}:</span>
+                <span className="font-extrabold text-gold-gradient">${balance.toFixed(2)}</span>
+              </div>
+            )}
+
             {vipLevel !== undefined && vipLevel > 0 && (
               <span
                 id="header-vip-badge"
@@ -112,12 +196,18 @@ export function AppHeader({
               </span>
             )}
 
+            {/* Language Switcher */}
+            <LanguageSwitcher compact={true} />
+
+            {/* Theme Toggle Button */}
+            <ThemeToggle />
+
             {/* Notification Bell with Badge */}
             <button
               id="header-notifications-btn"
               type="button"
               onClick={() => setNotificationsOpen(true)}
-              aria-label="الإشعارات"
+              aria-label={t("rewards.title")}
               className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border/80 text-foreground hover:border-cyan-glow hover:text-cyan-glow transition-all active:scale-95"
             >
               <Bell className="h-4 w-4" />
@@ -128,14 +218,25 @@ export function AppHeader({
               )}
             </button>
 
+            {/* Desktop Account / Logout button */}
+            <div className="hidden md:flex items-center gap-1">
+              <Link
+                to="/account"
+                className="flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-bold text-foreground hover:border-primary transition-all"
+              >
+                <User className="h-3.5 w-3.5 text-gold" />
+                <span className="max-w-[80px] truncate">{username || t("nav.account")}</span>
+              </Link>
+            </div>
+
             {showAbout && (
               <Link
                 id="header-about-btn"
                 to="/about"
-                className="flex shrink-0 items-center gap-1 rounded-full border border-cyan-glow/60 bg-surface/60 px-2.5 py-1 text-[11px] font-bold text-cyan-glow hover:border-cyan-glow hover:bg-surface transition-all shadow-[0_0_12px_oklch(0.82_0.14_205/0.25)]"
+                className="hidden sm:flex shrink-0 items-center gap-1 rounded-full border border-cyan-glow/60 bg-surface/60 px-2.5 py-1 text-[11px] font-bold text-cyan-glow hover:border-cyan-glow hover:bg-surface transition-all shadow-[0_0_12px_oklch(0.82_0.14_205/0.25)]"
               >
                 <Info className="h-3.5 w-3.5" />
-                <span>حول المنصة</span>
+                <span>{t("nav.about")}</span>
               </Link>
             )}
           </div>
@@ -154,9 +255,9 @@ export function AppHeader({
         >
           <div
             id="header-drawer-panel"
-            className="h-full w-4/5 max-w-xs overflow-y-auto border-l border-cyan-glow/40 bg-navy-deep p-4 shadow-2xl flex flex-col justify-between animate-in slide-in-from-right duration-300"
+            className="h-full w-4/5 max-w-xs overflow-y-auto border-s border-cyan-glow/40 bg-card p-4 shadow-2xl flex flex-col justify-between animate-in slide-in-from-start duration-300"
             onClick={(e) => e.stopPropagation()}
-            dir="rtl"
+            dir={isRTL ? "rtl" : "ltr"}
           >
             <div>
               {/* Drawer Header */}
@@ -171,6 +272,17 @@ export function AppHeader({
                 </button>
               </div>
 
+              {/* Drawer Theme & Language bar */}
+              <div className="mt-3 flex items-center justify-between rounded-xl bg-surface/60 p-2 border border-border/60">
+                <span className="text-xs font-bold text-muted-foreground">
+                  {t("common.language")} / {t("common.theme")}:
+                </span>
+                <div className="flex items-center gap-2">
+                  <LanguageSwitcher />
+                  <ThemeToggle />
+                </div>
+              </div>
+
               {/* User Snapshot Card */}
               {username && (
                 <div className="mt-3 surface-card glow-border p-3">
@@ -178,18 +290,20 @@ export function AppHeader({
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-bold">
                       <User className="h-5 w-5" />
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 text-start">
                       <p className="text-xs font-bold text-foreground truncate">{username}</p>
                       <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Crown className="h-3 w-3 text-gold" />
-                        {vipLevel ? `عضو VIP ${vipLevel}` : "عضو عادي"}
+                        {vipLevel ? `VIP ${vipLevel}` : t("home.vipStatus")}
                       </p>
                     </div>
                   </div>
 
                   {balance !== undefined && (
                     <div className="mt-2.5 flex items-center justify-between border-t border-border/40 pt-2">
-                      <span className="text-[11px] text-muted-foreground">الرصيد:</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("common.balance")}:
+                      </span>
                       <span className="text-sm font-extrabold text-gold-gradient">
                         ${balance.toFixed(2)}
                       </span>
@@ -207,7 +321,7 @@ export function AppHeader({
                       className="flex items-center justify-center gap-1 rounded-xl brand-gradient py-1.5 text-[10px] font-bold text-primary-foreground shadow-glow"
                     >
                       <ArrowDownLeft className="h-3 w-3" />
-                      إيداع
+                      {t("home.deposit")}
                     </button>
                     <button
                       type="button"
@@ -218,24 +332,24 @@ export function AppHeader({
                       className="flex items-center justify-center gap-1 rounded-xl border border-cyan-glow/40 bg-surface py-1.5 text-[10px] font-bold text-cyan-glow hover:bg-surface/80"
                     >
                       <ArrowUpRight className="h-3 w-3" />
-                      سحب
+                      {t("home.withdraw")}
                     </button>
                   </div>
                 </div>
               )}
 
               {/* Navigation Items */}
-              <nav className="mt-4 space-y-1">
+              <nav className="mt-4 space-y-1 text-start">
                 <Link
                   to="/home"
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <Home className="h-4 w-4 text-cyan-glow" />
-                  الرئيسية
+                  {t("nav.home")}
                 </Link>
 
                 <Link
@@ -243,11 +357,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <TrendingUp className="h-4 w-4 text-gold" />
-                  الاستثمار وباقات VIP
+                  {t("nav.investment")}
                 </Link>
 
                 <Link
@@ -255,11 +369,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <Users className="h-4 w-4 text-primary" />
-                  فريقي ومستويات الإحالة
+                  {t("nav.team")}
                 </Link>
 
                 <Link
@@ -267,11 +381,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <Gift className="h-4 w-4 text-pink-400" />
-                  سجل المكافآت وعجلة الحظ
+                  {t("nav.rewards")}
                 </Link>
 
                 <Link
@@ -279,11 +393,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <Video className="h-4 w-4 text-purple-400" />
-                  المهام اليومية وعمولة الفيديو
+                  {t("nav.tasks")}
                 </Link>
 
                 <Link
@@ -291,11 +405,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-300 hover:bg-surface transition-colors border border-amber-500/20 bg-amber-500/5"
                   activeProps={{
-                    className: "bg-surface text-amber-300 border-r-2 border-amber-400",
+                    className: "bg-surface text-amber-300 border-s-2 border-amber-400",
                   }}
                 >
                   <ShieldCheck className="h-4 w-4 text-amber-400" />
-                  لوحة الإدارة (Admin Panel)
+                  {t("nav.admin")}
                 </Link>
 
                 <button
@@ -304,10 +418,10 @@ export function AppHeader({
                     setDrawerOpen(false);
                     onOpenSupport?.();
                   }}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors text-right"
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors text-start"
                 >
                   <Headphones className="h-4 w-4 text-cyan-glow" />
-                  خدمة العملاء والدعم
+                  {t("nav.support")}
                 </button>
 
                 <Link
@@ -315,11 +429,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <Info className="h-4 w-4 text-cyan-glow" />
-                  حول المنصة ونبذة عن الشركة
+                  {t("nav.about")}
                 </Link>
 
                 <Link
@@ -327,11 +441,11 @@ export function AppHeader({
                   onClick={() => setDrawerOpen(false)}
                   className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
                   activeProps={{
-                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                    className: "bg-surface text-cyan-glow border-s-2 border-cyan-glow",
                   }}
                 >
                   <User className="h-4 w-4 text-gold" />
-                  حسابي وإعدادات الأمان
+                  {t("nav.account")}
                 </Link>
               </nav>
             </div>
@@ -345,11 +459,11 @@ export function AppHeader({
                 className="flex w-full items-center gap-2 rounded-xl bg-danger/15 border border-danger/30 px-3 py-2 text-xs font-bold text-danger hover:bg-danger/25 transition-colors"
               >
                 <LogOut className="h-4 w-4" />
-                تسجيل الخروج
+                {t("nav.logout")}
               </button>
 
               <p className="mt-3 text-center text-[10px] text-muted-foreground">
-                Valoriza Investment · مدريد، إسبانيا
+                Valoriza Investment · Madrid, Spain
               </p>
             </div>
           </div>

@@ -6,19 +6,20 @@ import { toast } from "sonner";
 import {
   Award,
   Check,
-  Coins,
   Copy,
   Layers,
-  Percent,
   Share2,
   Sparkles,
   TrendingUp,
   Users,
+  ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getTeamData } from "@/lib/valoriza-pages.functions";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/team")({
   head: () => ({
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/_authenticated/team")({
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 function TeamPage() {
+  const { t, isRTL } = useI18n();
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | null>(null);
@@ -53,19 +55,19 @@ function TeamPage() {
     try {
       await navigator.clipboard.writeText(referralCode);
       setCopiedCode(true);
-      toast.success("تم نسخ رمز الدعوة بنجاح!");
+      toast.success(t("common.copied"));
       setTimeout(() => setCopiedCode(false), 2000);
     } catch {
-      toast.error("تعذر نسخ الرمز");
+      toast.error(t("common.error"));
     }
   }
 
   async function shareOrCopyLink() {
-    if (navigator.share) {
+    if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: "انضم إلى فريقي في Valoriza",
-          text: `ابدأ استثمارك الذكي وحقق أرباحاً يومية مع Valoriza. استخدم كود الدعوة: ${referralCode}`,
+          title: "Valoriza Team",
+          text: `Valoriza Referral Code: ${referralCode}`,
           url: referralLink,
         });
         return;
@@ -76,17 +78,16 @@ function TeamPage() {
     try {
       await navigator.clipboard.writeText(referralLink);
       setCopiedLink(true);
-      toast.success("تم نسخ رابط الدعوة بنجاح!");
+      toast.success(t("common.copied"));
       setTimeout(() => setCopiedLink(false), 2000);
     } catch {
-      toast.error("تعذر نسخ الرابط");
+      toast.error(t("common.error"));
     }
   }
 
-  // Level percentages from settings or standard
   const levelPercentages: Record<number, string> = {
-    1: "8%",
-    2: "4%",
+    1: "10%",
+    2: "3%",
     3: "1%",
   };
 
@@ -96,126 +97,170 @@ function TeamPage() {
       : data?.members || [];
 
   return (
-    <div className="min-h-screen bg-background pb-28" dir="rtl">
+    <div className="min-h-screen bg-background pb-28 md:pb-12" dir={isRTL ? "rtl" : "ltr"}>
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-lg px-4 pt-4">
+      <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {isLoading || !data ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+          <div className="flex flex-col items-center justify-center py-24 space-y-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
+            <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>
+          </div>
         ) : (
           <>
-            {/* Team Hero Card matching PDF Page 5 */}
-            <section className="surface-card glow-border p-5 text-center relative overflow-hidden">
-              <div className="absolute -top-12 -right-12 h-36 w-36 rounded-full bg-cyan-glow/10 blur-2xl pointer-events-none" />
+            {/* Team Hero Section (Responsive 2-column on desktop) */}
+            <section className="surface-card glow-border p-5 sm:p-6 lg:p-8 rounded-3xl relative overflow-hidden">
+              <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-cyan-glow/10 blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-gold/10 blur-3xl pointer-events-none" />
 
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow mb-2 shadow-glow">
-                <Users className="h-6 w-6" />
-              </div>
-
-              <h1 className="text-xl font-extrabold text-foreground">فريقي</h1>
-              <p className="mt-1 text-sm font-bold text-gold-gradient">معاً نحقق المزيد</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                شارك كود الإحالة مع أصدقائك واكسب عمولات يومية مستمرة على 3 مستويات
-              </p>
-
-              {/* Referral Code & Share Link Box matching PDF Page 5 */}
-              <div className="mt-4 rounded-2xl border border-border/80 bg-navy-deep/80 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-right">
-                    <span className="text-[10px] text-muted-foreground block">
-                      رمز الدعوة الخاص بك
-                    </span>
-                    <span className="text-base font-extrabold tracking-widest text-gold font-mono select-all">
-                      {referralCode}
-                    </span>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                <div className="lg:col-span-7 space-y-3 text-start">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-cyan-glow/30 bg-cyan-glow/10 px-3 py-1 text-xs font-bold text-cyan-glow">
+                    <Users className="h-4 w-4" />
+                    <span>{t("team.title")}</span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      id="btn-copy-team-code"
-                      type="button"
-                      onClick={copyCode}
-                      className="flex items-center gap-1 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow active:scale-95 transition-all"
-                    >
-                      {copiedCode ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                      <span>{copiedCode ? "تم النسخ" : "نسخ الكود"}</span>
-                    </button>
+                  <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight">
+                    {t("team.togetherWeAchieve")}
+                  </h1>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
+                    {t("team.subtitle")}
+                  </p>
 
-                    <button
-                      id="btn-share-team-link"
-                      type="button"
-                      onClick={shareOrCopyLink}
-                      className="flex items-center gap-1 rounded-xl border border-electric/40 bg-surface px-3 py-2 text-xs font-bold text-cyan-glow hover:bg-surface/80 active:scale-95 transition-all"
-                    >
-                      {copiedLink ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Share2 className="h-3.5 w-3.5" />
-                      )}
-                      <span>{copiedLink ? "تم النسخ" : "مشاركة الرابط"}</span>
-                    </button>
+                  <div className="pt-2 flex items-center gap-4 text-xs font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <ShieldCheck className="h-4 w-4 text-success" />3 {t("team.referralLevels")}
+                    </span>
+                    <span>•</span>
+                    <span className="text-gold font-bold">14% Total Commission</span>
+                  </div>
+                </div>
+
+                {/* Referral Code & Share Link Bento Card */}
+                <div className="lg:col-span-5">
+                  <div className="rounded-2xl border border-border/80 bg-surface/90 p-4 sm:p-5 space-y-3.5 shadow-lg">
+                    <div>
+                      <span className="text-xs text-muted-foreground block font-medium mb-1">
+                        {t("team.inviteCode")}
+                      </span>
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-border bg-background">
+                        <span className="text-lg font-black tracking-widest text-gold font-mono select-all">
+                          {referralCode}
+                        </span>
+                        <button
+                          id="btn-copy-team-code"
+                          type="button"
+                          onClick={copyCode}
+                          className="flex items-center gap-1.5 rounded-lg brand-gradient px-3 py-2 text-xs font-black text-primary-foreground shadow active:scale-95 transition-all"
+                        >
+                          {copiedCode ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          <span>{copiedCode ? t("common.copied") : t("team.copyCode")}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-xs text-muted-foreground block font-medium mb-1">
+                        {t("team.inviteLink")}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={referralLink}
+                          className="w-full text-xs font-mono text-muted-foreground bg-background border border-border rounded-xl px-3 py-2.5 truncate focus:outline-none"
+                        />
+                        <button
+                          id="btn-share-team-link"
+                          type="button"
+                          onClick={shareOrCopyLink}
+                          className="shrink-0 flex items-center gap-1.5 rounded-xl border border-cyan-glow/40 bg-surface px-3 py-2.5 text-xs font-black text-cyan-glow hover:bg-surface/80 active:scale-95 transition-all"
+                        >
+                          {copiedLink ? (
+                            <Check className="h-3.5 w-3.5" />
+                          ) : (
+                            <Share2 className="h-3.5 w-3.5" />
+                          )}
+                          <span>{copiedLink ? t("common.copied") : t("team.shareLink")}</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* 3 Key Team Metrics Cards matching PDF Page 5 */}
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <div className="surface-card glow-border p-3 text-center">
-                <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-gold/15 text-gold border border-gold/30 mb-1.5">
-                  <Award className="h-4 w-4" />
+            {/* 3 Key Team Metrics (Bento-Grid 3 Columns) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="surface-card glow-border p-4 sm:p-5 rounded-2xl flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold border border-gold/30">
+                  <Award className="h-6 w-6" />
                 </div>
-                <p className="text-[10px] text-muted-foreground font-bold">مكافآت الفريق</p>
-                <p className="mt-0.5 text-sm font-extrabold text-gold-gradient">
-                  {money(data.teamRewards)}
-                </p>
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    {t("team.teamRewards")}
+                  </p>
+                  <p className="text-xl sm:text-2xl font-black text-gold-gradient mt-0.5">
+                    {money(data.teamRewards)}
+                  </p>
+                </div>
               </div>
 
-              <div className="surface-card glow-border p-3 text-center">
-                <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-glow/15 text-cyan-glow border border-cyan-glow/30 mb-1.5">
-                  <Users className="h-4 w-4" />
+              <div className="surface-card glow-border p-4 sm:p-5 rounded-2xl flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/15 text-cyan-glow border border-cyan-glow/30">
+                  <Users className="h-6 w-6" />
                 </div>
-                <p className="text-[10px] text-muted-foreground font-bold">عدد أعضاء الفريق</p>
-                <p className="mt-0.5 text-sm font-extrabold text-foreground">
-                  {data.totalMembers}{" "}
-                  <span className="text-[10px] text-muted-foreground font-normal">عضو</span>
-                </p>
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    {t("team.totalMembers")}
+                  </p>
+                  <p className="text-xl sm:text-2xl font-black text-foreground mt-0.5">
+                    {data.totalMembers}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {t("team.members")}
+                    </span>
+                  </p>
+                </div>
               </div>
 
-              <div className="surface-card glow-border p-3 text-center">
-                <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-success/15 text-success border border-success/30 mb-1.5">
-                  <TrendingUp className="h-4 w-4" />
+              <div className="surface-card glow-border p-4 sm:p-5 rounded-2xl flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-success/15 text-success border border-success/30">
+                  <TrendingUp className="h-6 w-6" />
                 </div>
-                <p className="text-[10px] text-muted-foreground font-bold">إجمالي دخل الفريق</p>
-                <p className="mt-0.5 text-sm font-extrabold text-success">
-                  {money(data.teamIncome)}
-                </p>
+                <div>
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    {t("team.teamIncome")}
+                  </p>
+                  <p className="text-xl sm:text-2xl font-black text-success mt-0.5">
+                    {money(data.teamIncome)}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* 3 Referral Levels matching PDF Page 5 */}
-            <section className="mt-5">
-              <div className="flex items-center justify-between mb-2.5">
-                <h2 className="text-sm font-extrabold text-foreground flex items-center gap-1.5">
-                  <Layers className="h-4 w-4 text-cyan-glow" />
-                  <span>مستويات الإحالة والعمولات</span>
+            {/* 3 Referral Levels */}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base sm:text-lg font-black text-foreground flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-cyan-glow" />
+                  <span>{t("team.referralLevels")}</span>
                 </h2>
                 {selectedLevelFilter !== null && (
                   <button
                     type="button"
                     onClick={() => setSelectedLevelFilter(null)}
-                    className="text-[11px] font-bold text-cyan-glow hover:underline"
+                    className="text-xs font-bold text-cyan-glow hover:underline cursor-pointer"
                   >
-                    عرض جميع المستويات
+                    {t("team.viewAllLevels")}
                   </button>
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 {data.levels.map((lvl) => {
                   const isSelected = selectedLevelFilter === lvl.level;
                   const rate = levelPercentages[lvl.level] || "—";
@@ -224,27 +269,29 @@ function TeamPage() {
                       key={lvl.level}
                       type="button"
                       onClick={() => setSelectedLevelFilter(isSelected ? null : lvl.level)}
-                      className={`surface-card p-3 text-center transition-all cursor-pointer ${
+                      className={`surface-card p-4 sm:p-5 rounded-2xl text-start transition-all cursor-pointer ${
                         isSelected
-                          ? "border-cyan-glow bg-surface shadow-[0_0_12px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow"
+                          ? "border-cyan-glow bg-surface shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow"
                           : "hover:border-border"
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1 text-[11px]">
-                        <span className="font-extrabold text-foreground">المستوى {lvl.level}</span>
-                        <span className="rounded-full bg-gold/20 border border-gold/40 px-1.5 py-0.2 text-[9px] font-bold text-gold">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-black text-foreground text-sm sm:text-base">
+                          {t("status.active", "Level")} {lvl.level}
+                        </span>
+                        <span className="rounded-full bg-gold/20 border border-gold/40 px-2.5 py-0.5 text-xs font-black text-gold">
                           {rate}
                         </span>
                       </div>
 
-                      <div className="mt-2 text-right space-y-1">
-                        <div className="flex justify-between text-[11px] text-muted-foreground">
-                          <span>الأعضاء:</span>
-                          <span className="font-bold text-foreground">{lvl.members}</span>
+                      <div className="space-y-1.5 pt-2 border-t border-border/50 text-xs">
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>{t("team.members")}:</span>
+                          <span className="font-black text-foreground">{lvl.members}</span>
                         </div>
-                        <div className="flex justify-between text-[11px] text-muted-foreground">
-                          <span>الأرباح:</span>
-                          <span className="font-bold text-success">{money(lvl.earnings)}</span>
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>{t("team.earnings")}:</span>
+                          <span className="font-black text-success">+{money(lvl.earnings)}</span>
                         </div>
                       </div>
                     </button>
@@ -252,62 +299,57 @@ function TeamPage() {
                 })}
               </div>
 
-              {/* Commission calculation rule note matching PDF */}
-              <div className="mt-3 rounded-xl border border-border/70 bg-surface/60 p-3 text-[11px] text-muted-foreground leading-relaxed flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-cyan-glow shrink-0" />
-                <span>
-                  تحسب العمولات تلقائياً عبر نظام المنصة الذكي عند قيام أعضاء فريقك بالاستثمار أو
-                  ترقية باقات VIP.
-                </span>
+              {/* Commission note */}
+              <div className="rounded-2xl border border-border/70 bg-surface/70 p-4 text-xs text-muted-foreground leading-relaxed flex items-center gap-3">
+                <Sparkles className="h-5 w-5 text-cyan-glow shrink-0" />
+                <span>{t("team.autoCalcNote")}</span>
               </div>
             </section>
 
-            {/* Team Members List */}
-            <section className="mt-5">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-extrabold text-foreground flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-gold" />
+            {/* Team Members List (Bento-Grid 1-3 columns) */}
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base sm:text-lg font-black text-foreground flex items-center gap-2">
+                  <Users className="h-5 w-5 text-gold" />
                   <span>
-                    أعضاء الفريق{" "}
+                    {t("team.teamMembers")}{" "}
                     {selectedLevelFilter !== null
-                      ? `(المستوى ${selectedLevelFilter})`
+                      ? `(${t("status.active", "Level")} ${selectedLevelFilter})`
                       : `(${data.totalMembers})`}
                   </span>
                 </h2>
               </div>
 
               {filteredMembers.length === 0 ? (
-                <div className="surface-card p-6 text-center text-xs text-muted-foreground">
-                  {selectedLevelFilter !== null
-                    ? `لا يوجد أعضاء في المستوى ${selectedLevelFilter} بعد.`
-                    : "لا يوجد أعضاء بعد. شارك كود الإحالة لتبدأ بناء فريقك وجني العمولات!"}
+                <div className="surface-card p-8 sm:p-12 text-center rounded-2xl">
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    {selectedLevelFilter !== null
+                      ? t("team.noMembersInLevel")
+                      : t("team.noMembers")}
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {filteredMembers.map((m, i) => (
                     <div
                       key={`${m.email}-${i}`}
-                      className="surface-card p-3 flex items-center justify-between gap-2 text-xs"
+                      className="surface-card p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-border text-foreground font-bold">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-surface border border-border text-foreground font-black text-sm">
                           {m.email.slice(0, 1).toUpperCase()}
                         </div>
-                        <div>
-                          <p className="font-bold text-foreground truncate max-w-[180px]">
-                            {m.email}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            المستوى {m.level} • {levelPercentages[m.level]} عمولة
+                        <div className="min-w-0">
+                          <p className="font-black text-foreground truncate">{m.email}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Level {m.level} • {levelPercentages[m.level]}
                           </p>
                         </div>
                       </div>
 
-                      <div className="text-left">
-                        <span className="rounded-full bg-gold/15 border border-gold/40 px-2 py-0.5 text-[10px] font-extrabold text-gold">
-                          VIP {m.vipLevel}
-                        </span>
-                      </div>
+                      <span className="shrink-0 rounded-full bg-gold/15 border border-gold/40 px-2.5 py-0.5 text-[11px] font-black text-gold">
+                        VIP {m.vipLevel}
+                      </span>
                     </div>
                   ))}
                 </div>

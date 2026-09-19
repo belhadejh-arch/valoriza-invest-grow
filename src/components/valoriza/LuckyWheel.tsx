@@ -12,6 +12,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 
 export type PrizeItem = {
   id: string;
@@ -41,6 +42,7 @@ interface LuckyWheelProps {
 const PERIMETER_ORDER = [0, 1, 2, 5, 8, 7, 6, 3, 4];
 
 export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelProps) {
+  const { t, isRTL } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
   const [winModal, setWinModal] = useState<{ label: string; value: number; cash: boolean } | null>(
@@ -195,7 +197,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
   const handleStartSpin = async () => {
     if (isSpinning || disabled) return;
     if (spinsLeft <= 0) {
-      toast.error("لا توجد محاولات متبقية اليوم");
+      toast.error(t("wheel.noSpins"));
       return;
     }
 
@@ -279,11 +281,11 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
       <div className="text-center pb-3">
         <div className="flex items-center justify-center gap-2">
           <Gift className="h-6 w-6 text-gold animate-bounce" />
-          <h3 className="text-2xl font-black text-gold-gradient tracking-wide">عجلة الحظ</h3>
+          <h3 className="text-2xl font-black text-gold-gradient tracking-wide">
+            {t("wheel.title")}
+          </h3>
         </div>
-        <p className="mt-1 text-xs font-semibold text-foreground/90">
-          إضغط على المربع لبدء الدوران واحصل على جائزتك!
-        </p>
+        <p className="mt-1 text-xs font-semibold text-foreground/90">{t("wheel.subtitle")}</p>
       </div>
 
       {/* Main Grid + Action Panel matching Page 2 */}
@@ -312,7 +314,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
         <div className="md:col-span-4 surface-card border-border/80 p-3.5 flex flex-col justify-between items-center text-center">
           <div className="flex flex-col items-center">
             <Ticket className="h-7 w-7 text-gold mb-1" />
-            <span className="text-xs font-bold text-foreground">عدد فرصك المتبقية</span>
+            <span className="text-xs font-bold text-foreground">{t("wheel.spinsLeft")}</span>
             <div
               id="wheel-spins-left-counter"
               className="mt-1 text-4xl font-extrabold text-foreground"
@@ -330,10 +332,10 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               className="w-full rounded-2xl gold-gradient py-3 px-4 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
             >
               <RotateCw className={`h-4 w-4 ${isSpinning ? "animate-spin" : ""}`} />
-              <span>{isSpinning ? "جاري الدوران..." : "ابدأ اللعب"}</span>
+              <span>{isSpinning ? t("wheel.spinning") : t("wheel.spinBtn")}</span>
             </button>
             <p className="mt-2 text-[10px] text-muted-foreground font-medium">
-              سيتم خصم فرصة واحدة بعد كل محاولة
+              {t("wheel.spinsCost")}
             </p>
           </div>
         </div>

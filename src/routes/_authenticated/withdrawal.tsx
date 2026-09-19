@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
+  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   Check,
@@ -24,6 +25,7 @@ import {
   requestWithdrawal,
   getUserFinancialRecords,
 } from "@/lib/valoriza-pages.functions";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/withdrawal")({
   head: () => ({
@@ -40,6 +42,7 @@ export const Route = createFileRoute("/_authenticated/withdrawal")({
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 function WithdrawalPage() {
+  const { t, isRTL } = useI18n();
   const qc = useQueryClient();
   const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
   const [addressInput, setAddressInput] = useState("");
@@ -87,13 +90,13 @@ function WithdrawalPage() {
       bindAddressFn({ data: vals }),
     onSuccess: (res) => {
       if (res.ok) {
-        toast.success("تم ربط وقفل عنوان السحب بحسابك بنجاح وحمايته من التغيير.");
+        toast.success(t("withdraw.bindSuccess"));
         qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
       } else {
-        toast.error(res.message || "تعذر ربط عنوان المحفظة");
+        toast.error(res.message || t("common.error"));
       }
     },
-    onError: () => toast.error("حدث خطأ أثناء ربط العنوان"),
+    onError: () => toast.error(t("common.error")),
   });
 
   const withdrawMutation = useMutation({
@@ -102,7 +105,7 @@ function WithdrawalPage() {
     onSuccess: (res) => {
       if (res.ok) {
         toast.success(
-          `تم تقديم طلب السحب بمبلغ صافي ${money(res.netAmount)} بعد خصم رسوم (${feePercent}%). سيتم الإرسال بعد الفحص.`,
+          `${t("withdraw.receivable")}: ${money(res.netAmount)}. (${t("withdraw.fee")}: ${feePercent}%)`,
         );
         setAmount("");
         qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
@@ -110,23 +113,23 @@ function WithdrawalPage() {
         qc.invalidateQueries({ queryKey: ["account"] });
       } else {
         if (res.reason === "INSUFFICIENT_BALANCE") {
-          toast.error("رصيدك المتاح غير كافٍ لإتمام السحب");
+          toast.error(t("common.error"));
         } else if (res.reason === "BELOW_MIN_WITHDRAWAL") {
-          toast.error(`الحد الأدنى للسحب هو ${minWithdrawal} دولارات`);
+          toast.error(`${t("withdraw.minNotice")} (${minWithdrawal}$)`);
         } else if (res.reason === "ADDRESS_MISMATCH") {
           toast.error(res.message);
         } else {
-          toast.error("تعذر معالجة طلب السحب حالياً");
+          toast.error(t("common.error"));
         }
       }
     },
-    onError: () => toast.error("حدث خطأ في الخادم أثناء تقديم السحب"),
+    onError: () => toast.error(t("common.error")),
   });
 
   const handleBind = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addressInput.trim() || addressInput.trim().length < 15) {
-      toast.error("يرجى إدخال عنوان محفظة صحيح لا يقل عن 15 حرفاً");
+      toast.error(t("withdraw.addressPlaceholder"));
       return;
     }
     bindMutation.mutate({ network, address: addressInput.trim() });
@@ -135,15 +138,15 @@ function WithdrawalPage() {
   const handleSubmitWithdraw = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addressInput.trim()) {
-      toast.error("يرجى إدخال وربط عنوان السحب أولاً");
+      toast.error(t("withdraw.addressPlaceholder"));
       return;
     }
     if (numAmount < minWithdrawal) {
-      toast.error(`الحد الأدنى للسحب هو ${minWithdrawal} دولارات`);
+      toast.error(`${t("withdraw.minNotice")} (${minWithdrawal}$)`);
       return;
     }
     if (numAmount > balance) {
-      toast.error("رصيدك الحالي غير كافٍ لتغطية مبلغ السحب");
+      toast.error(t("common.error"));
       return;
     }
     withdrawMutation.mutate({
@@ -153,287 +156,305 @@ function WithdrawalPage() {
     });
   };
 
+  const BackArrow = isRTL ? ArrowRight : ArrowLeft;
+
   return (
-    <div className="min-h-screen bg-background pb-28" dir="rtl">
+    <div
+      className="min-h-screen bg-background pb-28 md:pb-12 text-foreground"
+      dir={isRTL ? "rtl" : "ltr"}
+    >
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-lg px-4 pt-4">
+      <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Navigation Breadcrumb */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center justify-between">
           <Link
             to="/account"
-            className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowRight className="h-4 w-4" />
-            <span>العودة للحساب</span>
+            <BackArrow className="h-4 w-4" />
+            <span>{t("support.backToAccount")}</span>
           </Link>
-          <div className="flex items-center gap-1 text-xs font-extrabold text-gold">
-            <Wallet className="h-3.5 w-3.5" />
-            <span>الرصيد: {infoLoading ? "..." : money(balance)}</span>
-          </div>
-        </div>
-
-        {/* Page Title Card matching PDF Page 7 */}
-        <section className="surface-card glow-border p-5 text-center relative overflow-hidden">
-          <div className="absolute -top-12 -left-12 h-32 w-32 rounded-full bg-electric/10 blur-2xl pointer-events-none" />
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-surface border border-electric/40 text-cyan-glow mb-2 shadow-glow">
-            <ArrowUpRight className="h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-extrabold text-foreground">السحب</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            سحب رصيدك إلى محفظتك الرقمية المعتمدة
-          </p>
-          <div className="mt-3 inline-flex items-center gap-2 rounded-2xl border border-gold/40 bg-surface/80 px-4 py-1.5">
-            <span className="text-xs text-muted-foreground">الرصيد القابل للسحب:</span>
-            <span className="text-base font-extrabold text-gold-gradient">{money(balance)}</span>
-          </div>
-        </section>
-
-        {/* Network Selector matching PDF Page 7 */}
-        <div className="mt-4">
-          <label className="block text-xs font-bold text-foreground mb-2">اختر شبكة السحب</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(["ERC20", "BEP20", "TRC20"] as const).map((net) => {
-              const isSelected = network === net;
-              return (
-                <button
-                  key={net}
-                  id={`btn-withdraw-net-${net}`}
-                  type="button"
-                  disabled={isAddressLocked}
-                  onClick={() => setNetwork(net)}
-                  className={`relative flex flex-col items-center justify-center rounded-2xl border p-3 transition-all ${
-                    isSelected
-                      ? "border-cyan-glow bg-surface shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
-                      : "border-border/60 bg-navy hover:bg-surface/50"
-                  } ${isAddressLocked && !isSelected ? "opacity-40 cursor-not-allowed" : ""}`}
-                >
-                  {isSelected && (
-                    <span className="absolute top-1.5 left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-glow text-navy-deep">
-                      <Check className="h-2.5 w-2.5 stroke-[3]" />
-                    </span>
-                  )}
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-bold">
-                    ₮
-                  </div>
-                  <span className="mt-1.5 text-xs font-bold text-foreground">USDT-{net}</span>
-                  <span className="text-[10px] text-muted-foreground">({net})</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Address Binding Card matching PDF Page 7 & Page 8 Rule 1 */}
-        <div className="mt-4 surface-card p-4 glow-border">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-              <Lock className="h-4 w-4 text-gold" />
-              <span>ربط عنوان المحفظة</span>
-            </span>
-            {isAddressLocked ? (
-              <span className="rounded-full bg-success/20 border border-success/40 px-2.5 py-0.5 text-[10px] font-bold text-success flex items-center gap-1">
-                <ShieldCheck className="h-3 w-3" /> مقفل ومحمي
-              </span>
-            ) : (
-              <span className="text-[10px] text-gold font-bold">مطلوب للربط</span>
-            )}
-          </div>
-
-          <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
-            {isAddressLocked
-              ? "عنوانك مسجل ومقفل لحماية أموالك من أي محاولة تغيير غير مصرح بها."
-              : "قم بإدخال عنوان محفظتك ثم اضغط (ربط) لحفظه بحسابك بصورة دائمة."}
-          </p>
-
-          <div className="mt-3 flex items-center gap-2">
-            <input
-              id="withdraw-address-field"
-              type="text"
-              placeholder="أدخل عنوان المحفظة (يبدأ بـ 0x أو T)"
-              value={addressInput}
-              onChange={(e) => setAddressInput(e.target.value)}
-              disabled={isAddressLocked}
-              dir="ltr"
-              className="w-full rounded-xl border border-border bg-navy px-3 py-2.5 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none disabled:opacity-80"
-            />
-            {!isAddressLocked ? (
-              <button
-                id="btn-bind-wallet-address"
-                type="button"
-                disabled={bindMutation.isPending}
-                onClick={handleBind}
-                className="shrink-0 rounded-xl brand-gradient px-4 py-2.5 text-xs font-bold text-primary-foreground shadow-glow active:scale-95 transition-all"
-              >
-                {bindMutation.isPending ? "..." : "ربط 🔗"}
-              </button>
-            ) : (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-success/20 text-success border border-success/30">
-                <Check className="h-5 w-5" />
-              </div>
-            )}
-          </div>
-
-          {isAddressLocked ? (
-            <p className="mt-2 text-[10px] text-cyan-glow/80 flex items-center gap-1">
-              <ShieldCheck className="h-3 w-3 shrink-0" />
-              <span>لا يمكن تغيير العنوان إلا بطلب رسمي من خلال خدمة العملاء.</span>
-            </p>
-          ) : (
-            <p className="mt-2 text-[10px] text-gold/80 flex items-center gap-1">
-              <ShieldAlert className="h-3 w-3 shrink-0" />
-              <span>تأكد من دقة العنوان، سيتم قفله بمجرد الربط أو السحب لأول مرة.</span>
-            </p>
-          )}
-        </div>
-
-        {/* Withdrawal Form */}
-        <form onSubmit={handleSubmitWithdraw} className="mt-4 space-y-4">
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-bold text-foreground">مبلغ السحب (USDT)</label>
-              <button
-                type="button"
-                onClick={() => setAmount(balance > 0 ? balance.toString() : "0")}
-                className="text-xs font-bold text-cyan-glow hover:underline"
-              >
-                سحب الكل ({money(balance)})
-              </button>
-            </div>
-
-            <div className="relative">
-              <input
-                id="withdraw-amount-input"
-                type="number"
-                min={minWithdrawal}
-                max={balance}
-                step="0.01"
-                placeholder={`الحد الأدنى ${minWithdrawal}$`}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-                className="w-full rounded-2xl border border-border bg-navy px-4 py-3.5 text-sm font-bold text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
-              />
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-extrabold text-gold">
-                USDT
-              </span>
-            </div>
-          </div>
-
-          {/* Breakdown fee box matching PDF */}
-          {numAmount > 0 && (
-            <div className="rounded-2xl border border-border/80 bg-surface/70 p-3.5 text-xs space-y-2">
-              <div className="flex justify-between text-muted-foreground">
-                <span>المبلغ المطلوب سحبه:</span>
-                <span className="font-bold text-foreground">{money(numAmount)}</span>
-              </div>
-              <div className="flex justify-between text-danger">
-                <span>رسوم المنصة ({feePercent}%):</span>
-                <span className="font-bold">-{money(feeAmount)}</span>
-              </div>
-              <div className="flex justify-between font-extrabold text-success border-t border-border/50 pt-2 text-sm">
-                <span>صافي المبلغ المستلم:</span>
-                <span className="text-gold-gradient">{money(netAmount)} USDT</span>
-              </div>
-            </div>
-          )}
-
-          <button
-            id="submit-withdraw-button"
-            type="submit"
-            disabled={withdrawMutation.isPending || numAmount <= 0}
-            className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-          >
-            {withdrawMutation.isPending ? "جاري المعالجة..." : "تقديم طلب السحب ✈"}
-          </button>
-        </form>
-
-        {/* Important Notes matching PDF Page 7 */}
-        <div className="mt-5 rounded-2xl border border-cyan-glow/30 bg-surface/70 p-4 text-xs leading-relaxed space-y-2.5">
-          <div className="flex items-center gap-1.5 font-bold text-cyan-glow">
-            <Info className="h-4 w-4 shrink-0" />
-            <span>ملاحظات هامة:</span>
-          </div>
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            <span>الحد الأدنى للسحب هو {minWithdrawal} دولارات.</span>
-          </p>
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
+          <div className="flex items-center gap-1.5 text-xs font-black text-gold">
+            <Wallet className="h-4 w-4" />
             <span>
-              وقت السحب من الساعة {startHour} صباحاً إلى غاية {endHour} مساءً.
+              {t("home.accountBalance")}: {infoLoading ? "..." : money(balance)}
             </span>
-          </p>
-          <p className="flex items-center gap-2 text-muted-foreground text-xs">
-            <Coins className="h-3.5 w-3.5 text-cyan-glow shrink-0" />
-            <span>رسوم السحب هي {feePercent}%.</span>
-          </p>
+          </div>
         </div>
 
-        {/* Recent Withdrawals History */}
-        <section className="mt-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-extrabold text-foreground">سجل السحوبات الأخيرة</h2>
-            <Link
-              to="/records"
-              search={{ tab: "withdrawals" }}
-              className="text-xs font-bold text-cyan-glow hover:underline"
-            >
-              عرض الكل ›
-            </Link>
-          </div>
-
-          {!recordsData?.withdrawals || recordsData.withdrawals.length === 0 ? (
-            <div className="surface-card p-6 text-center text-xs text-muted-foreground">
-              لا توجد طلبات سحب سابقة.
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {recordsData.withdrawals.slice(0, 5).map((w) => (
-                <div
-                  key={w.id}
-                  className="surface-card p-3 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-electric/40 text-cyan-glow font-bold">
-                      ↑
-                    </div>
-                    <div>
-                      <p className="font-extrabold text-foreground">
-                        -{money(w.amount)}{" "}
-                        <span className="text-[10px] text-muted-foreground">
-                          (صافي: {money(w.netAmount)})
+        {/* Bento Grid: Form on Left (7 cols), Info & History on Right (5 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Form Column */}
+          <div className="lg:col-span-7 space-y-5 text-start">
+            {/* Network Selector */}
+            <div className="surface-card glow-border p-5 rounded-3xl space-y-3">
+              <label className="block text-xs font-black text-foreground">
+                {t("withdraw.selectNetwork")}
+              </label>
+              <div className="grid grid-cols-3 gap-2.5">
+                {(["ERC20", "BEP20", "TRC20"] as const).map((net) => {
+                  const isSelected = network === net;
+                  return (
+                    <button
+                      key={net}
+                      id={`btn-withdraw-net-${net}`}
+                      type="button"
+                      disabled={isAddressLocked}
+                      onClick={() => setNetwork(net)}
+                      className={`relative flex flex-col items-center justify-center rounded-2xl border p-3.5 transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-cyan-glow bg-surface shadow-glow ring-1 ring-cyan-glow/50"
+                          : "border-border bg-surface/50 hover:bg-surface"
+                      } ${isAddressLocked && !isSelected ? "opacity-40 cursor-not-allowed" : ""}`}
+                    >
+                      {isSelected && (
+                        <span className="absolute top-2 start-2 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-glow text-primary-foreground">
+                          <Check className="h-2.5 w-2.5 stroke-[3]" />
                         </span>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {new Date(w.createdAt).toLocaleString("ar-EG", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
-                      </p>
-                    </div>
-                  </div>
+                      )}
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-black">
+                        ₮
+                      </div>
+                      <span className="mt-2 text-xs font-black text-foreground">USDT-{net}</span>
+                      <span className="text-[10px] text-muted-foreground font-semibold">
+                        ({net})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-                  <div>
-                    {w.status === "approved" ? (
-                      <span className="rounded-full bg-success/20 border border-success/40 px-2.5 py-0.5 text-[10px] font-bold text-success">
-                        تم التحويل بنجاح
-                      </span>
-                    ) : w.status === "rejected" ? (
-                      <span className="rounded-full bg-danger/20 border border-danger/40 px-2.5 py-0.5 text-[10px] font-bold text-danger">
-                        مرفوض
-                      </span>
-                    ) : (
-                      <span className="rounded-full bg-gold/20 border border-gold/40 px-2.5 py-0.5 text-[10px] font-bold text-gold">
-                        قيد المعالجة
-                      </span>
-                    )}
+            {/* Address Binding Card */}
+            <div className="surface-card glow-border p-5 rounded-3xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-foreground flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-gold" />
+                  <span>{t("account.walletBind")}</span>
+                </span>
+                {isAddressLocked ? (
+                  <span className="rounded-full bg-success/20 border border-success/40 px-3 py-0.5 text-[10px] font-black text-success flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" /> {t("withdraw.walletLocked")}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-gold font-bold">
+                    {t("withdraw.bindingRequired")}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isAddressLocked ? t("withdraw.lockedDesc") : t("withdraw.unlockedDesc")}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  id="withdraw-address-field"
+                  type="text"
+                  placeholder={t("withdraw.addressPlaceholder")}
+                  value={addressInput}
+                  onChange={(e) => setAddressInput(e.target.value)}
+                  disabled={isAddressLocked}
+                  dir="ltr"
+                  className="flex-1 rounded-2xl border border-border bg-surface px-4 py-3 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none disabled:opacity-80"
+                />
+                {!isAddressLocked ? (
+                  <button
+                    id="btn-bind-wallet-address"
+                    type="button"
+                    disabled={bindMutation.isPending}
+                    onClick={handleBind}
+                    className="shrink-0 rounded-2xl brand-gradient px-4 py-3 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all cursor-pointer"
+                  >
+                    {bindMutation.isPending ? "..." : t("withdraw.bindBtn")}
+                  </button>
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-success/20 text-success border border-success/30">
+                    <Check className="h-5 w-5" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Withdrawal Amount & Submission */}
+            <form
+              onSubmit={handleSubmitWithdraw}
+              className="surface-card glow-border p-5 rounded-3xl space-y-4"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-black text-foreground">
+                    {t("withdraw.amount")}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setAmount(balance > 0 ? balance.toString() : "0")}
+                    className="text-xs font-black text-cyan-glow hover:underline cursor-pointer"
+                  >
+                    {t("withdraw.withdrawAll")} ({money(balance)})
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    id="withdraw-amount-input"
+                    type="number"
+                    min={minWithdrawal}
+                    max={balance}
+                    step="0.01"
+                    placeholder={`${t("withdraw.minNotice")} ${minWithdrawal}$`}
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    required
+                    className="w-full rounded-2xl border border-border bg-surface px-4 py-3.5 text-sm font-black text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
+                  />
+                  <span className="absolute end-4 top-1/2 -translate-y-1/2 text-xs font-black text-gold">
+                    USDT
+                  </span>
+                </div>
+              </div>
+
+              {/* Fee breakdown calculation */}
+              {numAmount > 0 && (
+                <div className="rounded-2xl border border-border bg-surface p-4 text-xs space-y-2">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>{t("withdraw.requestedAmount")}:</span>
+                    <span className="font-black text-foreground">{money(numAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-danger">
+                    <span>
+                      {t("withdraw.platformFee")} ({feePercent}%):
+                    </span>
+                    <span className="font-black">-{money(feeAmount)}</span>
+                  </div>
+                  <div className="flex justify-between font-black text-success border-t border-border/60 pt-2.5 text-sm">
+                    <span>{t("withdraw.receivable")}:</span>
+                    <span className="text-gold-gradient font-black">{money(netAmount)} USDT</span>
                   </div>
                 </div>
-              ))}
+              )}
+
+              <button
+                id="submit-withdraw-button"
+                type="submit"
+                disabled={withdrawMutation.isPending || numAmount <= 0}
+                className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-black text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {withdrawMutation.isPending ? t("withdraw.submitting") : t("withdraw.submit")}
+              </button>
+            </form>
+          </div>
+
+          {/* Right Column: Balance Hero + Rules + Recent History */}
+          <div className="lg:col-span-5 space-y-5 text-start">
+            {/* Balance Hero Card */}
+            <div className="surface-card glow-border p-6 rounded-3xl relative overflow-hidden shadow-xl text-center space-y-2">
+              <div className="absolute -top-12 -end-12 h-32 w-32 rounded-full bg-cyan-glow/10 blur-2xl pointer-events-none" />
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow mb-1 shadow-glow">
+                <ArrowUpRight className="h-6 w-6" />
+              </div>
+              <h2 className="text-sm font-black text-muted-foreground">
+                {t("withdraw.withdrawableBalance")}
+              </h2>
+              <p className="text-3xl sm:text-4xl font-black text-gold-gradient tracking-tight">
+                {money(balance)}
+              </p>
             </div>
-          )}
-        </section>
+
+            {/* Important Notes Card */}
+            <div className="surface-card glow-border p-5 rounded-3xl space-y-3">
+              <div className="flex items-center gap-2 font-black text-cyan-glow text-xs">
+                <Info className="h-4 w-4 shrink-0" />
+                <span>{t("withdraw.importantNotes")}</span>
+              </div>
+              <div className="space-y-2 text-xs text-muted-foreground">
+                <p className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-success shrink-0" />
+                  <span>
+                    {t("withdraw.minNotice")} ({minWithdrawal}$)
+                  </span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
+                  <span>
+                    {t("withdraw.hoursNotice")} {startHour} - {endHour}
+                  </span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Coins className="h-3.5 w-3.5 text-cyan-glow shrink-0" />
+                  <span>
+                    {t("withdraw.platformFee")}: {feePercent}%
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {/* Recent Withdrawals History */}
+            <div className="surface-card glow-border p-5 rounded-3xl space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black text-foreground">
+                  {t("withdraw.recentHistory")}
+                </h3>
+                <Link
+                  to="/records"
+                  search={{ tab: "withdrawals" }}
+                  className="text-xs font-black text-cyan-glow hover:underline"
+                >
+                  {t("withdraw.viewAll")} ›
+                </Link>
+              </div>
+
+              {!recordsData?.withdrawals || recordsData.withdrawals.length === 0 ? (
+                <p className="text-center py-6 text-xs text-muted-foreground">
+                  {t("withdraw.noHistory")}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {recordsData.withdrawals.slice(0, 4).map((w) => (
+                    <div
+                      key={w.id}
+                      className="surface-card p-3 rounded-2xl flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-black text-foreground">
+                          -{money(w.amount)}{" "}
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            ({money(w.netAmount)})
+                          </span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {new Date(w.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+
+                      <div className="shrink-0">
+                        {w.status === "approved" ? (
+                          <span className="rounded-full bg-success/20 border border-success/40 px-2.5 py-0.5 text-[10px] font-black text-success">
+                            {t("records.completed")}
+                          </span>
+                        ) : w.status === "rejected" ? (
+                          <span className="rounded-full bg-danger/20 border border-danger/40 px-2.5 py-0.5 text-[10px] font-black text-danger">
+                            {t("records.rejected")}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-gold/20 border border-gold/40 px-2.5 py-0.5 text-[10px] font-black text-gold">
+                            {t("records.pending")}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </main>
 
       <BottomNav />

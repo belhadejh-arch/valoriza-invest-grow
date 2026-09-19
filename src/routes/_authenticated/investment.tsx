@@ -28,6 +28,7 @@ import {
   purchaseVip,
   investInSavingsFund,
 } from "@/lib/valoriza-pages.functions";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/investment")({
   head: () => ({
@@ -48,6 +49,7 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 
 function InvestmentPage() {
   const qc = useQueryClient();
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<"funds" | "vip">("funds");
   const [selectedFund, setSelectedFund] = useState<any | null>(null);
   const [investAmount, setInvestAmount] = useState<string>("5");
@@ -156,31 +158,31 @@ function InvestmentPage() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-background pb-28" dir="rtl">
+    <div className="min-h-screen bg-background text-foreground pb-28">
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-lg px-4 pt-4">
+      <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4 space-y-4">
         {isLoading || !data ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+          <p className="py-16 text-center text-sm text-muted-foreground">{t("common.loading")}</p>
         ) : (
           <>
             {/* Wallet Snapshot Banner */}
-            <section className="surface-card glow-border p-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gold/15 text-gold border border-gold/30">
+            <section className="surface-card glow-border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold/15 text-gold border border-gold/30 shadow-gold-glow">
                   <Wallet className="h-5 w-5" />
                 </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground font-bold">
-                    الرصيد المتاح للاستثمار
+                <div className="text-start">
+                  <p className="text-xs text-muted-foreground font-bold">
+                    {t("investment.availableBalance")}
                   </p>
-                  <p className="text-xl font-extrabold text-gold-gradient">{money(balance)}</p>
+                  <p className="text-2xl font-black text-gold-gradient">{money(balance)}</p>
                 </div>
               </div>
 
-              <div className="text-left">
-                <p className="text-[11px] text-muted-foreground">عضويتك الحالية</p>
-                <span className="inline-flex items-center gap-1 rounded-full bg-navy-deep border border-gold px-2.5 py-0.5 text-xs font-extrabold text-gold">
+              <div className="flex items-center sm:flex-col sm:items-end justify-between border-t sm:border-t-0 border-border/50 pt-2 sm:pt-0">
+                <p className="text-xs text-muted-foreground">{t("investment.activeVip")}</p>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-gold px-3 py-1 text-xs font-black text-gold shadow-sm mt-0.5">
                   <Crown className="h-3.5 w-3.5 fill-gold text-gold" />
                   <span>VIP {data.profile.vipLevel}</span>
                 </span>
@@ -189,16 +191,16 @@ function InvestmentPage() {
 
             {/* Trial Banner if VIP 0 */}
             {!data.profile.trialActive && data.profile.vipLevel === 0 && (
-              <div className="mt-3 rounded-2xl border border-cyan-glow/40 bg-surface/80 p-3.5 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-glow/20 text-cyan-glow">
+              <div className="rounded-2xl border border-cyan-glow/40 bg-surface/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                <div className="flex items-center gap-3 text-start">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/20 text-cyan-glow">
                     <Timer className="h-5 w-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-foreground">الفترة التجريبية المجانية</h4>
-                    <p className="text-[10px] text-muted-foreground">
-                      جرب مهام VIP مجاناً لمدة يومين واكسب أرباحاً حقيقية
-                    </p>
+                    <h4 className="text-sm font-extrabold text-foreground">
+                      {t("investment.trialBanner")}
+                    </h4>
+                    <p className="text-xs text-muted-foreground">{t("investment.trialDesc")}</p>
                   </div>
                 </div>
 
@@ -206,137 +208,146 @@ function InvestmentPage() {
                   type="button"
                   disabled={trialMutation.isPending}
                   onClick={() => trialMutation.mutate()}
-                  className="shrink-0 rounded-xl brand-gradient px-3 py-1.5 text-xs font-extrabold text-primary-foreground shadow-glow active:scale-95 transition-all"
+                  className="shrink-0 rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
                 >
-                  تفعيل مجاني
+                  {t("investment.activateTrial")}
                 </button>
               </div>
             )}
 
             {/* View Switcher (Tabs) */}
-            <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-border bg-surface/80 p-1.5 shadow-sm">
+            <div className="max-w-md mx-auto grid grid-cols-2 gap-2 rounded-2xl border border-border bg-surface/80 p-1.5 shadow-sm">
               <button
                 type="button"
                 onClick={() => setActiveTab("funds")}
-                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-extrabold transition-all ${
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs sm:text-sm font-black transition-all ${
                   activeTab === "funds"
                     ? "brand-gradient text-primary-foreground shadow-glow"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Vault className="h-4 w-4" />
-                <span>صندوق التوفير</span>
+                <span>{t("investment.fundsTab")}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("vip")}
-                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-extrabold transition-all ${
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs sm:text-sm font-black transition-all ${
                   activeTab === "vip"
                     ? "brand-gradient text-primary-foreground shadow-glow"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Crown className="h-4 w-4" />
-                <span>ترقيات VIP</span>
+                <span>{t("investment.vipTab")}</span>
               </button>
             </div>
 
-            {/* TAB 1: SAVINGS FUNDS matching PDF Page 3 */}
+            {/* TAB 1: SAVINGS FUNDS */}
             {activeTab === "funds" && (
-              <div className="mt-4 space-y-4 animate-in fade-in duration-200">
-                {/* Hero Header matching PDF Page 3 */}
-                <div className="surface-card glow-border p-4 text-center relative overflow-hidden">
+              <div className="space-y-4 animate-in fade-in duration-200">
+                {/* Hero Header */}
+                <div className="surface-card glow-border p-5 text-center relative overflow-hidden">
                   <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-gold/10 blur-2xl pointer-events-none" />
-                  <h2 className="text-lg font-extrabold text-foreground">صندوق التوفير</h2>
+                  <h2 className="text-xl font-black text-foreground">{t("investment.fundsTab")}</h2>
                   <p className="mt-1 text-sm font-bold text-gold-gradient">
-                    استثمر اليوم .. لمستقبل أفضل
+                    {t("investment.fundsSubtitle")}
                   </p>
-                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed max-w-md mx-auto">
-                    فرص استثمارية آمنة مع عوائد مميزة تمنحك الاستقرار المالي والنمو المستدام
+                  <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed max-w-lg mx-auto">
+                    {t("investment.fundsDesc")}
                   </p>
                 </div>
 
-                {/* 4 Savings Funds List matching PDF Page 3 */}
-                <div className="space-y-3">
+                {/* 4 Savings Funds Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {data.funds.map((fund) => (
                     <div
                       key={fund.id}
-                      className="surface-card glow-border p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 hover:border-cyan-glow/50 transition-all"
+                      className="surface-card glow-border p-4 flex flex-col justify-between gap-3 hover:border-cyan-glow/50 transition-all shadow-md"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-extrabold text-xs shadow-glow">
-                          {fund.code}
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-extrabold text-foreground">{fund.nameAr}</h3>
-                          <p className="text-[11px] text-muted-foreground">
-                            {fund.taglineAr || fund.nameEn}
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                            <span className="flex items-center gap-1 text-cyan-glow">
-                              <Clock className="h-3.5 w-3.5" />
-                              <span>
-                                المدة: <b>{fund.durationDays} أيام</b>
-                              </span>
-                            </span>
-                            <span className="flex items-center gap-1 text-success font-bold">
-                              <TrendingUp className="h-3.5 w-3.5" />
-                              <span>نسبة الأرباح: {fund.profitPercent}%</span>
-                            </span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 text-start">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-black text-xs shadow-glow">
+                            {fund.code}
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-black text-foreground">{fund.nameAr}</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {fund.taglineAr || fund.nameEn}
+                            </p>
                           </div>
                         </div>
+
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-black text-emerald-400">
+                          +{fund.profitPercent}%
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-border/40 text-start">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-cyan-glow" />
+                          <span>
+                            {fund.durationDays} {t("investment.durationDays")}
+                          </span>
+                        </span>
+                        <span className="text-muted-foreground text-end">
+                          {t("investment.minAmount")}:{" "}
+                          <b className="text-foreground">${fund.minAmount || 5}</b>
+                        </span>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => handleOpenInvest(fund)}
-                        className="shrink-0 inline-flex items-center justify-center gap-1 rounded-xl gold-gradient px-4 py-2.5 text-xs font-extrabold text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
+                        className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl gold-gradient py-2.5 text-xs font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
                       >
-                        <span>استثمر الآن</span>
+                        <span>{t("investment.investNow")}</span>
                         <span>›</span>
                       </button>
                     </div>
                   ))}
                 </div>
 
-                {/* Minimum Note matching PDF Page 3 */}
+                {/* Minimum Note */}
                 <div className="rounded-2xl border border-gold/40 bg-gold/10 p-3 text-center text-xs font-bold text-gold flex items-center justify-center gap-2">
                   <Sparkles className="h-4 w-4 shrink-0" />
-                  <span>الحد الأدنى للاستثمار في الصناديق التوفيرية هو 5 دولارات</span>
+                  <span>{t("investment.minNote")}</span>
                 </div>
 
                 {/* My Active Investments List */}
                 {data.userInvestments && data.userInvestments.length > 0 && (
                   <section className="mt-6">
-                    <h3 className="text-sm font-extrabold text-foreground mb-3 flex items-center gap-1.5">
+                    <h3 className="text-sm font-black text-foreground mb-3 flex items-center gap-2 text-start">
                       <Clock className="h-4 w-4 text-cyan-glow" />
-                      <span>استثماراتي النشطة ({data.userInvestments.length})</span>
+                      <span>
+                        {t("investment.activeInvestments")} ({data.userInvestments.length})
+                      </span>
                     </h3>
 
-                    <div className="space-y-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {data.userInvestments.map((inv) => (
                         <div
                           key={inv.id}
-                          className="surface-card p-3 flex items-center justify-between gap-3 text-xs"
+                          className="surface-card p-3.5 flex flex-col justify-between gap-2 text-xs text-start"
                         >
-                          <div>
-                            <p className="font-extrabold text-foreground">{inv.fundName}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              تاريخ الاستحقاق:{" "}
-                              {new Date(inv.maturesAt).toLocaleDateString("ar-EG", {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric",
-                              })}
-                            </p>
+                          <div className="flex items-center justify-between">
+                            <p className="font-black text-foreground text-sm">{inv.fundName}</p>
+                            <span className="text-xs font-bold text-success">
+                              +{money(inv.expectedProfit)}
+                            </span>
                           </div>
-
-                          <div className="text-left">
-                            <p className="font-bold text-foreground">المبلغ: {money(inv.amount)}</p>
-                            <p className="text-[11px] font-extrabold text-success">
-                              الربح المتوقع: +{money(inv.expectedProfit)}
-                            </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("investment.maturesAt")}:{" "}
+                            {new Date(inv.maturesAt).toLocaleDateString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </p>
+                          <div className="pt-2 border-t border-border/40 flex justify-between text-muted-foreground">
+                            <span>{t("investment.investedAmount")}:</span>
+                            <span className="font-black text-foreground">{money(inv.amount)}</span>
                           </div>
                         </div>
                       ))}
@@ -346,130 +357,132 @@ function InvestmentPage() {
               </div>
             )}
 
-            {/* TAB 2: VIP PACKAGES (VIP 1 to 7) matching PDF Page 8, 9, 10 */}
+            {/* TAB 2: VIP PACKAGES */}
             {activeTab === "vip" && (
-              <div className="mt-4 space-y-3 animate-in fade-in duration-200">
-                <div className="surface-card p-3.5 text-center glow-border mb-2">
-                  <h2 className="text-base font-extrabold text-foreground flex items-center justify-center gap-1.5">
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="surface-card p-4 text-center glow-border">
+                  <h2 className="text-base sm:text-lg font-black text-foreground flex items-center justify-center gap-2">
                     <Crown className="h-5 w-5 text-gold" />
-                    <span>باقات العضوية الاستثمارية VIP</span>
+                    <span>{t("investment.vipPackages")}</span>
                   </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    احصل على دخل يومي مستمر عبر إنجاز مهام مشاهدة الإعلانات اليومية
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t("investment.vipPackagesDesc")}
                   </p>
                 </div>
 
-                {data.packages.map((pkg) => {
-                  const isCurrent = data.profile.vipLevel === pkg.level;
-                  const isOwned = data.profile.vipLevel >= pkg.level;
-                  const isLocked = !pkg.isActive || pkg.level === 7;
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {data.packages.map((pkg) => {
+                    const isCurrent = data.profile.vipLevel === pkg.level;
+                    const isOwned = data.profile.vipLevel >= pkg.level;
+                    const isLocked = !pkg.isActive || pkg.level === 7;
 
-                  // VIP Styling colors
-                  const vipColors: Record<number, string> = {
-                    1: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-                    2: "border-sky-500/40 text-sky-400 bg-sky-500/10",
-                    3: "border-purple-500/40 text-purple-400 bg-purple-500/10",
-                    4: "border-gold/50 text-gold bg-gold/10",
-                    5: "border-pink-500/40 text-pink-400 bg-pink-500/10",
-                    6: "border-teal-500/40 text-teal-400 bg-teal-500/10",
-                    7: "border-zinc-500/40 text-zinc-400 bg-zinc-500/10",
-                  };
+                    const vipColors: Record<number, string> = {
+                      1: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
+                      2: "border-sky-500/40 text-sky-400 bg-sky-500/10",
+                      3: "border-purple-500/40 text-purple-400 bg-purple-500/10",
+                      4: "border-gold/50 text-gold bg-gold/10",
+                      5: "border-pink-500/40 text-pink-400 bg-pink-500/10",
+                      6: "border-teal-500/40 text-teal-400 bg-teal-500/10",
+                      7: "border-zinc-500/40 text-zinc-400 bg-zinc-500/10",
+                    };
 
-                  const colorClass = vipColors[pkg.level] || "border-border text-foreground";
+                    const colorClass = vipColors[pkg.level] || "border-border text-foreground";
 
-                  return (
-                    <div
-                      key={pkg.id}
-                      className={`surface-card p-4 transition-all relative overflow-hidden ${
-                        isCurrent
-                          ? "border-cyan-glow shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
-                          : isLocked
-                            ? "opacity-60"
-                            : "hover:border-border"
-                      }`}
-                    >
-                      {isCurrent && (
-                        <span className="absolute top-2 left-2 rounded-full bg-cyan-glow text-navy-deep px-2 py-0.5 text-[10px] font-extrabold shadow">
-                          باقتك النشطة حالياً
-                        </span>
-                      )}
-
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${colorClass} shadow-glow`}
-                          >
-                            <Crown className="h-6 w-6" />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-base font-black text-foreground">{pkg.name}</h3>
-                              {isLocked && (
-                                <span className="rounded-full bg-zinc-800 border border-zinc-700 px-2 py-0.2 text-[10px] font-bold text-zinc-400 flex items-center gap-1">
-                                  <Lock className="h-2.5 w-2.5" /> مغلق حالياً
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              ربح يومي:{" "}
-                              <span className="font-extrabold text-gold">
-                                {money(pkg.dailyProfit)}
-                              </span>{" "}
-                              • مهام يومية:{" "}
-                              <span className="font-bold text-foreground">
-                                {pkg.dailyTasks} مهام
-                              </span>
-                            </p>
-                            <p className="text-[11px] text-cyan-glow mt-0.5">
-                              مكافأة المهمة الواحدة: {money(pkg.taskReward)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="text-left shrink-0">
-                          <span className="text-xs text-muted-foreground block">سعر الباقة</span>
-                          <span className="text-xl font-extrabold text-gold-gradient">
-                            {money(pkg.price)}
+                    return (
+                      <div
+                        key={pkg.id}
+                        className={`surface-card p-4 transition-all relative overflow-hidden flex flex-col justify-between gap-3 ${
+                          isCurrent
+                            ? "border-cyan-glow shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
+                            : isLocked
+                              ? "opacity-60"
+                              : "hover:border-border"
+                        }`}
+                      >
+                        {isCurrent && (
+                          <span className="absolute top-2 left-2 rtl:left-auto rtl:right-2 rounded-full bg-cyan-glow text-navy-deep px-2.5 py-0.5 text-[10px] font-black shadow">
+                            {t("investment.currentTier")}
                           </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-3.5 pt-3 border-t border-border/50 flex items-center justify-between gap-2">
-                        <div className="text-[11px] text-muted-foreground">
-                          صلاحية الباقة: 365 يوماً
-                        </div>
-
-                        {isLocked ? (
-                          <button
-                            type="button"
-                            disabled
-                            className="rounded-xl border border-border/60 bg-surface/50 px-4 py-2 text-xs font-bold text-muted-foreground cursor-not-allowed"
-                          >
-                            غير متاح حالياً
-                          </button>
-                        ) : isCurrent ? (
-                          <span className="rounded-xl bg-success/20 border border-success/40 px-4 py-1.5 text-xs font-bold text-success flex items-center gap-1">
-                            <Check className="h-3.5 w-3.5" /> باقة مفعّلة
-                          </span>
-                        ) : isOwned ? (
-                          <span className="rounded-xl bg-surface border border-border px-4 py-1.5 text-xs font-bold text-muted-foreground">
-                            مملوكة سابقاً
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={buyMutation.isPending}
-                            onClick={() => buyMutation.mutate(pkg.id)}
-                            className="rounded-xl brand-gradient px-5 py-2 text-xs font-extrabold text-primary-foreground shadow-glow active:scale-95 transition-all"
-                          >
-                            {buyMutation.isPending ? "جاري الترقية..." : `ترقية إلى ${pkg.name}`}
-                          </button>
                         )}
+
+                        <div className="flex items-start justify-between gap-3 text-start">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${colorClass} shadow-glow`}
+                            >
+                              <Crown className="h-6 w-6" />
+                            </div>
+
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-base font-black text-foreground">{pkg.name}</h3>
+                                {isLocked && (
+                                  <span className="rounded-full bg-surface border border-border px-2 py-0.5 text-[10px] font-bold text-muted-foreground flex items-center gap-1">
+                                    <Lock className="h-2.5 w-2.5" /> {t("investment.locked")}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {t("investment.dailyProfit")}:{" "}
+                                <span className="font-black text-gold">
+                                  {money(pkg.dailyProfit)}
+                                </span>{" "}
+                                • {pkg.dailyTasks} {t("investment.tasksCount")}
+                              </p>
+                              <p className="text-[11px] text-cyan-glow mt-0.5">
+                                {t("investment.taskReward")}: {money(pkg.taskReward)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-end shrink-0">
+                            <span className="text-xs text-muted-foreground block">
+                              {t("investment.price")}
+                            </span>
+                            <span className="text-xl font-black text-gold-gradient">
+                              {money(pkg.price)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-2">
+                          <div className="text-[11px] text-muted-foreground">
+                            {t("investment.validityYear")}
+                          </div>
+
+                          {isLocked ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="rounded-xl border border-border/60 bg-surface/50 px-4 py-2 text-xs font-bold text-muted-foreground cursor-not-allowed"
+                            >
+                              {t("investment.unavailable")}
+                            </button>
+                          ) : isCurrent ? (
+                            <span className="rounded-xl bg-success/20 border border-success/40 px-4 py-1.5 text-xs font-bold text-success flex items-center gap-1">
+                              <Check className="h-3.5 w-3.5" /> {t("investment.activePackage")}
+                            </span>
+                          ) : isOwned ? (
+                            <span className="rounded-xl bg-surface border border-border px-4 py-1.5 text-xs font-bold text-muted-foreground">
+                              {t("investment.previouslyOwned")}
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={buyMutation.isPending}
+                              onClick={() => buyMutation.mutate(pkg.id)}
+                              className="rounded-xl brand-gradient px-4 sm:px-5 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
+                            >
+                              {buyMutation.isPending
+                                ? t("common.loading")
+                                : `${t("investment.upgradeTo")} ${pkg.name}`}
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
           </>
@@ -479,26 +492,26 @@ function InvestmentPage() {
       {/* Real Investment Modal Flow for Savings Fund */}
       {selectedFund && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in"
           onClick={() => setSelectedFund(null)}
-          dir="rtl"
         >
           <div
-            className="w-full max-w-md surface-card glow-border p-5 rounded-t-3xl sm:rounded-3xl relative"
+            className="w-full max-w-md surface-card glow-border p-5 rounded-3xl relative shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5 text-start">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow">
                   <Vault className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-extrabold text-foreground">
-                    الاستثمار في {selectedFund.nameAr}
+                  <h3 className="text-base font-black text-foreground">
+                    {t("investment.investIn")} {selectedFund.nameAr}
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
-                    المدة: {selectedFund.durationDays} أيام • الربح: {selectedFund.profitPercent}%
+                    {selectedFund.durationDays} {t("investment.durationDays")} •{" "}
+                    {selectedFund.profitPercent}%
                   </p>
                 </div>
               </div>
@@ -506,19 +519,22 @@ function InvestmentPage() {
               <button
                 type="button"
                 onClick={() => setSelectedFund(null)}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-surface transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Form */}
-            <form onSubmit={handleConfirmInvest} className="mt-4 space-y-4">
+            <form onSubmit={handleConfirmInvest} className="mt-4 space-y-4 text-start">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-foreground">مبلغ الاستثمار (USDT)</label>
+                  <label className="text-xs font-bold text-foreground">
+                    {t("investment.amountLabel")}
+                  </label>
                   <span className="text-xs text-muted-foreground">
-                    الرصيد المتاح: <b className="text-gold">{money(balance)}</b>
+                    {t("investment.availableBalance")}:{" "}
+                    <b className="text-gold">{money(balance)}</b>
                   </span>
                 </div>
 
@@ -528,19 +544,19 @@ function InvestmentPage() {
                     min={selectedFund.minAmount}
                     max={balance}
                     step="0.01"
-                    placeholder={`الحد الأدنى ${selectedFund.minAmount}$`}
+                    placeholder={`Min: $${selectedFund.minAmount}`}
                     value={investAmount}
                     onChange={(e) => setInvestAmount(e.target.value)}
                     required
-                    className="w-full rounded-2xl border border-border bg-navy px-4 py-3.5 text-sm font-extrabold text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
+                    className="w-full rounded-2xl border border-border bg-surface px-4 py-3.5 text-sm font-extrabold text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
                   />
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-extrabold text-gold">
+                  <span className="absolute right-4 rtl:right-auto rtl:left-4 top-1/2 -translate-y-1/2 text-xs font-extrabold text-gold">
                     USDT
                   </span>
                 </div>
 
                 {/* Quick amount presets */}
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                   {[5, 20, 50, 100, 250].map((preset) => (
                     <button
                       key={preset}
@@ -556,7 +572,7 @@ function InvestmentPage() {
                     onClick={() => setInvestAmount(balance > 0 ? balance.toString() : "5")}
                     className="rounded-xl border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-bold text-gold hover:bg-gold/20 transition-colors"
                   >
-                    الكل
+                    {t("investment.allAmount")}
                   </button>
                 </div>
               </div>
@@ -564,20 +580,22 @@ function InvestmentPage() {
               {/* Live Calculation Preview */}
               <div className="rounded-2xl border border-border/80 bg-surface/80 p-3.5 text-xs space-y-2">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>نسبة الأرباح الثابتة:</span>
-                  <span className="font-bold text-success">{selectedFund.profitPercent}%</span>
+                  <span>{t("investment.fixedProfitRate")}:</span>
+                  <span className="font-bold text-success">+{selectedFund.profitPercent}%</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
-                  <span>مدة الحجز والاستثمار:</span>
-                  <span className="font-bold text-foreground">{selectedFund.durationDays} يوم</span>
+                  <span>{t("investment.lockDuration")}:</span>
+                  <span className="font-bold text-foreground">
+                    {selectedFund.durationDays} {t("investment.durationDays")}
+                  </span>
                 </div>
                 <div className="flex justify-between text-muted-foreground">
-                  <span>الربح الصافي المتوقع:</span>
+                  <span>{t("investment.expectedNetProfit")}:</span>
                   <span className="font-extrabold text-success">+{money(calculatedProfit)}</span>
                 </div>
                 <div className="flex justify-between font-extrabold text-foreground border-t border-border/50 pt-2 text-sm">
-                  <span>إجمالي المبلغ عند الاستحقاق:</span>
-                  <span className="text-gold-gradient">
+                  <span>{t("investment.totalAtMaturity")}:</span>
+                  <span className="text-gold-gradient font-black">
                     {money(parsedAmount + calculatedProfit)} USDT
                   </span>
                 </div>
@@ -587,9 +605,9 @@ function InvestmentPage() {
               <button
                 type="submit"
                 disabled={investMutation.isPending || parsedAmount <= 0}
-                className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-black text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
               >
-                {investMutation.isPending ? "جاري فتح الاستثمار..." : "تأكيد واستثمار الآن ✈"}
+                {investMutation.isPending ? t("common.loading") : t("investment.confirmInvestBtn")}
               </button>
             </form>
           </div>

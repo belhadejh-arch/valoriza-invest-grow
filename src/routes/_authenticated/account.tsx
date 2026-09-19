@@ -7,16 +7,14 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   ChevronLeft,
+  ChevronRight,
   Coins,
   Crown,
   FileText,
   Gift,
   Headphones,
   KeyRound,
-  Lock,
   LogOut,
-  Mail,
-  Phone,
   ShieldCheck,
   Sparkles,
   Ticket,
@@ -30,6 +28,7 @@ import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getAccountData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { supabase } from "@/integrations/supabase/client";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/account")({
   head: () => ({
@@ -49,6 +48,7 @@ export const Route = createFileRoute("/_authenticated/account")({
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 function AccountPage() {
+  const { t, isRTL } = useI18n();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -68,15 +68,15 @@ function AccountPage() {
     mutationFn: () => claimDaily(),
     onSuccess: (res) => {
       if (res.ok) {
-        toast.success(`تم الحصول على المكافأة اليومية بنجاح! +${money(res.amount)}`);
+        toast.success(`${t("rewards.claimSuccess")} +${money(res.amount)}`);
         qc.invalidateQueries({ queryKey: ["account"] });
         qc.invalidateQueries({ queryKey: ["home"] });
         qc.invalidateQueries({ queryKey: ["financial-records"] });
       } else {
-        toast.info("لقد حصلت بالفعل على مكافأة اليوم، عد غداً مجدداً.");
+        toast.info(t("rewards.alreadyClaimed"));
       }
     },
-    onError: () => toast.error("تعذر المطالبة بالمكافأة حالياً"),
+    onError: () => toast.error(t("common.error")),
   });
 
   async function signOut() {
@@ -89,11 +89,11 @@ function AccountPage() {
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword.length < 6) {
-      toast.error("كلمة المرور يجب أن لا تقل عن 6 أحرف");
+      toast.error(t("account.passwordMinLength"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error("كلمتا المرور غير متطابقتين");
+      toast.error(t("account.passwordMismatch"));
       return;
     }
 
@@ -101,228 +101,268 @@ function AccountPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      toast.success("تم تغيير كلمة المرور بنجاح");
+      toast.success(t("account.passwordChangedSuccess"));
       setPasswordModalOpen(false);
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      toast.error(err.message || "حدث خطأ أثناء تغيير كلمة المرور");
+      toast.error(err.message || t("common.error"));
     } finally {
       setPasswordLoading(false);
     }
   }
 
+  const Chevron = isRTL ? ChevronLeft : ChevronRight;
+
   return (
-    <div className="min-h-screen bg-background pb-28" dir="rtl">
+    <div
+      className="min-h-screen bg-background pb-28 md:pb-12 text-foreground"
+      dir={isRTL ? "rtl" : "ltr"}
+    >
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-lg px-4 pt-4">
+      <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {isLoading || !data ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">جارٍ التحميل...</p>
+          <div className="flex flex-col items-center justify-center py-24 space-y-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
+            <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>
+          </div>
         ) : (
           <>
-            {/* User Profile Header matching PDF Page 4 */}
-            <section className="surface-card glow-border p-5 relative overflow-hidden">
-              <div className="absolute -top-10 -left-10 h-28 w-28 rounded-full bg-cyan-glow/10 blur-2xl pointer-events-none" />
+            {/* Top Bento Section (2 Columns on desktop) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-stretch">
+              {/* Profile Card */}
+              <section className="md:col-span-6 surface-card glow-border p-6 rounded-3xl relative overflow-hidden flex flex-col justify-between text-start">
+                <div className="absolute -top-12 -left-12 h-36 w-36 rounded-full bg-cyan-glow/10 blur-2xl pointer-events-none" />
 
-              <div className="flex items-center gap-3.5">
-                {/* Avatar with VIP badge */}
-                <div className="relative">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl brand-gradient text-primary-foreground font-black text-2xl shadow-glow">
-                    {data.profile.username.slice(0, 2).toUpperCase()}
+                <div className="relative z-10 flex items-start gap-4">
+                  {/* Avatar */}
+                  <div className="relative shrink-0">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl brand-gradient text-primary-foreground font-black text-2xl shadow-glow">
+                      {data.profile.username.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="absolute -bottom-1.5 -start-1.5 flex items-center gap-1 rounded-full bg-background border border-gold px-2 py-0.5 text-[10px] font-black text-gold shadow-md">
+                      <Crown className="h-3 w-3 text-gold fill-gold" />
+                      <span>VIP {data.profile.vipLevel}</span>
+                    </div>
                   </div>
-                  <div className="absolute -bottom-1.5 -left-1.5 flex items-center gap-0.5 rounded-full bg-navy-deep border border-gold px-1.5 py-0.5 text-[10px] font-extrabold text-gold shadow-md">
-                    <Crown className="h-3 w-3 text-gold fill-gold" />
-                    <span>VIP {data.profile.vipLevel}</span>
-                  </div>
-                </div>
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-lg font-extrabold text-foreground truncate">
-                      {data.profile.username}
-                    </h1>
-                    {data.profile.trialActive && (
-                      <span className="rounded-full bg-cyan-glow/20 border border-cyan-glow/40 px-2 py-0.2 text-[10px] font-bold text-cyan-glow">
-                        فترة تجريبية
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {data.profile.email}
-                  </p>
-                  <p className="text-[11px] text-cyan-glow font-mono mt-1 flex items-center gap-1">
-                    <Ticket className="h-3 w-3" />
-                    كود الدعوة:{" "}
-                    <span className="font-bold select-all">{data.profile.referralCode}</span>
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            {/* Account Balance Card matching PDF Page 4 */}
-            <section className="mt-4 surface-card glow-border p-5 text-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-transparent via-cyan-glow to-transparent" />
-              <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground mb-1">
-                <Wallet className="h-4 w-4 text-cyan-glow" />
-                <span>رصيد الحساب</span>
-              </div>
-              <p className="text-3xl font-extrabold text-gold-gradient tracking-tight">
-                {money(data.balance)}
-              </p>
-
-              {/* 3 Prominent Action Buttons matching PDF Page 4 */}
-              <div className="mt-5 grid grid-cols-3 gap-2.5">
-                <Link
-                  to="/deposit"
-                  id="btn-account-deposit"
-                  className="flex flex-col items-center justify-center rounded-2xl brand-gradient py-3 px-2 text-primary-foreground shadow-glow active:scale-[0.98] transition-all"
-                >
-                  <ArrowDownLeft className="h-5 w-5 mb-1 text-gold" />
-                  <span className="text-xs font-extrabold">إيداع</span>
-                </Link>
-
-                <Link
-                  to="/withdrawal"
-                  id="btn-account-withdraw"
-                  className="flex flex-col items-center justify-center rounded-2xl border border-electric/40 bg-surface/80 py-3 px-2 text-foreground hover:bg-surface active:scale-[0.98] transition-all"
-                >
-                  <ArrowUpRight className="h-5 w-5 mb-1 text-cyan-glow" />
-                  <span className="text-xs font-extrabold">سحب</span>
-                </Link>
-
-                <Link
-                  to="/support"
-                  id="btn-account-support"
-                  className="flex flex-col items-center justify-center rounded-2xl border border-gold/40 bg-surface/80 py-3 px-2 text-foreground hover:bg-surface active:scale-[0.98] transition-all"
-                >
-                  <Headphones className="h-5 w-5 mb-1 text-gold" />
-                  <span className="text-xs font-extrabold">خدمة العملاء</span>
-                </Link>
-              </div>
-            </section>
-
-            {/* Daily Login Reward Section matching PDF Page 4 */}
-            <section className="mt-4 surface-card glow-border p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gold/15 border border-gold/40 text-gold shadow-glow">
-                    <Gift className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-extrabold text-foreground">
-                      مكافأة تسجيل الدخول اليومية
-                    </h3>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      مكافأة يومية قدرها{" "}
-                      <span className="text-gold font-bold">{money(data.dailyReward.amount)}</span>{" "}
-                      تضاف لرصيدك مباشرة
+                  {/* Profile info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h1 className="text-lg font-black text-foreground truncate">
+                        {data.profile.username}
+                      </h1>
+                      {data.profile.trialActive && (
+                        <span className="rounded-full bg-cyan-glow/20 border border-cyan-glow/40 px-2 py-0.5 text-[10px] font-bold text-cyan-glow">
+                          {t("account.trialPeriod")}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-1">
+                      {data.profile.email}
                     </p>
+                    <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 py-1 text-xs font-mono text-cyan-glow">
+                      <Ticket className="h-3.5 w-3.5" />
+                      <span>{t("team.inviteCode")}:</span>
+                      <span className="font-black select-all text-gold">
+                        {data.profile.referralCode}
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Daily Reward Mini Card */}
+                <div className="mt-5 pt-4 border-t border-border/60 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gold/15 border border-gold/40 text-gold">
+                      <Gift className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-foreground truncate">
+                        {t("rewards.claimToday")}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        +{money(data.dailyReward.amount)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    id="btn-claim-daily-reward"
+                    type="button"
+                    disabled={data.dailyReward.claimed || claimMutation.isPending}
+                    onClick={() => claimMutation.mutate()}
+                    className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-black shadow-md transition-all cursor-pointer ${
+                      data.dailyReward.claimed
+                        ? "bg-surface text-muted-foreground border border-border cursor-not-allowed"
+                        : "brand-gradient text-primary-foreground shadow-glow hover:opacity-95 active:scale-95"
+                    }`}
+                  >
+                    {data.dailyReward.claimed ? t("rewards.claimedToday") : t("rewards.claimToday")}
+                  </button>
+                </div>
+              </section>
+
+              {/* Balance & Action Buttons Card */}
+              <section className="md:col-span-6 surface-card glow-border p-6 rounded-3xl relative overflow-hidden flex flex-col justify-between text-start shadow-xl">
+                <div className="absolute top-0 right-0 left-0 h-1 bg-gradient-to-r from-transparent via-cyan-glow to-transparent" />
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Wallet className="h-4 w-4 text-cyan-glow" />
+                    <span className="font-semibold">{t("home.accountBalance")}</span>
+                  </div>
+                  <p className="text-3xl sm:text-4xl font-black text-gold-gradient tracking-tight">
+                    {money(data.balance)}
+                  </p>
+                </div>
+
+                {/* 3 Prominent Quick Action Buttons */}
+                <div className="mt-5 grid grid-cols-3 gap-2.5">
+                  <Link
+                    to="/deposit"
+                    id="btn-account-deposit"
+                    className="flex flex-col items-center justify-center rounded-2xl brand-gradient py-3.5 px-2 text-primary-foreground shadow-glow active:scale-95 transition-all text-center"
+                  >
+                    <ArrowDownLeft className="h-5 w-5 mb-1 text-gold" />
+                    <span className="text-xs font-black">{t("home.deposit")}</span>
+                  </Link>
+
+                  <Link
+                    to="/withdrawal"
+                    id="btn-account-withdraw"
+                    className="flex flex-col items-center justify-center rounded-2xl border border-cyan-glow/40 bg-surface/80 py-3.5 px-2 text-foreground hover:bg-surface active:scale-95 transition-all text-center"
+                  >
+                    <ArrowUpRight className="h-5 w-5 mb-1 text-cyan-glow" />
+                    <span className="text-xs font-black">{t("home.withdraw")}</span>
+                  </Link>
+
+                  <Link
+                    to="/support"
+                    id="btn-account-support"
+                    className="flex flex-col items-center justify-center rounded-2xl border border-gold/40 bg-surface/80 py-3.5 px-2 text-foreground hover:bg-surface active:scale-95 transition-all text-center"
+                  >
+                    <Headphones className="h-5 w-5 mb-1 text-gold" />
+                    <span className="text-xs font-black">{t("home.support")}</span>
+                  </Link>
+                </div>
+              </section>
+            </div>
+
+            {/* Bottom Bento Section: Menu Links (Left) + Security Notes (Right) */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-start">
+              {/* Account Menu Navigation */}
+              <div className="md:col-span-7 surface-card divide-y divide-border/60 overflow-hidden rounded-3xl">
+                <Link
+                  to="/records"
+                  search={{ tab: "withdrawals" }}
+                  className="flex items-center justify-between p-4 hover:bg-surface transition-colors"
+                >
+                  <div className="flex items-center gap-3.5 text-xs font-black text-foreground">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-cyan-glow/40 text-cyan-glow">
+                      <ArrowUpRight className="h-4 w-4" />
+                    </div>
+                    <span>{t("account.recordsWithdrawals")}</span>
+                  </div>
+                  <Chevron className="h-4 w-4 text-muted-foreground" />
+                </Link>
+
+                <Link
+                  to="/records"
+                  search={{ tab: "deposits" }}
+                  className="flex items-center justify-between p-4 hover:bg-surface transition-colors"
+                >
+                  <div className="flex items-center gap-3.5 text-xs font-black text-foreground">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-gold/40 text-gold">
+                      <ArrowDownLeft className="h-4 w-4" />
+                    </div>
+                    <span>{t("account.recordsDeposits")}</span>
+                  </div>
+                  <Chevron className="h-4 w-4 text-muted-foreground" />
+                </Link>
+
+                <Link
+                  to="/records"
+                  search={{ tab: "transactions" }}
+                  className="flex items-center justify-between p-4 hover:bg-surface transition-colors"
+                >
+                  <div className="flex items-center gap-3.5 text-xs font-black text-foreground">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-border text-foreground">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <span>{t("account.recordsTransactions")}</span>
+                  </div>
+                  <Chevron className="h-4 w-4 text-muted-foreground" />
+                </Link>
+
+                <Link
+                  to="/records"
+                  search={{ tab: "rewards" }}
+                  className="flex items-center justify-between p-4 hover:bg-surface transition-colors"
+                >
+                  <div className="flex items-center gap-3.5 text-xs font-black text-foreground">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-gold/40 text-gold">
+                      <Coins className="h-4 w-4" />
+                    </div>
+                    <span>{t("account.recordsRewards")}</span>
+                  </div>
+                  <Chevron className="h-4 w-4 text-muted-foreground" />
+                </Link>
 
                 <button
-                  id="btn-claim-daily-reward"
                   type="button"
-                  disabled={data.dailyReward.claimed || claimMutation.isPending}
-                  onClick={() => claimMutation.mutate()}
-                  className={`shrink-0 rounded-xl px-4 py-2 text-xs font-extrabold shadow-md transition-all ${
-                    data.dailyReward.claimed
-                      ? "bg-surface text-muted-foreground border border-border cursor-not-allowed"
-                      : "gold-gradient text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95"
-                  }`}
+                  onClick={() => setPasswordModalOpen(true)}
+                  className="w-full flex items-center justify-between p-4 hover:bg-surface transition-colors text-start cursor-pointer"
                 >
-                  {data.dailyReward.claimed ? "تم الاستلام ✓" : "احصل عليه"}
+                  <div className="flex items-center gap-3.5 text-xs font-black text-foreground">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-border text-cyan-glow">
+                      <KeyRound className="h-4 w-4" />
+                    </div>
+                    <span>{t("account.changePass")}</span>
+                  </div>
+                  <Chevron className="h-4 w-4 text-muted-foreground" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={signOut}
+                  className="w-full flex items-center justify-between p-4 hover:bg-danger/10 transition-colors text-start text-danger cursor-pointer"
+                >
+                  <div className="flex items-center gap-3.5 text-xs font-black">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger/15 border border-danger/40 text-danger">
+                      <LogOut className="h-4 w-4" />
+                    </div>
+                    <span>{t("account.logout")}</span>
+                  </div>
+                  <Chevron className="h-4 w-4 text-danger/70" />
                 </button>
               </div>
-            </section>
 
-            {/* Account Menu Navigation matching PDF Page 4 */}
-            <div className="mt-4 surface-card divide-y divide-border/50 overflow-hidden rounded-2xl">
-              <Link
-                to="/records"
-                search={{ tab: "withdrawals" }}
-                className="flex items-center justify-between p-3.5 hover:bg-surface/50 transition-colors"
-              >
-                <div className="flex items-center gap-3 text-xs font-bold text-foreground">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-electric/40 text-cyan-glow">
-                    <ArrowUpRight className="h-4 w-4" />
-                  </div>
-                  <span>سجل السحوبات</span>
+              {/* Safety Information Bento Card */}
+              <div className="md:col-span-5 surface-card glow-border p-6 rounded-3xl space-y-4 text-start">
+                <div className="flex items-center gap-2 text-cyan-glow">
+                  <ShieldCheck className="h-5 w-5" />
+                  <h3 className="text-sm font-black text-foreground">
+                    {t("account.securityNoticeTitle")}
+                  </h3>
                 </div>
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              </Link>
 
-              <Link
-                to="/records"
-                search={{ tab: "deposits" }}
-                className="flex items-center justify-between p-3.5 hover:bg-surface/50 transition-colors"
-              >
-                <div className="flex items-center gap-3 text-xs font-bold text-foreground">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-gold/40 text-gold">
-                    <ArrowDownLeft className="h-4 w-4" />
-                  </div>
-                  <span>سجل الإيداع</span>
-                </div>
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              </Link>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {t("account.securityNoticeDesc")}
+                </p>
 
-              <Link
-                to="/records"
-                search={{ tab: "transactions" }}
-                className="flex items-center justify-between p-3.5 hover:bg-surface/50 transition-colors"
-              >
-                <div className="flex items-center gap-3 text-xs font-bold text-foreground">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-border text-foreground">
-                    <FileText className="h-4 w-4" />
+                <div className="rounded-2xl border border-border bg-surface p-3.5 space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">{t("home.vipStatus")}:</span>
+                    <span className="font-black text-gold">VIP {data.profile.vipLevel}</span>
                   </div>
-                  <span>سجل المعاملات المالية</span>
-                </div>
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              </Link>
-
-              <Link
-                to="/records"
-                search={{ tab: "rewards" }}
-                className="flex items-center justify-between p-3.5 hover:bg-surface/50 transition-colors"
-              >
-                <div className="flex items-center gap-3 text-xs font-bold text-foreground">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-gold/40 text-gold">
-                    <Coins className="h-4 w-4" />
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">SSL / TLS:</span>
+                    <span className="font-black text-success">256-bit Encrypted</span>
                   </div>
-                  <span>سجل المكافآت</span>
                 </div>
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => setPasswordModalOpen(true)}
-                className="w-full flex items-center justify-between p-3.5 hover:bg-surface/50 transition-colors text-right"
-              >
-                <div className="flex items-center gap-3 text-xs font-bold text-foreground">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-border text-cyan-glow">
-                    <KeyRound className="h-4 w-4" />
-                  </div>
-                  <span>تغيير كلمة المرور</span>
-                </div>
-                <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
-
-              <button
-                type="button"
-                onClick={signOut}
-                className="w-full flex items-center justify-between p-3.5 hover:bg-danger/10 transition-colors text-right text-danger"
-              >
-                <div className="flex items-center gap-3 text-xs font-bold">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-danger/15 border border-danger/40 text-danger">
-                    <LogOut className="h-4 w-4" />
-                  </div>
-                  <span>تسجيل الخروج</span>
-                </div>
-                <ChevronLeft className="h-4 w-4 text-danger/70" />
-              </button>
+              </div>
             </div>
           </>
         )}
@@ -331,56 +371,56 @@ function AccountPage() {
       {/* Change Password Modal */}
       {passwordModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in"
           onClick={() => setPasswordModalOpen(false)}
         >
           <div
-            className="w-full max-w-md surface-card glow-border p-5 relative"
+            className="w-full max-w-md surface-card glow-border p-6 rounded-3xl relative shadow-2xl animate-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
-            dir="rtl"
+            dir={isRTL ? "rtl" : "ltr"}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-border/60">
-              <h3 className="text-base font-extrabold text-foreground flex items-center gap-2">
+            <div className="flex items-center justify-between pb-3.5 border-b border-border/60">
+              <h3 className="text-base font-black text-foreground flex items-center gap-2">
                 <KeyRound className="h-5 w-5 text-cyan-glow" />
-                <span>تغيير كلمة المرور</span>
+                <span>{t("account.changePass")}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setPasswordModalOpen(false)}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            <form onSubmit={handleChangePassword} className="mt-4 space-y-3.5">
+            <form onSubmit={handleChangePassword} className="mt-4 space-y-4 text-start">
               <div>
-                <label className="block text-xs font-bold text-foreground mb-1">
-                  كلمة المرور الجديدة
+                <label className="block text-xs font-bold text-foreground mb-1.5">
+                  {t("account.newPassword")}
                 </label>
                 <input
                   type="password"
-                  placeholder="لا تقل عن 6 أحرف"
+                  placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   dir="ltr"
-                  className="w-full rounded-xl border border-border bg-navy px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-foreground mb-1">
-                  تأكيد كلمة المرور الجديدة
+                <label className="block text-xs font-bold text-foreground mb-1.5">
+                  {t("account.confirmPassword")}
                 </label>
                 <input
                   type="password"
-                  placeholder="أعد إدخال كلمة المرور"
+                  placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   dir="ltr"
-                  className="w-full rounded-xl border border-border bg-navy px-3 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
+                  className="w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
                 />
               </div>
 
@@ -388,16 +428,16 @@ function AccountPage() {
                 <button
                   type="submit"
                   disabled={passwordLoading}
-                  className="flex-1 rounded-xl brand-gradient py-2.5 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-50"
+                  className="flex-1 rounded-xl brand-gradient py-3 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50 cursor-pointer"
                 >
-                  {passwordLoading ? "جاري الحفظ..." : "حفظ كلمة المرور"}
+                  {passwordLoading ? t("account.saving") : t("account.savePassword")}
                 </button>
                 <button
                   type="button"
                   onClick={() => setPasswordModalOpen(false)}
-                  className="rounded-xl border border-border px-4 py-2.5 text-xs font-bold text-muted-foreground hover:text-foreground"
+                  className="rounded-xl border border-border bg-surface px-4 py-3 text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer"
                 >
-                  إلغاء
+                  {t("common.cancel")}
                 </button>
               </div>
             </form>
