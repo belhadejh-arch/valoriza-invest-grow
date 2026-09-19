@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Bell,
   Crown,
   Gift,
   Headphones,
-  HelpCircle,
   Home,
   Info,
   LogOut,
@@ -20,6 +21,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "./Logo";
+import { NotificationsDrawer } from "./NotificationsDrawer";
+import { getUserNotifications } from "@/lib/valoriza-tasks.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 interface AppHeaderProps {
@@ -44,7 +47,17 @@ export function AppHeader({
   onOpenSupport,
 }: AppHeaderProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Query unread notifications count
+  const { data: notifData } = useQuery({
+    queryKey: ["user-notifications-count"],
+    queryFn: () => getUserNotifications(),
+    refetchInterval: 20000,
+  });
+
+  const unreadCount = notifData?.unreadCount ?? 0;
 
   const handleToggleMenu = () => {
     if (onMenu) {
@@ -99,6 +112,22 @@ export function AppHeader({
               </span>
             )}
 
+            {/* Notification Bell with Badge */}
+            <button
+              id="header-notifications-btn"
+              type="button"
+              onClick={() => setNotificationsOpen(true)}
+              aria-label="الإشعارات"
+              className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border/80 text-foreground hover:border-cyan-glow hover:text-cyan-glow transition-all active:scale-95"
+            >
+              <Bell className="h-4 w-4" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-extrabold text-white shadow-[0_0_8px_oklch(0.63_0.24_25/0.8)] animate-pulse">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
             {showAbout && (
               <Link
                 id="header-about-btn"
@@ -112,6 +141,9 @@ export function AppHeader({
           </div>
         </div>
       </header>
+
+      {/* Notifications Drawer */}
+      <NotificationsDrawer open={notificationsOpen} onClose={() => setNotificationsOpen(false)} />
 
       {/* Slide-over Sidebar Drawer */}
       {drawerOpen && (
@@ -240,6 +272,30 @@ export function AppHeader({
                 >
                   <Gift className="h-4 w-4 text-pink-400" />
                   سجل المكافآت وعجلة الحظ
+                </Link>
+
+                <Link
+                  to="/tasks"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-foreground hover:bg-surface transition-colors"
+                  activeProps={{
+                    className: "bg-surface text-cyan-glow border-r-2 border-cyan-glow",
+                  }}
+                >
+                  <Video className="h-4 w-4 text-purple-400" />
+                  المهام اليومية وعمولة الفيديو
+                </Link>
+
+                <Link
+                  to="/admin"
+                  onClick={() => setDrawerOpen(false)}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-300 hover:bg-surface transition-colors border border-amber-500/20 bg-amber-500/5"
+                  activeProps={{
+                    className: "bg-surface text-amber-300 border-r-2 border-amber-400",
+                  }}
+                >
+                  <ShieldCheck className="h-4 w-4 text-amber-400" />
+                  لوحة الإدارة (Admin Panel)
                 </Link>
 
                 <button
