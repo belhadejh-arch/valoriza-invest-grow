@@ -1,11 +1,39 @@
+import {
+  serverAuthSession,
+  serverAuthLogin,
+  serverAuthRegister,
+  serverAuthLogout,
+  serverAuthUpdatePassword,
+  type AuthUser,
+} from "@/lib/valoriza-auth.functions";
 import { formatBackendUrl } from "@/lib/backend-client";
 
-type AuthUser = { id: string; email: string; username?: string; role?: string };
 type AuthListener = (event: "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED", session: unknown) => void;
-
 const listeners = new Set<AuthListener>();
 
-async function request<T>(path: string, init: RequestInit = {}) {
+function saveSession(token?: string) {
+  if (typeof window !== "undefined" && token) {
+    localStorage.setItem("valoriza_token", token);
+    try {
+      document.cookie = `valoriza_session=${token}; path=/; max-age=2592000; SameSite=Lax`;
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function clearSession() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("valoriza_token");
+    try {
+      document.cookie = "valoriza_session=; path=/; max-age=0; SameSite=Lax";
+    } catch {
+      // ignore
+    }
+  }
+}
+
+async function requestFallback<T>(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");
@@ -46,66 +74,112 @@ async function request<T>(path: string, init: RequestInit = {}) {
 
 const auth = {
   async getSession() {
-    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
-    return { data: result.data || { session: null }, error: result.error };
-  },
-  async getUser() {
-    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
-    return { data: { user: result.data?.session?.user ?? null }, error: result.error };
-  },
-  async signInWithPassword(input: { email: string; password: string }) {
-    const result = await request<{ ok: boolean; token?: string; user?: AuthUser }>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-    if (!result.error) {
-      if (result.data?.token && typeof window !== "undefined") {
-        localStorage.setItem("valoriza_token", result.data.token);
-      }
-      listeners.forEach((listener) => listener("SIGNED_IN", result.data));
+    try {
+      const data = await serverAuthSession();
+      return { data: data || { session: null }, error: null };
+    } catch {
+      return requestFallback<{ session: { user: AuthUser } | null }>("/api/auth/session");
     }
-    return result;
   },
+
+  async getUser() {
+    try {
+      const data = await serverAuthSession();
+      return { data: { user: data?.session?.user ?? null }, error: null };
+    } catch {
+      const result = await requestFallback<{ session: { user: AuthUser } | null }>("/api/auth/session");
+      return { data: { user: result.data?.session?.user ?? null }, error: result.error };
+    }
+  },
+
+  async signInWithPassword(input: { email: string; password: string }) {
+    try {
+      const data = await serverAuthLogin({ data: input });
+      if (data?.token) {
+        saveSession(data.token);
+      }
+      listeners.forEach((listener) => listener("SIGNED_IN", data));
+      return { data, error: null };
+    } catch (err: any) {
+      // Fallback direct request
+      const fallback = await requestFallback<{ ok: boolean; token?: string; user?: AuthUser }>(
+        "/api/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+        },
+      );
+      if (!fallback.error && fallback.data?.token) {
+        saveSession(fallback.data.token);
+        listeners.forEach((listener) => listener("SIGNED_IN", fallback.data));
+        return { data: fallback.data, error: null };
+      }
+      return { data: null, error: err?.message ? err : fallback.error };
+    }
+  },
+
   async signUp(input: {
     email: string;
     password: string;
     options?: { data?: Record<string, string> };
   }) {
     const metadata = input.options?.data ?? {};
-    const result = await request<{ ok: boolean; token?: string; user?: AuthUser }>("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({
-        email: input.email,
-        password: input.password,
-        username: metadata.username,
-        phone: metadata.phone,
-        referralCode: metadata.referral_code,
-      }),
-    });
-    if (!result.error) {
-      if (result.data?.token && typeof window !== "undefined") {
-        localStorage.setItem("valoriza_token", result.data.token);
+    const payload = {
+      email: input.email,
+      password: input.password,
+      username: metadata.username,
+      phone: metadata.phone,
+      referralCode: metadata.referral_code,
+    };
+    try {
+      const data = await serverAuthRegister({ data: payload });
+      if (data?.token) {
+        saveSession(data.token);
       }
-      listeners.forEach((listener) => listener("SIGNED_IN", result.data));
+      listeners.forEach((listener) => listener("SIGNED_IN", data));
+      return { data, error: null };
+    } catch (err: any) {
+      // Fallback direct request
+      const fallback = await requestFallback<{ ok: boolean; token?: string; user?: AuthUser }>(
+        "/api/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!fallback.error && fallback.data?.token) {
+        saveSession(fallback.data.token);
+        listeners.forEach((listener) => listener("SIGNED_IN", fallback.data));
+        return { data: fallback.data, error: null };
+      }
+      return { data: null, error: err?.message ? err : fallback.error };
     }
-    return result;
   },
+
   async signOut() {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("valoriza_token");
+    clearSession();
+    try {
+      await serverAuthLogout();
+    } catch {
+      await requestFallback<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
     }
-    const result = await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
     listeners.forEach((listener) => listener("SIGNED_OUT", null));
-    return result;
+    return { data: { ok: true }, error: null };
   },
+
   async updateUser(input: { password?: string }) {
-    const result = await request<{ user: AuthUser }>("/api/auth/password", {
-      method: "POST",
-      body: JSON.stringify(input),
-    });
-    if (!result.error) listeners.forEach((listener) => listener("USER_UPDATED", result.data));
-    return result;
+    try {
+      const data = await serverAuthUpdatePassword({ data: input });
+      listeners.forEach((listener) => listener("USER_UPDATED", data));
+      return { data, error: null };
+    } catch (err: any) {
+      return requestFallback<{ user: AuthUser }>("/api/auth/password", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    }
   },
+
   onAuthStateChange(listener: AuthListener) {
     listeners.add(listener);
     return { data: { subscription: { unsubscribe: () => listeners.delete(listener) } } };
@@ -113,3 +187,4 @@ const auth = {
 };
 
 export const supabase = { auth };
+export type { AuthUser };
