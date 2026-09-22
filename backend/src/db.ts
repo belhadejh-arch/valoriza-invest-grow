@@ -5,7 +5,12 @@ const { Pool } = pg;
 
 const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 if (!connectionString) {
-  console.warn("⚠️ Warning: Neither DATABASE_URL nor POSTGRES_URL is defined yet. Database operations will fail until set.");
+  console.warn("\n============================================================");
+  console.warn("⚠️  DATABASE_URL / POSTGRES_URL is not defined in environment variables!");
+  console.warn("👉 On Render: Go to your Web Service -> Environment -> Add Environment Variable");
+  console.warn("   Key: DATABASE_URL");
+  console.warn("   Value: [Your PostgreSQL Internal or External Connection String]");
+  console.warn("============================================================\n");
 }
 
 export const pool = new Pool({
@@ -17,7 +22,8 @@ export const pool = new Pool({
           (connectionString &&
             (connectionString.includes("render.com") ||
               connectionString.includes("neon.tech") ||
-              connectionString.includes("supabase.co")))
+              connectionString.includes("supabase.co") ||
+              connectionString.includes("aws.neon.tech")))
         ? { rejectUnauthorized: false }
         : undefined,
   max: Number(process.env.DB_POOL_MAX ?? 10),
@@ -28,10 +34,20 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,
   values: unknown[] = [],
 ): Promise<pg.QueryResult<T>> {
+  if (!connectionString) {
+    throw new Error(
+      "Missing database connection string. Please set DATABASE_URL (or POSTGRES_URL) in your environment variables.",
+    );
+  }
   return pool.query<T>(text, values);
 }
 
 export async function withTransaction<T>(callback: (client: pg.PoolClient) => Promise<T>) {
+  if (!connectionString) {
+    throw new Error(
+      "Missing database connection string. Please set DATABASE_URL (or POSTGRES_URL) in your environment variables.",
+    );
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
