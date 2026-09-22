@@ -1,3 +1,10 @@
+databases:
+  - name: valoriza-postgres
+    databaseName: valoriza
+    user: valoriza
+    plan: free
+    region: frankfurt
+
 services:
   # Valoriza Backend Service on Render
   - type: web
@@ -5,21 +12,29 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm install && npm run build:render
-    startCommand: npm run start:render
-    healthCheckPath: /
+    buildCommand: npm install && npm run build:backend
+    startCommand: npm run start:backend
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: SUPABASE_PUBLISHABLE_KEY
-        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: valoriza-postgres
+          property: connectionString
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: valoriza-postgres
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
       - key: ADMIN_EMAIL
         value: admin@valoriza.com
       - key: ADMIN_PASSWORD
         value: AdminValoriza2026!
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

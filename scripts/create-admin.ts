@@ -1,6 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import "dotenv/config";
 import fs from "fs";
 import path from "path";
+import { runMigrations } from "../backend/src/migrate.js";
+import { seedDatabase } from "../backend/src/seed.js";
+import { closeDb } from "../backend/src/db.js";
 
 async function run() {
   console.log("==================================================");
@@ -10,105 +13,29 @@ async function run() {
   const adminEmail = process.env.ADMIN_EMAIL || "admin@valoriza.com";
   const adminPassword = process.env.ADMIN_PASSWORD || "AdminValoriza2026!";
   const adminUsername = "admin";
-  const adminFullName = "مدير النظام الرئيسي (Super Admin)";
 
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const dbUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-  let createdInSupabase = false;
-
-  // 1. محاولة الإنشاء والربط في Supabase إذا كانت المتغيرات متوفرة
-  if (supabaseUrl && serviceRoleKey && !supabaseUrl.includes("placeholder")) {
+  if (dbUrl) {
+    console.log("📡 الاتصال بقاعدة بيانات PostgreSQL الرئيسية...");
     try {
-      console.log(`📡 جاري الاتصال بقاعدة بيانات Supabase: ${supabaseUrl}`);
-      const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
+      console.log("1️⃣ فحص وتطبيق جداول قاعدة البيانات (Migrations)...");
+      await runMigrations();
+      console.log("✅ تم تطبيق جداول قاعدة البيانات بنجاح.");
 
-      // البحث عن المستخدم أو إنشاؤه
-      let adminId: string | null = null;
-      const { data: userList } = await supabaseAdmin.auth.admin.listUsers();
-      const existing = userList?.users?.find(
-        (u) => u.email?.toLowerCase() === adminEmail.toLowerCase(),
-      );
-
-      if (existing) {
-        adminId = existing.id;
-        console.log(
-          `✅ تم العثور على حساب الأدمن مسبقاً (ID: ${adminId})، جاري تحديث كلمة المرور والصلاحيات...`,
-        );
-        await supabaseAdmin.auth.admin.updateUserById(adminId, {
-          password: adminPassword,
-          email_confirm: true,
-          user_metadata: {
-            username: adminUsername,
-            full_name: adminFullName,
-          },
-        });
-      } else {
-        const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-          email: adminEmail,
-          password: adminPassword,
-          email_confirm: true,
-          user_metadata: {
-            username: adminUsername,
-            full_name: adminFullName,
-          },
-        });
-
-        if (createErr) {
-          console.warn("⚠️ خطأ أثناء إنشاء المستخدم في Supabase Auth:", createErr.message);
-        } else if (newUser?.user) {
-          adminId = newUser.user.id;
-          console.log(`✅ تم إنشاء حساب الأدمن في Supabase Auth بنجاح (ID: ${adminId})`);
-        }
-      }
-
-      if (adminId) {
-        // تحديث الملف الشخصي في profiles
-        await supabaseAdmin.from("profiles").upsert({
-          id: adminId,
-          email: adminEmail,
-          username: adminUsername,
-          full_name: adminFullName,
-          vip_level: 7,
-          trial_active: false,
-        });
-        console.log("✅ تم تحديث ملف المدير (profiles) مع باقة VIP 7.");
-
-        // إسناد رتبة الأدمن في user_roles
-        await supabaseAdmin.from("user_roles").upsert(
-          {
-            user_id: adminId,
-            role: "admin",
-          },
-          { onConflict: "user_id,role" },
-        );
-        console.log("👑 تم منح صلاحيات الأدمن الكاملة (user_roles).");
-
-        // تهيئة محفظة الأدمن في wallets
-        await supabaseAdmin.from("wallets").upsert({
-          user_id: adminId,
-          balance: 1000.0,
-          total_earned: 0.0,
-          invested_balance: 0.0,
-          team_income: 0.0,
-        });
-        console.log("💰 تم ربط رصيد المحفظة الإدارية (wallets).");
-
-        createdInSupabase = true;
-      }
-    } catch (err: any) {
-      console.warn("⚠️ تعذر الاتصال بـ Supabase:", err?.message || err);
+      console.log("2️⃣ إنشاء وتأكيد حساب الأدمن وصناديق الاستثمار وباقات VIP...");
+      await seedDatabase({ adminEmail, adminPassword });
+      console.log("✅ تم ربط وتفعيل حساب الأدمن في قاعدة بيانات PostgreSQL بنجاح!");
+      await closeDb();
+    } catch (dbErr: any) {
+      console.warn("⚠️ تنبيه أثناء الاتصال بقاعدة البيانات:", dbErr?.message || dbErr);
     }
   } else {
-    console.log("ℹ️ لم يتم تحديد SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY في البيئة الحالية.");
-    console.log(
-      "ℹ️ سيتم تفعيل حساب الأدمن في قاعدة البيانات المحلية (.data/valoriza_db.json) وتقديم ملف SQL.",
-    );
+    console.log("ℹ️ لم يتم تحديد DATABASE_URL أو POSTGRES_URL في البيئة الحالية.");
+    console.log("ℹ️ يمكنك تحديد DATABASE_URL لربطه تلقائياً بقاعدة بيانات Render PostgreSQL.");
   }
 
-  // 2. تحديث وتثبيت الأدمن في قاعدة البيانات المحلية (.data/valoriza_db.json)
+  // تحديث وتثبيت الأدمن في النسخة الاحتياطية المحلية (.data/valoriza_db.json)
   try {
     const dataDir = path.resolve(process.cwd(), ".data");
     const storePath = path.join(dataDir, "valoriza_db.json");
@@ -149,15 +76,12 @@ async function run() {
     };
 
     fs.writeFileSync(storePath, JSON.stringify(dbData, null, 2), "utf-8");
-    console.log(
-      "✅ تم حفظ وتأكيد بيانات الأدمن في قاعدة البيانات المحلية (.data/valoriza_db.json)",
-    );
   } catch (localErr) {
-    console.warn("خطأ في تحديث قاعدة البيانات المحلية:", localErr);
+    // Ignore local store error
   }
 
   console.log("\n==================================================");
-  console.log("🎉 بيانات حساب الأدمن الأساسي (Super Admin) الجاهز للاستخدام:");
+  console.log("🎉 بيانات حساب الأدمن الأساسي (Super Admin) لمنصة Valoriza:");
   console.log(`📧 البريد الإلكتروني:  ${adminEmail}`);
   console.log(`🔑 كلمة المرور:       ${adminPassword}`);
   console.log(`👤 اسم المستخدم:      ${adminUsername}`);

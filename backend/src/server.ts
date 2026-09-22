@@ -4,6 +4,8 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
+import { runMigrations } from "./migrate.js";
+import { seedDatabase } from "./seed.js";
 import {
   clearSessionCookie,
   createSession,
@@ -1423,7 +1425,44 @@ app.use(
 );
 
 const server = createServer(app);
-server.listen(port, "0.0.0.0", () => console.log(`Valoriza backend listening on ${port}`));
+
+async function initDatabase() {
+  const hasDb = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+  if (!hasDb) {
+    console.warn("⚠️ Warning: No DATABASE_URL or POSTGRES_URL set. Skipping database initialization.");
+    return;
+  }
+
+  if (process.env.AUTO_MIGRATE !== "false") {
+    try {
+      console.log("Checking and applying database migrations...");
+      await runMigrations();
+      console.log("Database migrations applied successfully.");
+    } catch (err: any) {
+      console.warn("Migration notice (schema may already be initialized):", err?.message || err);
+    }
+  }
+
+  try {
+    const adminCheck = await query(
+      "SELECT users.id FROM users JOIN user_roles ON users.id = user_roles.user_id WHERE user_roles.role = 'admin' LIMIT 1",
+    );
+    if (!adminCheck.rows.length) {
+      console.log("No admin user found. Creating primary admin account...");
+      const creds = await seedDatabase();
+      console.log(`Primary admin account created: ${creds.adminEmail}`);
+    } else {
+      console.log("Admin account verified in database.");
+    }
+  } catch (err: any) {
+    console.warn("Notice verifying admin account:", err?.message || err);
+  }
+}
+
+server.listen(port, "0.0.0.0", async () => {
+  console.log(`Valoriza backend listening on ${port}`);
+  await initDatabase();
+});
 
 async function shutdown() {
   server.close();

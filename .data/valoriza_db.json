@@ -1,0 +1,22 @@
+{
+  "wallets": {
+    "admin-primary-001": {
+      "userId": "admin-primary-001",
+      "balance": 1000,
+      "totalDeposited": 1000,
+      "totalWithdrawn": 0,
+      "totalEarned": 0,
+      "investedBalance": 0,
+      "teamIncome": 0
+    }
+  },
+  "userVips": {
+    "admin-primary-001": {
+      "userId": "admin-primary-001",
+      "vipLevel": 7,
+      "activatedAt": "2026-09-22T17:50:09.938Z",
+      "expiresAt": "2027-09-22T17:50:09.938Z",
+      "status": "active"
+    }
+  }
+}
