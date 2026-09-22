@@ -15,7 +15,7 @@ const post = <T>(path: string, fallback?: (data: T) => string) =>
 
 export const getInvestmentData = get("/api/app/investment");
 export const activateTrial = createServerFn({ method: "POST" }).handler(() =>
-  backendRequest("/api/app/trial", { method: "POST" }),
+  serverBackendRequest("/api/app/trial", { method: "POST" }),
 );
 export const purchaseVip = post<{ level: number }>("/api/app/vip/purchase");
 export const investInSavingsFund = post<{ fundId: string; amount: number }>("/api/app/invest");
