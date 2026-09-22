@@ -13,7 +13,12 @@
     "db:migrate": "tsx backend/src/migrate.ts",
     "db:seed": "tsx backend/src/seed.ts",
     "build:dev": "vite build --mode development",
+    "build:render": "NITRO_PRESET=node-server vite build",
+    "start:render": "node .output/server/index.mjs",
+    "build:vercel": "vite build",
     "preview": "vite preview",
+    "create:admin": "tsx scripts/create-admin.ts",
+    "seed:accounts": "tsx scripts/seed-accounts.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -102,6 +107,7 @@
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
     "prettier": "^3.7.3",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
     "vite": "8.1.5"

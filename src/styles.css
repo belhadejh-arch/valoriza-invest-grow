@@ -112,12 +112,12 @@
   --navy: oklch(1 0 0);
   --surface: oklch(0.95 0.015 255);
   --surface-2: oklch(0.91 0.02 255);
-  --royal: oklch(0.45 0.20 262);
+  --royal: oklch(0.45 0.2 262);
   --electric: oklch(0.52 0.22 245);
   --cyan-glow: oklch(0.42 0.18 220);
   --gold: oklch(0.65 0.18 78);
   --gold-soft: oklch(0.75 0.15 82);
-  --success: oklch(0.50 0.18 148);
+  --success: oklch(0.5 0.18 148);
   --danger: oklch(0.55 0.22 25);
   --vip: oklch(0.52 0.22 305);
   --vip-soft: oklch(0.62 0.18 310);
@@ -151,7 +151,10 @@
 @layer base {
   * {
     border-color: var(--color-border);
-    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease,
+      color 0.15s ease;
   }
 
   html {
