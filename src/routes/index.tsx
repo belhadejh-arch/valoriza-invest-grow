@@ -103,7 +103,7 @@ function AuthPage() {
         toast.success(t("auth.accountCreated"));
         navigate({ to: "/home", replace: true });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: form.email.trim(),
           password: form.password,
         });
@@ -112,7 +112,11 @@ function AuthPage() {
           return;
         }
         toast.success(t("auth.welcomeBack"));
-        navigate({ to: "/home", replace: true });
+        if (data?.user?.role === "admin") {
+          navigate({ to: "/admin", replace: true });
+        } else {
+          navigate({ to: "/home", replace: true });
+        }
       }
     } finally {
       setLoading(false);

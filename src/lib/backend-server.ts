@@ -19,8 +19,14 @@ export async function serverBackendRequest<T>(path: string, init: RequestInit = 
     headers,
     credentials: "include",
   });
-  const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
+  const text = await response.text();
+  let payload: any = {};
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    payload = { message: `خطأ في الاتصال بالخادم (${response.status})` };
+  }
   if (!response.ok)
-    throw new Error(payload.message || `Backend request failed (${response.status})`);
-  return payload;
+    throw new Error(payload.message || `خطأ في الخادم (${response.status})`);
+  return payload as T;
 }

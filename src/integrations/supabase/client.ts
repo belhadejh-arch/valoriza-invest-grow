@@ -19,16 +19,29 @@ async function request<T>(path: string, init: RequestInit = {}) {
   }
 
   const url = formatBackendUrl(path);
-  const response = await fetch(url, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-  const data = await response.json().catch(() => ({}));
-  return {
-    data: data as T,
-    error: response.ok ? null : new Error(data?.message || "Backend request failed"),
-  };
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+    const text = await response.text();
+    let data: any = {};
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: `خطأ في الاتصال بالخادم (${response.status})` };
+    }
+    return {
+      data: data as T,
+      error: response.ok ? null : new Error(data?.message || `خطأ في الخادم (${response.status})`),
+    };
+  } catch (err: any) {
+    return {
+      data: {} as T,
+      error: new Error(err?.message || "تعذر الاتصال بالخادم"),
+    };
+  }
 }
 
 const auth = {
