@@ -37,15 +37,24 @@ export async function seedDatabase(options: SeedOptions = {}) {
     const userId = user.rows[0].id;
 
     await client.query(
+      `DELETE FROM profiles WHERE (LOWER(username) = 'admin' OR UPPER(referral_code) = 'ADMIN') AND id != $1`,
+      [adminId],
+    );
+    await client.query(
       `INSERT INTO profiles (id, username, email, referral_code, vip_level)
        VALUES ($1, 'admin', $2, 'ADMIN', 7)
-       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, vip_level = 7`,
+       ON CONFLICT (id) DO UPDATE SET username = 'admin', email = EXCLUDED.email, referral_code = 'ADMIN', vip_level = 7`,
       [adminId, adminEmail],
+    );
+
+    await client.query(
+      `DELETE FROM profiles WHERE (LOWER(username) = 'valoriza_user' OR UPPER(referral_code) = 'VALORIZAUSER') AND id != $1`,
+      [userId],
     );
     await client.query(
       `INSERT INTO profiles (id, username, email, referral_code)
        VALUES ($1, 'valoriza_user', $2, 'VALORIZAUSER')
-       ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+       ON CONFLICT (id) DO UPDATE SET username = 'valoriza_user', email = EXCLUDED.email, referral_code = 'VALORIZAUSER'`,
       [userId, userEmail],
     );
     await client.query(

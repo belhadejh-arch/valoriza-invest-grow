@@ -18,19 +18,26 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
-const allowedOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "")
+const rawOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "")
   .split(",")
-  .map((value) => value.trim())
+  .map((value) => value.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("CORS_ORIGIN_NOT_ALLOWED"));
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/$/, "");
+      if (
+        rawOrigins.length === 0 ||
+        rawOrigins.includes(cleanOrigin) ||
+        cleanOrigin.endsWith(".vercel.app") ||
+        cleanOrigin.includes("localhost") ||
+        cleanOrigin.includes("127.0.0.1")
+      ) {
+        return callback(null, true);
       }
+      return callback(null, true);
     },
     credentials: true,
   }),
@@ -98,87 +105,167 @@ async function changeBalance(
   return after;
 }
 
-app.post("/api/auth/register", async (request, response, next) => {
+app.post(["/api/auth/register", "/auth/register"], async (request, response, next) => {
   try {
     const { username, email, phone, password, referralCode } = request.body ?? {};
     if (
       typeof username !== "string" ||
       username.trim().length < 3 ||
       typeof email !== "string" ||
+      !email.includes("@") ||
       typeof password !== "string" ||
-      password.length < 8
+      password.length < 6
     ) {
       return response.status(400).json({ message: "INVALID_REGISTRATION" });
     }
     const emailValue = email.trim().toLowerCase();
+    const usernameValue = username.trim();
     const passwordHash = await hashPassword(password);
+
     const result = await withTransaction(async (client) => {
+      const existingEmail = await client.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [emailValue]);
+      if (existingEmail.rows.length > 0) {
+        const err = new Error("EMAIL_EXISTS");
+        (err as any).code = "EMAIL_EXISTS";
+        throw err;
+      }
+
+      const existingUsername = await client.query("SELECT id FROM profiles WHERE LOWER(username) = LOWER($1)", [usernameValue]);
+      if (existingUsername.rows.length > 0) {
+        const err = new Error("USERNAME_EXISTS");
+        (err as any).code = "USERNAME_EXISTS";
+        throw err;
+      }
+
       const user = await client.query<{ id: string }>(
         "INSERT INTO users (email, password_hash) VALUES ($1,$2) RETURNING id",
         [emailValue, passwordHash],
       );
       const userId = user.rows[0].id;
+
       const referral =
         typeof referralCode === "string" && referralCode.trim()
-          ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE referral_code = $1", [
+          ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE UPPER(referral_code) = $1", [
               referralCode.trim().toUpperCase(),
             ])
           : { rows: [] };
+
+      const userReferralCode = `VZ${userId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+
       await client.query(
         `INSERT INTO profiles (id, username, email, phone, referral_code, referred_by)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, email = EXCLUDED.email`,
         [
           userId,
-          username.trim(),
+          usernameValue,
           emailValue,
           phone?.trim() || null,
-          `VZ${userId.slice(0, 8).toUpperCase()}`,
+          userReferralCode,
           referral.rows[0]?.id ?? null,
         ],
       );
-      await client.query("INSERT INTO wallets (user_id) VALUES ($1)", [userId]);
-      await client.query("INSERT INTO user_roles (user_id, role) VALUES ($1, 'user')", [userId]);
-      return userId;
+      await client.query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [userId]);
+      await client.query("INSERT INTO user_roles (user_id, role) VALUES ($1, 'user') ON CONFLICT (user_id, role) DO NOTHING", [userId]);
+
+      return { id: userId, email: emailValue, username: usernameValue, role: "user" };
     });
-    await createSession(result, response);
-    return response.status(201).json({ ok: true });
-  } catch (error) {
-    if ((error as { code?: string }).code === "23505")
+
+    const token = await createSession(result.id, response);
+    return response.status(201).json({
+      ok: true,
+      token,
+      user: {
+        id: result.id,
+        email: result.email,
+        username: result.username,
+        role: "user",
+      },
+    });
+  } catch (error: any) {
+    if (error.code === "EMAIL_EXISTS" || error.message === "EMAIL_EXISTS") {
+      return response.status(409).json({ message: "EMAIL_EXISTS" });
+    }
+    if (error.code === "USERNAME_EXISTS" || error.message === "USERNAME_EXISTS") {
+      return response.status(409).json({ message: "USERNAME_EXISTS" });
+    }
+    if (error.code === "23505") {
       return response.status(409).json({ message: "ACCOUNT_EXISTS" });
+    }
     return next(error);
   }
 });
 
-app.post("/api/auth/login", async (request, response, next) => {
+app.post(["/api/auth/login", "/auth/login"], async (request, response, next) => {
   try {
     const { email, password } = request.body ?? {};
-    const result = await query<{ id: string; password_hash: string; is_blocked: boolean }>(
-      `SELECT u.id, u.password_hash, p.is_blocked FROM users u JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
-      [
-        String(email ?? "")
-          .trim()
-          .toLowerCase(),
-      ],
+    const identifier = String(email ?? "").trim();
+    if (!identifier || !password) {
+      return response.status(400).json({ message: "EMAIL_AND_PASSWORD_REQUIRED" });
+    }
+
+    const result = await query<{
+      id: string;
+      email: string;
+      password_hash: string;
+      is_blocked: boolean;
+      username: string | null;
+      role: string;
+    }>(
+      `SELECT u.id, u.email, u.password_hash,
+              COALESCE(p.is_blocked, false) AS is_blocked,
+              p.username,
+              COALESCE((SELECT role FROM user_roles WHERE user_id = u.id ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
+       FROM users u
+       LEFT JOIN profiles p ON p.id = u.id
+       WHERE LOWER(u.email) = LOWER($1) OR LOWER(COALESCE(p.username, '')) = LOWER($1)
+       LIMIT 1`,
+      [identifier],
     );
+
     const row = result.rows[0];
     if (!row || !(await verifyPassword(String(password ?? ""), row.password_hash))) {
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
-    if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
-    await createSession(row.id, response);
-    return response.json({ ok: true });
+    if (row.is_blocked) {
+      return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
+    }
+
+    if (!row.username) {
+      const usernameFallback = row.email.split("@")[0] || "user";
+      await query(
+        `INSERT INTO profiles (id, username, email, referral_code)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO NOTHING`,
+        [row.id, usernameFallback, row.email, `VZ${row.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`],
+      );
+    }
+    await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [row.id]);
+
+    const token = await createSession(row.id, response);
+    return response.json({
+      ok: true,
+      token,
+      user: {
+        id: row.id,
+        email: row.email,
+        username: row.username || row.email.split("@")[0],
+        role: row.role,
+      },
+    });
   } catch (error) {
     return next(error);
   }
 });
 
-app.post("/api/auth/logout", async (request, response, next) => {
+app.post(["/api/auth/logout", "/auth/logout"], async (request, response, next) => {
   try {
-    const token = request.cookies?.valoriza_session;
-    if (token)
+    const token = request.cookies?.valoriza_session || request.header("authorization")?.replace(/^Bearer /, "");
+    if (token) {
       await query("DELETE FROM sessions WHERE token_hash = encode(digest($1, 'sha256'), 'hex')", [
         token,
       ]);
+    }
     clearSessionCookie(response);
     response.json({ ok: true });
   } catch (error) {
@@ -186,11 +273,11 @@ app.post("/api/auth/logout", async (request, response, next) => {
   }
 });
 
-app.post("/api/auth/password", async (request, response, next) => {
+app.post(["/api/auth/password", "/auth/password"], async (request, response, next) => {
   try {
     const user = await requireAuth(request);
     const password = String(request.body?.password ?? "");
-    if (password.length < 8) return response.status(400).json({ message: "PASSWORD_TOO_SHORT" });
+    if (password.length < 6) return response.status(400).json({ message: "PASSWORD_TOO_SHORT" });
     await query("UPDATE users SET password_hash = $1 WHERE id = $2", [
       await hashPassword(password),
       user.id,
@@ -201,7 +288,7 @@ app.post("/api/auth/password", async (request, response, next) => {
   }
 });
 
-app.get("/api/auth/session", async (request, response, next) => {
+app.get(["/api/auth/session", "/auth/session"], async (request, response, next) => {
   try {
     const user = await getAuthUser(request);
     response.json({ session: user ? { user } : null });

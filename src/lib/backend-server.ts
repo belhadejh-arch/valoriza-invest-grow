@@ -1,5 +1,5 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import { backendBaseUrl } from "./backend-client";
+import { formatBackendUrl } from "./backend-client";
 
 const getIncomingRequest = createServerOnlyFn(async () => {
   const { getRequest } = await import("@tanstack/react-start/server");
@@ -14,7 +14,7 @@ export async function serverBackendRequest<T>(path: string, init: RequestInit = 
   const authorization = request?.headers.get("authorization");
   if (cookie) headers.set("cookie", cookie);
   if (authorization) headers.set("authorization", authorization);
-  const response = await fetch(`${backendBaseUrl()}${path}`, {
+  const response = await fetch(formatBackendUrl(path), {
     ...init,
     headers,
     credentials: "include",

@@ -60,6 +60,17 @@ function AuthPage() {
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
+  function getAuthErrorMessage(msg: string): string {
+    if (msg.includes("EMAIL_EXISTS")) return "البريد الإلكتروني مسجل بالفعل، يرجى تسجيل الدخول";
+    if (msg.includes("USERNAME_EXISTS")) return "اسم المستخدم مسجل مسبقاً، يرجى اختيار اسم مستخدم آخر";
+    if (msg.includes("ACCOUNT_EXISTS")) return "هذا الحساب مسجل بالفعل، يرجى تسجيل الدخول";
+    if (msg.includes("INVALID_REGISTRATION")) return "يرجى التأكد من ملء جميع الحقول بصورة صحيحة";
+    if (msg.includes("INVALID_CREDENTIALS")) return t("auth.errInvalidCreds");
+    if (msg.includes("ACCOUNT_BLOCKED")) return "تم تجميد هذا الحساب، يرجى مراجعة الدعم الفني";
+    if (msg.includes("PASSWORD_TOO_SHORT")) return t("auth.errPasswordLen");
+    return msg;
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
@@ -86,7 +97,7 @@ function AuthPage() {
           },
         });
         if (error) {
-          toast.error(error.message);
+          toast.error(getAuthErrorMessage(error.message));
           return;
         }
         toast.success(t("auth.accountCreated"));
@@ -97,7 +108,7 @@ function AuthPage() {
           password: form.password,
         });
         if (error) {
-          toast.error(t("auth.errInvalidCreds"));
+          toast.error(getAuthErrorMessage(error.message));
           return;
         }
         toast.success(t("auth.welcomeBack"));
@@ -220,9 +231,9 @@ function AuthPage() {
 
                 <Field
                   id="auth-field-email"
-                  icon={Mail}
-                  type="email"
-                  placeholder={t("auth.email")}
+                  icon={mode === "login" ? User : Mail}
+                  type={mode === "login" ? "text" : "email"}
+                  placeholder={mode === "login" ? "البريد الإلكتروني أو اسم المستخدم" : t("auth.email")}
                   value={form.email}
                   onChange={set("email")}
                   required
