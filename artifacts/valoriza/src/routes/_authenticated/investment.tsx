@@ -29,23 +29,27 @@ import {
   investInSavingsFund,
 } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export const Route = createFileRoute("/_authenticated/investment")({
-  head: () => ({
-    meta: [
-      { title: "الاستثمار و VIP — Valoriza" },
-      {
-        name: "description",
-        content: "صناديق التوفير الاستثمارية وترقيات باقات VIP بعوائد يومية مضمونة.",
-      },
-      { property: "og:title", content: "الاستثمار و VIP — Valoriza" },
-      { property: "og:description", content: "صناديق التوفير وباقات VIP في منصة Valoriza." },
-    ],
-  }),
   component: InvestmentPage,
 });
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number | null | undefined) => {
+  const value = Number.isFinite(Number(n)) ? Number(n) : 0;
+  return `$${value.toFixed(2)}`;
+};
+
+function localizedField(item: any, field: string) {
+  const value = item?.[field];
+  if (value && typeof value === "object") return value;
+  return {
+    ar: item?.[`${field}Ar`] ?? item?.[`${field}_ar`] ?? value,
+    en: item?.[`${field}En`] ?? item?.[`${field}_en`],
+    fr: item?.[`${field}Fr`] ?? item?.[`${field}_fr`],
+    es: item?.[`${field}Es`] ?? item?.[`${field}_es`],
+  };
+}
 
 function InvestmentPage() {
   const qc = useQueryClient();
@@ -54,6 +58,7 @@ function InvestmentPage() {
   const [investAmount, setInvestAmount] = useState<string>("5");
 
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
 
   const fetchData = getInvestmentData;
   const trial = activateTrial;
@@ -63,6 +68,71 @@ function InvestmentPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["investment"],
     queryFn: () => fetchData(),
+  });
+
+  const trialMutation = useMutation({
+    mutationFn: () => trial(),
+    onSuccess: (res: any) => {
+      if (res?.ok) {
+        toast.success(t("investment.trialSuccess"));
+        qc.invalidateQueries({ queryKey: ["investment"] });
+        qc.invalidateQueries({ queryKey: ["home"] });
+      } else {
+        toast.error(
+          res?.reason === "HAS_VIP"
+            ? t("investment.alreadyVip")
+            : t("investment.trialUsed"),
+        );
+      }
+    },
+    onError: () => toast.error(t("investment.trialError")),
+  });
+
+  const buyMutation = useMutation({
+    mutationFn: (pkg: { id: string; level: number }) =>
+      buy({ packageId: pkg.id, level: pkg.level }),
+    onSuccess: (res: any) => {
+      if (res?.ok) {
+        toast.success(t("investment.upgraded").replace("{level}", String(res.level ?? res.vipLevel)));
+        qc.invalidateQueries({ queryKey: ["investment"] });
+        qc.invalidateQueries({ queryKey: ["home"] });
+        qc.invalidateQueries({ queryKey: ["account"] });
+      } else {
+        toast.error(
+          res?.reason === "INSUFFICIENT_BALANCE"
+            ? t("investment.insufficientUpgrade")
+            : t("investment.packageUnavailable"),
+        );
+      }
+    },
+    onError: () => toast.error(t("investment.purchaseError")),
+  });
+
+  const investMutation = useMutation({
+    mutationFn: (vals: { fundId: string; amount: number }) => invest(vals),
+    onSuccess: (res: any) => {
+      if (res?.ok) {
+        toast.success(
+          t("investment.investSuccess")
+            .replace("{fund}", content(selectedFund?.nameVariants ?? {}))
+            .replace("{profit}", money(res.expectedProfit ?? 0)),
+        );
+        setSelectedFund(null);
+        setInvestAmount("5");
+        qc.invalidateQueries({ queryKey: ["investment"] });
+        qc.invalidateQueries({ queryKey: ["account"] });
+        qc.invalidateQueries({ queryKey: ["financial-records"] });
+      } else {
+        if (res?.reason === "INSUFFICIENT_BALANCE") {
+          toast.error(t("investment.insufficientFunds"));
+        } else if (res?.reason === "BELOW_MIN_AMOUNT") {
+          toast.error(t("investment.belowMin").replace("{amount}", String(res.minAmount)));
+        } else {
+          toast.error(t("investment.investError"));
+        }
+      }
+    },
+    onError: () => toast.error(t("investment.processError")),
   });
 
   if (isLoading) {
@@ -95,9 +165,8 @@ function InvestmentPage() {
     ...fund,
     id: fund.id,
     code: fund.code,
-    nameAr: fund.nameAr || fund.name_ar || fund.code,
-    nameEn: fund.nameEn || fund.name_en || fund.code,
-    taglineAr: fund.taglineAr || fund.tagline_ar || "",
+    nameVariants: localizedField(fund, "name"),
+    taglineVariants: localizedField(fund, "tagline"),
     durationDays: Number(fund.durationDays || fund.duration_days || 0),
     profitPercent: Number(fund.profitPercent || fund.profit_percent || 0),
     minAmount: Number(fund.minAmount || fund.min_amount || 5),
@@ -107,7 +176,7 @@ function InvestmentPage() {
     ...pkg,
     id: pkg.id,
     level: Number(pkg.level),
-    name: pkg.name,
+    nameVariants: localizedField(pkg, "name"),
     price: Number(pkg.price),
     dailyProfit: Number(pkg.dailyProfit ?? pkg.daily_profit ?? 0),
     dailyTasks: Number(pkg.dailyTasks ?? pkg.daily_tasks ?? 0),
@@ -120,75 +189,21 @@ function InvestmentPage() {
     (inv: any) => ({
       ...inv,
       id: inv.id,
-      fundName: inv.fundName || inv.name_ar || inv.code || "صندوق استثماري",
+      fundNameVariants: localizedField(
+        {
+          ...inv,
+          fundName: inv.fundName ?? inv.name ?? inv.name_ar,
+          fundName_en: inv.fundName_en ?? inv.fundNameEn ?? inv.name_en,
+          fundName_fr: inv.fundName_fr ?? inv.fundNameFr ?? inv.name_fr,
+          fundName_es: inv.fundName_es ?? inv.fundNameEs ?? inv.name_es,
+        },
+        "fundName",
+      ),
       amount: Number(inv.amount),
       expectedProfit: Number(inv.expectedProfit ?? inv.expected_profit ?? 0),
       maturesAt: inv.maturesAt || inv.matures_at || new Date().toISOString(),
     }),
   );
-
-  const trialMutation = useMutation({
-    mutationFn: () => trial(),
-    onSuccess: (res: any) => {
-      if (res?.ok) {
-        toast.success("تم تفعيل الفترة التجريبية المجانية بنجاح!");
-        qc.invalidateQueries({ queryKey: ["investment"] });
-        qc.invalidateQueries({ queryKey: ["home"] });
-      } else {
-        toast.error(
-          res?.reason === "HAS_VIP"
-            ? "لديك باقة VIP نشطة بالفعل"
-            : "تم استخدام الفترة التجريبية مسبقاً لهذا الحساب",
-        );
-      }
-    },
-    onError: () => toast.error("تعذر تفعيل التجربة"),
-  });
-
-  const buyMutation = useMutation({
-    mutationFn: (pkg: { id: string; level: number }) =>
-      buy({ packageId: pkg.id, level: pkg.level }),
-    onSuccess: (res: any) => {
-      if (res?.ok) {
-        toast.success(`تم ترقية حسابك إلى VIP ${res.level ?? res.vipLevel} بنجاح!`);
-        qc.invalidateQueries({ queryKey: ["investment"] });
-        qc.invalidateQueries({ queryKey: ["home"] });
-        qc.invalidateQueries({ queryKey: ["account"] });
-      } else {
-        toast.error(
-          res?.reason === "INSUFFICIENT_BALANCE"
-            ? "رصيدك غير كافٍ لإتمام ترقية هذه الباقة. يرجى شحن الرصيد أولاً."
-            : "الباقة غير متاحة حالياً",
-        );
-      }
-    },
-    onError: () => toast.error("تعذر شراء الباقة حالياً"),
-  });
-
-  const investMutation = useMutation({
-    mutationFn: (vals: { fundId: string; amount: number }) => invest(vals),
-    onSuccess: (res: any) => {
-      if (res?.ok) {
-        toast.success(
-          `تم الاستثمار بنجاح في ${res.fundName || "الصندوق"}! الأرباح المتوقعة: +${money(res.expectedProfit ?? 0)}`,
-        );
-        setSelectedFund(null);
-        setInvestAmount("5");
-        qc.invalidateQueries({ queryKey: ["investment"] });
-        qc.invalidateQueries({ queryKey: ["account"] });
-        qc.invalidateQueries({ queryKey: ["financial-records"] });
-      } else {
-        if (res?.reason === "INSUFFICIENT_BALANCE") {
-          toast.error("رصيدك المتاح غير كافٍ لإتمام الاستثمار");
-        } else if (res?.reason === "BELOW_MIN_AMOUNT") {
-          toast.error(`الحد الأدنى للاستثمار في هذا الصندوق هو ${res.minAmount}$`);
-        } else {
-          toast.error("تعذر إتمام الاستثمار");
-        }
-      }
-    },
-    onError: () => toast.error("حدث خطأ أثناء معالجة الاستثمار"),
-  });
 
   const handleOpenInvest = (fund: any) => {
     setSelectedFund(fund);
@@ -200,11 +215,11 @@ function InvestmentPage() {
     if (!selectedFund) return;
     const num = parseFloat(investAmount);
     if (isNaN(num) || num < selectedFund.minAmount) {
-      toast.error(`الحد الأدنى للاستثمار هو ${selectedFund.minAmount}$`);
+      toast.error(t("investment.minAmountError").replace("{amount}", String(selectedFund.minAmount)));
       return;
     }
     if (num > balance) {
-      toast.error("رصيدك المتاح أقل من المبلغ المطلوب");
+      toast.error(t("investment.balanceTooLow"));
       return;
     }
     investMutation.mutate({
@@ -327,12 +342,12 @@ function InvestmentPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 text-start">
                           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-black text-xs shadow-glow">
-                            {fund.code}
+                            {content(fund.code, { allowLanguageNeutral: true })}
                           </div>
                           <div>
-                            <h3 className="text-sm font-black text-foreground">{fund.nameAr}</h3>
+                    <h3 className="text-sm font-black text-foreground">{content(fund.nameVariants)}</h3>
                             <p className="text-xs text-muted-foreground">
-                              {fund.taglineAr || fund.nameEn}
+                      {content(fund.taglineVariants)}
                             </p>
                           </div>
                         </div>
@@ -390,7 +405,7 @@ function InvestmentPage() {
                           className="surface-card p-3.5 flex flex-col justify-between gap-2 text-xs text-start"
                         >
                           <div className="flex items-center justify-between">
-                            <p className="font-black text-foreground text-sm">{inv.fundName}</p>
+                            <p className="font-black text-foreground text-sm">{content(inv.fundNameVariants)}</p>
                             <span className="text-xs font-bold text-success">
                               +{money(inv.expectedProfit)}
                             </span>
@@ -473,7 +488,7 @@ function InvestmentPage() {
 
                             <div>
                               <div className="flex items-center gap-2">
-                                <h3 className="text-base font-black text-foreground">{pkg.name}</h3>
+                                 <h3 className="text-base font-black text-foreground">{content(pkg.nameVariants)}</h3>
                                 {isLocked && (
                                   <span className="rounded-full bg-surface border border-border px-2 py-0.5 text-[10px] font-bold text-muted-foreground flex items-center gap-1">
                                     <Lock className="h-2.5 w-2.5" /> {t("investment.locked")}
@@ -533,7 +548,7 @@ function InvestmentPage() {
                             >
                               {buyMutation.isPending
                                 ? t("common.loading")
-                                : `${t("investment.upgradeTo")} ${pkg.name}`}
+                                : `${t("investment.upgradeTo")} ${content(pkg.nameVariants)}`}
                             </button>
                           )}
                         </div>
@@ -563,7 +578,7 @@ function InvestmentPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-black text-foreground">
-                    {t("investment.investIn")} {selectedFund.nameAr}
+                    {t("investment.investIn")} {content(selectedFund.nameVariants)}
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
                     {selectedFund.durationDays} {t("investment.durationDays")} •{" "}
@@ -600,7 +615,7 @@ function InvestmentPage() {
                     min={selectedFund.minAmount}
                     max={balance}
                     step="0.01"
-                    placeholder={`Min: $${selectedFund.minAmount}`}
+                    placeholder={t("investment.minPlaceholder").replace("{amount}", String(selectedFund.minAmount))}
                     value={investAmount}
                     onChange={(e) => setInvestAmount(e.target.value)}
                     required

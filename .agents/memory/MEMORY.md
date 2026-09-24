@@ -1,1 +1,2 @@
 - [Vite build runtime env](vite-build-runtime-env.md) — CI evaluates all Vite configs without Replit's preview-only PORT and BASE_PATH.
+- [Arabic-only authored content](arabic-authored-content.md) — do not show source Arabic in other locales when no authored translation exists.

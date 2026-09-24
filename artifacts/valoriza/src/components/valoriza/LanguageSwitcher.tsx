@@ -1,4 +1,4 @@
-import { Globe, Check } from "lucide-react";
+import { Globe } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export function LanguageSwitcher({
@@ -8,24 +8,30 @@ export function LanguageSwitcher({
   compact?: boolean;
   className?: string;
 }) {
-  const { currentLanguage } = useI18n();
+  const { languages, lang, setLang, t } = useI18n();
 
   return (
     <div className={`relative inline-block text-right ${className}`}>
-      <div
+      <label
         id="language-switcher-indicator"
-        title="اللغة الرسمية الموحدة: العربية"
-        aria-label="اللغة الموحدة: العربية"
-        className="flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-bold text-foreground shadow-sm select-none"
+        title={t("public.lang.aria")}
+        aria-label={t("public.lang.aria")}
+        className="flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-bold text-foreground shadow-sm"
       >
         <Globe className="h-3.5 w-3.5 text-cyan-glow" />
-        <span className="text-[13px] leading-none">{currentLanguage.flag}</span>
-        {!compact && <span className="font-bold text-foreground">{currentLanguage.nativeName}</span>}
-        <span className="hidden sm:inline-flex items-center gap-0.5 rounded-full bg-cyan-glow/15 px-1.5 py-0.2 text-[9px] font-bold text-cyan-glow">
-          <Check className="h-2.5 w-2.5" />
-          <span>موحدة</span>
-        </span>
-      </div>
+        <select
+          aria-label={t("public.lang.aria")}
+          value={lang}
+          onChange={(event) => setLang(event.target.value as typeof lang)}
+          className={`${compact ? "max-w-[88px]" : "max-w-[112px]"} cursor-pointer appearance-none bg-transparent text-[11px] font-bold text-foreground outline-none`}
+        >
+          {languages.map((language) => (
+            <option key={language.code} value={language.code} className="bg-background">
+              {language.flag} {t(`language.${language.code}`)}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

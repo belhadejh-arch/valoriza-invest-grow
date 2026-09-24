@@ -1,4 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useRouterState } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { coreTranslations } from "./locales/core";
+import { publicTranslations } from "./locales/public";
+import { pagesTranslations } from "./locales/pages";
+import { adminTranslations } from "./locales/admin";
 
 export type LanguageCode = "ar" | "en" | "fr" | "es";
 
@@ -12,6 +18,9 @@ export interface LanguageOption {
 
 export const LANGUAGES: LanguageOption[] = [
   { code: "ar", name: "العربية", nativeName: "العربية", flag: "🇸🇦", dir: "rtl" },
+  { code: "en", name: "English", nativeName: "English", flag: "🇬🇧", dir: "ltr" },
+  { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷", dir: "ltr" },
+  { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸", dir: "ltr" },
 ];
 
 export const translations = {
@@ -414,23 +423,68 @@ export const translations = {
     "status.active": "نشط",
     "status.expired": "منتهي",
     "status.not_started": "لم يبدأ بعد",
+
+    "content.unavailable": "هذا المحتوى غير متاح باللغة المختارة.",
+    "language.ar": "العربية",
+    "language.en": "الإنجليزية",
+    "language.fr": "الفرنسية",
+    "language.es": "الإسبانية",
+    "meta.title": "Valoriza — استثمر اليوم لبناء مستقبلك غداً",
+    "meta.description": "منصة Valoriza للاستثمار: صناديق توفير، باقات VIP، مهام يومية ومكافآت الفريق.",
+    "meta.ogTitle": "فالوريزا — استثمر اليوم لبناء مستقبلك غداً",
+    "meta.ogDescription": "منصة استثمارية عالمية: فرص حقيقية لربح المال بأمان وسهولة.",
   },
   en: {} as Record<string, string>,
   fr: {} as Record<string, string>,
   es: {} as Record<string, string>,
 };
 
-// Guarantee 100% Arabic unification across all dictionaries
-translations.en = translations.ar;
-translations.fr = translations.ar;
-translations.es = translations.ar;
+const localeModules = [publicTranslations, pagesTranslations, adminTranslations] as const;
+for (const lang of ["ar", "en", "fr", "es"] as const) {
+  Object.assign(
+    translations[lang],
+    coreTranslations[lang],
+    ...localeModules.map((module) => module[lang]),
+  );
+}
+
+if (import.meta.env.DEV) {
+  const allKeys = new Set(
+    (["ar", "en", "fr", "es"] as const).flatMap((lang) =>
+      Object.keys(translations[lang] as Record<string, string>),
+    ),
+  );
+  for (const lang of ["ar", "en", "fr", "es"] as const) {
+    const dictionary = translations[lang] as Record<string, string>;
+    const missing = [...allKeys].filter((key) => dictionary[key] === undefined);
+    if (missing.length) {
+      throw new Error(`Missing ${lang} translations: ${missing.join(", ")}`);
+    }
+  }
+}
 
 export type TranslationKey = keyof typeof translations.ar | (string & {});
+
+const ROUTE_METADATA: Record<string, { title: TranslationKey; description: TranslationKey }> = {
+  "/": { title: "nav.home", description: "meta.description" },
+  "/about": { title: "nav.about", description: "meta.description" },
+  "/home": { title: "nav.home", description: "meta.description" },
+  "/investment": { title: "investment.title", description: "investment.fundsDesc" },
+  "/team": { title: "team.title", description: "team.subtitle" },
+  "/tasks": { title: "tasks.title", description: "tasks.subtitle" },
+  "/rewards": { title: "rewards.title", description: "rewards.subtitle" },
+  "/account": { title: "account.title", description: "account.subtitle" },
+  "/admin": { title: "admin.title", description: "admin.subtitle" },
+  "/support": { title: "support.title", description: "support.subtitle" },
+  "/deposit": { title: "deposit.title", description: "deposit.subtitle" },
+  "/withdrawal": { title: "withdraw.title", description: "withdraw.subtitle" },
+  "/records": { title: "records.title", description: "records.statement" },
+};
 
 interface I18nContextType {
   lang: LanguageCode;
   setLang: (lang: LanguageCode) => void;
-  t: (key: TranslationKey, fallback?: string) => string;
+  t: (key: TranslationKey, fallback?: string, values?: Record<string, string | number>) => string;
   dir: "rtl" | "ltr";
   isRTL: boolean;
   currentLanguage: LanguageOption;
@@ -441,42 +495,138 @@ const I18nContext = createContext<I18nContextType | null>(null);
 
 const STORAGE_KEY = "valoriza_language";
 
+function isLanguageCode(value: string | null): value is LanguageCode {
+  return value === "ar" || value === "en" || value === "fr" || value === "es";
+}
+
+export function getStoredLanguage(): LanguageCode {
+  if (typeof window === "undefined") return "ar";
+  try {
+    const value = window.localStorage.getItem(STORAGE_KEY);
+    return isLanguageCode(value) ? value : "ar";
+  } catch {
+    return "ar";
+  }
+}
+
+function translate(
+  lang: LanguageCode,
+  key: TranslationKey,
+  fallback?: string,
+  values?: Record<string, string | number>,
+): string {
+  const value = (translations[lang] as Record<string, string>)[key];
+  if (value === undefined) {
+    if (import.meta.env.DEV) {
+      throw new Error(`Missing translation for "${key}" in locale "${lang}"`);
+    }
+    return lang === "ar" ? fallback ?? key : key;
+  }
+  return value.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
+    values && name in values ? String(values[name]) : placeholder,
+  );
+}
+
+/** Translates without requiring React context, using an explicit locale. */
+export function translateForLanguage(
+  lang: LanguageCode,
+  key: TranslationKey,
+  fallback?: string,
+  values?: Record<string, string | number>,
+): string {
+  return translate(lang, key, fallback, values);
+}
+
+/** Translates with the currently persisted locale; safe outside LanguageProvider. */
+export function translateFromStorage(
+  key: TranslationKey,
+  fallback?: string,
+  values?: Record<string, string | number>,
+): string {
+  return translate(getStoredLanguage(), key, fallback, values);
+}
+
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<LanguageCode>("ar");
+  const [lang, setLangState] = useState<LanguageCode>(getStoredLanguage);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const currentLanguage = LANGUAGES.find((language) => language.code === lang)!;
+  const dir = currentLanguage.dir;
+  const isRTL = dir === "rtl";
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = lang;
+    document.documentElement.dir = dir;
+
+    const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+    const page = ROUTE_METADATA[normalizedPath] ?? ROUTE_METADATA["/"];
+    const syncMetadata = () => {
+      const pageTitle = translate(lang, page.title);
+      const title = `${pageTitle} — Valoriza`;
+      const description = translate(lang, page.description);
+      if (document.title !== title) document.title = title;
+
+      const setMetaContent = (selector: string, create: () => HTMLMetaElement, content: string) => {
+        let meta = document.head.querySelector<HTMLMetaElement>(selector);
+        if (!meta) {
+          meta = create();
+          document.head.appendChild(meta);
+        }
+        if (meta.content !== content) meta.content = content;
+      };
+      setMetaContent(
+        'meta[name="description"]',
+        () => {
+          const meta = document.createElement("meta");
+          meta.name = "description";
+          return meta;
+        },
+        description,
+      );
+      setMetaContent(
+        'meta[property="og:title"]',
+        () => {
+          const meta = document.createElement("meta");
+          meta.setAttribute("property", "og:title");
+          return meta;
+        },
+        title,
+      );
+      setMetaContent(
+        'meta[property="og:description"]',
+        () => {
+          const meta = document.createElement("meta");
+          meta.setAttribute("property", "og:description");
+          return meta;
+        },
+        description,
+      );
+    };
+
+    syncMetadata();
+    const observer = new MutationObserver(syncMetadata);
+    observer.observe(document.head, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["content"],
+    });
+    return () => observer.disconnect();
+  }, [lang, dir, pathname]);
+
+  const setLang = (newLang: LanguageCode) => {
+    if (!isLanguageCode(newLang)) return;
+    toast.dismiss();
+    setLangState(newLang);
     try {
-      localStorage.setItem(STORAGE_KEY, "ar");
-    } catch {
-      // ignore
-    }
-    setLangState("ar");
-  }, []);
-
-  const currentLanguage = LANGUAGES[0]!;
-  const dir = "rtl" as const;
-  const isRTL = true;
-
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = "ar";
-      document.documentElement.dir = "rtl";
-    }
-  }, []);
-
-  const setLang = (_newLang: LanguageCode) => {
-    setLangState("ar");
-    try {
-      localStorage.setItem(STORAGE_KEY, "ar");
+      localStorage.setItem(STORAGE_KEY, newLang);
     } catch {
       // ignore
     }
   };
 
-  const t = (key: TranslationKey, fallback?: string): string => {
-    const fallbackDict = translations.ar as Record<string, string>;
-    return fallbackDict[key] || fallback || key;
-  };
+  const t = (key: TranslationKey, fallback?: string, values?: Record<string, string | number>) =>
+    translate(lang, key, fallback, values);
 
   return (
     <I18nContext.Provider
@@ -498,8 +648,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 export function useI18n() {
   const ctx = useContext(I18nContext);
   if (!ctx) {
-    const fallbackT = (key: TranslationKey, fallback?: string) =>
-      translations.ar[key as keyof typeof translations.ar] || fallback || key;
+    const fallbackT = (key: TranslationKey, fallback?: string, values?: Record<string, string | number>) =>
+      translate("ar", key, fallback, values);
     return {
       lang: "ar" as LanguageCode,
       setLang: () => {},

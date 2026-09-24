@@ -26,17 +26,6 @@ import { createDepositRequest, getCompanySettingsAndSupport } from "@/lib/valori
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
-  head: () => ({
-    meta: [
-      { title: "الإيداع — Valoriza" },
-      {
-        name: "description",
-        content: "شحن رصيد حسابك بالدولار الرقمي USDT عبر شبكات ERC20, BEP20, TRC20.",
-      },
-      { property: "og:title", content: "الإيداع — Valoriza" },
-      { property: "og:description", content: "شحن الرصيد في منصة Valoriza." },
-    ],
-  }),
   component: DepositPage,
 });
 
@@ -92,19 +81,19 @@ function DepositPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      toast.error(t("deposit.uploadHint"));
+      toast.error(t("deposit.invalidImage"));
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      toast.error(t("common.error"));
+      toast.error(t("deposit.fileTooLarge"));
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
       setScreenshotPreview(reader.result as string);
-      toast.success(t("deposit.proof"));
+      toast.success(t("deposit.uploadSuccess"));
     };
     reader.readAsDataURL(file);
   };
@@ -121,7 +110,7 @@ function DepositPage() {
       submitDeposit(vals),
     onSuccess: (res: any) => {
       if (res.ok) {
-        toast.success(t("deposit.note"));
+        toast.success(t("deposit.requestReceived"));
         setAmount("");
         setScreenshotPreview(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -280,7 +269,7 @@ function DepositPage() {
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
                       currentAddress,
                     )}`}
-                    alt="رمز الاستجابة السريعة QR"
+                    alt={t("deposit.scanQr")}
                     className="h-40 w-40"
                   />
                   <span className="text-xs font-black text-gray-800 mt-2">{network}</span>
@@ -338,7 +327,7 @@ function DepositPage() {
                     {t("deposit.uploadHint")}
                   </span>
                   <span className="text-[10px] text-muted-foreground font-semibold">
-                    صيغة PNG أو JPG (الحد الأقصى 5 ميجابايت)
+                    {t("deposit.imageFormats")}
                   </span>
                 </label>
               ) : (
@@ -346,7 +335,7 @@ function DepositPage() {
                   <div className="relative rounded-2xl overflow-hidden border border-border bg-surface max-h-56 flex items-center justify-center">
                     <img
                       src={screenshotPreview}
-                      alt="معاينة إثبات الإيداع"
+                      alt={t("deposit.previewAlt")}
                       className="w-full h-auto max-h-56 object-contain"
                     />
                     <button
@@ -433,7 +422,7 @@ function DepositPage() {
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
                     currentAddress,
                   )}`}
-                  alt="رمز الاستجابة السريعة QR"
+                  alt={t("deposit.scanQr")}
                   className="h-36 w-36 mx-auto"
                 />
               </div>

@@ -3,8 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Crown, Edit2, CheckCircle2, XCircle, X, RefreshCw, Video, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminVipPackages, saveVipPackage } from "@/lib/valoriza-admin.functions";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export function AdminVipPackagesTab() {
+  const { t } = useI18n();
+  const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPkg, setEditingPkg] = useState<any | null>(null);
@@ -28,13 +32,13 @@ export function AdminVipPackagesTab() {
   const saveMutation = useMutation({
     mutationFn: saveVipPackage,
     onSuccess: () => {
-      toast.success("تم تحديث باقة VIP بنجاح");
+      toast.success(t("admin.vipPackageUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-vip-packages"] });
       queryClient.invalidateQueries({ queryKey: ["investment-data"] });
       queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
       setModalOpen(false);
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: () => toast.error(t("common.error")),
   });
 
   const handleOpenEdit = (pkg: any) => {
@@ -52,9 +56,9 @@ export function AdminVipPackagesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xs font-extrabold text-foreground">إدارة وتعديل باقات VIP</h2>
+          <h2 className="text-xs font-extrabold text-foreground">{t("admin.manageVipPackages")}</h2>
           <p className="text-[10px] text-muted-foreground">
-            تحديد أسعار الترقية، الأرباح اليومية، وعدد المهام لكل مستوى.
+            {t("admin.vipPackagesDescription")}
           </p>
         </div>
         <button
@@ -63,14 +67,14 @@ export function AdminVipPackagesTab() {
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          <span>تحديث</span>
+          <span>{t("admin.refresh")}</span>
         </button>
       </div>
 
       {isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
-          جارٍ جلب باقات VIP...
+          {t("admin.loadingVipPackages")}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -89,9 +93,9 @@ export function AdminVipPackagesTab() {
                     <Crown className="h-5 w-5 text-gold" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-black text-foreground">{pkg.name}</h3>
+                    <h3 className="text-xs font-black text-foreground">{content(pkg.name)}</h3>
                     <span className="text-[10px] font-bold text-gold">
-                      سعر التفعيل: ${Number(pkg.price).toFixed(2)}
+                      {t("admin.activationPrice")}: ${Number(pkg.price).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -107,17 +111,17 @@ export function AdminVipPackagesTab() {
 
               <div className="mt-3.5 space-y-1.5 rounded-xl bg-navy-deep p-2.5 border border-border/60 text-[11px]">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">الربح اليومي:</span>
+                  <span className="text-muted-foreground">{t("admin.dailyProfit")}:</span>
                   <span className="font-extrabold text-emerald-400">
                     +${Number(pkg.daily_profit).toFixed(2)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">المهام اليومية:</span>
-                  <span className="font-bold text-foreground">{pkg.daily_tasks} مهام</span>
+                  <span className="text-muted-foreground">{t("admin.dailyTasks")}:</span>
+                  <span className="font-bold text-foreground">{pkg.daily_tasks} {t("admin.tasks")}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">عمولة الفيديو الواحد:</span>
+                  <span className="text-muted-foreground">{t("admin.perVideoCommission")}:</span>
                   <span className="font-bold text-cyan-glow">
                     ${Number(pkg.task_reward).toFixed(2)}
                   </span>
@@ -125,16 +129,16 @@ export function AdminVipPackagesTab() {
               </div>
 
               <div className="mt-3 flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">الحالة:</span>
+                <span className="text-muted-foreground">{t("common.status")}:</span>
                 {pkg.is_active ? (
                   <span className="flex items-center gap-1 font-bold text-emerald-400">
                     <CheckCircle2 className="h-3.5 w-3.5" />
-                    مفعلة
+                    {t("admin.enabled")}
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 font-bold text-muted-foreground">
                     <XCircle className="h-3.5 w-3.5" />
-                    مغلقة
+                    {t("admin.closed")}
                   </span>
                 )}
               </div>
@@ -149,7 +153,7 @@ export function AdminVipPackagesTab() {
           <div className="w-full max-w-sm rounded-3xl border border-vip/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                تعديل باقة: {editingPkg.name}
+                {t("admin.editPackage")}: {content(editingPkg.name)}
               </h3>
               <button
                 type="button"
@@ -162,7 +166,7 @@ export function AdminVipPackagesTab() {
 
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">اسم الباقة</label>
+                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.packageNameArabicSource")}</label>
                 <input
                   type="text"
                   value={name}
@@ -173,7 +177,7 @@ export function AdminVipPackagesTab() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">السعر ($)</label>
+                  <label className="text-[10px] text-muted-foreground font-bold">{t("admin.priceUsd")}</label>
                   <input
                     type="number"
                     step="1"
@@ -184,7 +188,7 @@ export function AdminVipPackagesTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    الربح اليومي ($)
+                    {t("admin.dailyProfitUsd")}
                   </label>
                   <input
                     type="number"
@@ -199,7 +203,7 @@ export function AdminVipPackagesTab() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    عدد المهام اليومية
+                    {t("admin.dailyTaskCount")}
                   </label>
                   <input
                     type="number"
@@ -211,7 +215,7 @@ export function AdminVipPackagesTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    عمولة الفيديو ($)
+                    {t("admin.videoCommissionUsd")}
                   </label>
                   <input
                     type="number"
@@ -232,7 +236,7 @@ export function AdminVipPackagesTab() {
                   className="h-4 w-4 rounded border-border text-cyan-glow focus:ring-0"
                 />
                 <label htmlFor="pkg-is-active" className="text-xs font-bold text-foreground">
-                  تفعيل الباقة والسماح بالترقية إليها
+                  {t("admin.activatePackage")}
                 </label>
               </div>
 
@@ -252,7 +256,7 @@ export function AdminVipPackagesTab() {
                 }
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {saveMutation.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+                {saveMutation.isPending ? t("admin.saving") : t("admin.saveChanges")}
               </button>
             </div>
           </div>

@@ -41,23 +41,28 @@ async function request<T>(
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      const message =
-        data?.message ||
-        (response.status === 401
+      const knownCodes = new Set([
+        "INVALID_CREDENTIALS",
+        "ACCOUNT_BLOCKED",
+        "ACCOUNT_EXISTS",
+        "INVALID_REGISTRATION",
+      ]);
+      const message = knownCodes.has(data?.message)
+        ? data.message
+        : response.status === 401
           ? "INVALID_CREDENTIALS"
           : response.status === 403
             ? "ACCOUNT_BLOCKED"
             : response.status === 409
               ? "ACCOUNT_EXISTS"
-              : `فشل الطلب (${response.status})`);
+              : "REQUEST_FAILED";
       return { data: null, error: new Error(message) };
     }
 
     return { data: data as T, error: null };
-  } catch (networkError: unknown) {
+  } catch {
     // Return friendly error object rather than crashing with unhandled rejection
-    const msg = networkError instanceof Error ? networkError.message : "NETWORK_ERROR";
-    return { data: null, error: new Error(msg) };
+    return { data: null, error: new Error("NETWORK_ERROR") };
   }
 }
 
@@ -75,7 +80,7 @@ const auth = {
     if (!result.error && result.data?.session?.user) {
       return { data: { user: result.data.session.user }, error: null };
     }
-    return { data: null, error: result.error || new Error("No user found") };
+    return { data: null, error: result.error || new Error("USER_NOT_FOUND") };
   },
 
   async signInWithPassword(input: { email: string; password?: string }) {
@@ -83,7 +88,7 @@ const auth = {
     const password = input.password || "";
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      return { data: null, error: new Error("يرجى إدخال بريد إلكتروني صالح.") };
+      return { data: null, error: new Error("INVALID_EMAIL") };
     }
 
     const remoteResult = await request<{ ok: boolean; token?: string; user?: AuthUser }>(
@@ -104,7 +109,7 @@ const auth = {
     
     return {
       data: null,
-      error: remoteResult.error || new Error("بيانات الدخول غير صحيحة، يرجى التأكد من البريد الإلكتروني وكلمة المرور."),
+      error: remoteResult.error || new Error("INVALID_CREDENTIALS"),
     };
   },
 
@@ -118,10 +123,10 @@ const auth = {
     const metadata = input.options?.data ?? {};
 
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      return { data: null, error: new Error("يرجى إدخال بريد إلكتروني صالح.") };
+      return { data: null, error: new Error("INVALID_EMAIL") };
     }
     if (password.length < 6) {
-      return { data: null, error: new Error("كلمة المرور يجب أن لا تقل عن 6 أحرف.") };
+      return { data: null, error: new Error("PASSWORD_TOO_SHORT") };
     }
 
     const remoteResult = await request<{ ok: boolean; token?: string; user?: AuthUser }>(
@@ -153,7 +158,7 @@ const auth = {
     ) {
       return {
         data: null,
-        error: new Error("هذا البريد الإلكتروني مسجل بالفعل! يمكنك تسجيل الدخول مباشرة."),
+        error: new Error("ACCOUNT_EXISTS"),
       };
     }
 

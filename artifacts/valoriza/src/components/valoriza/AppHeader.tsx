@@ -25,6 +25,7 @@ import { NotificationsDrawer } from "./NotificationsDrawer";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 import { getUserNotifications } from "@/lib/valoriza-tasks.functions";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -53,6 +54,7 @@ export function AppHeader({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const navigate = useNavigate();
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
 
   // Query unread notifications count
   const { data: notifData } = useQuery({
@@ -192,7 +194,7 @@ export function AppHeader({
                 className="flex items-center gap-1 rounded-full border border-vip/50 bg-vip/15 px-2 py-0.5 text-[10px] font-extrabold text-vip-soft shadow-[0_0_10px_oklch(0.72_0.17_310/0.3)]"
               >
                 <Crown className="h-3 w-3 text-gold" />
-                VIP {vipLevel}
+                {t("public.header.vipLevel").replace("{level}", String(vipLevel))}
               </span>
             )}
 
@@ -225,7 +227,9 @@ export function AppHeader({
                 className="flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-bold text-foreground hover:border-primary transition-all"
               >
                 <User className="h-3.5 w-3.5 text-gold" />
-                <span className="max-w-[80px] truncate">{username || t("nav.account")}</span>
+                <span className="max-w-[80px] truncate">
+                  {username ? content(username, { allowUserIdentifier: true }) : t("nav.account")}
+                </span>
               </Link>
             </div>
 
@@ -275,7 +279,7 @@ export function AppHeader({
               {/* Drawer Theme & Language bar */}
               <div className="mt-3 flex items-center justify-between rounded-xl bg-surface/60 p-2 border border-border/60">
                 <span className="text-xs font-bold text-muted-foreground">
-                  {t("common.language")} والمظهر:
+                  {t("public.header.languageTheme")}
                 </span>
                 <div className="flex items-center gap-2">
                   <LanguageSwitcher />
@@ -291,10 +295,14 @@ export function AppHeader({
                       <User className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1 text-start">
-                      <p className="text-xs font-bold text-foreground truncate">{username}</p>
+                      <p className="text-xs font-bold text-foreground truncate">
+                        {content(username, { allowUserIdentifier: true })}
+                      </p>
                       <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Crown className="h-3 w-3 text-gold" />
-                        {vipLevel ? `VIP ${vipLevel}` : t("home.vipStatus")}
+                        {vipLevel
+                          ? t("public.header.vipLevel").replace("{level}", String(vipLevel))
+                          : t("home.vipStatus")}
                       </p>
                     </div>
                   </div>
@@ -463,7 +471,7 @@ export function AppHeader({
               </button>
 
               <p className="mt-3 text-center text-[10px] text-muted-foreground">
-                Valoriza Investment · Madrid, Spain
+                {t("public.header.footer")}
               </p>
             </div>
           </div>

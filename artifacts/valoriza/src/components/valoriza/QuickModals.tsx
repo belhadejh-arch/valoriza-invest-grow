@@ -10,16 +10,15 @@ import {
   Info,
   Lock,
   QrCode,
-  ShieldCheck,
   Sparkles,
   TrendingUp,
   Vault,
-  Wallet,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createDepositRequest, requestWithdrawal } from "@/lib/valoriza-pages.functions";
-import { supabase } from "@/integrations/supabase/client";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 /* =========================================================================
    1. Deposit Modal (Matching PDF Page 6)
@@ -32,6 +31,8 @@ interface DepositModalProps {
 }
 
 export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) {
+  const { t, dir } = useI18n();
+  const content = useLocalizedContent();
   const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
   const [amount, setAmount] = useState<string>("");
   const [copied, setCopied] = useState(false);
@@ -51,7 +52,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
   const handleCopy = () => {
     navigator.clipboard.writeText(currentAddress);
     setCopied(true);
-    toast.success("تم نسخ عنوان الإيداع بنجاح");
+    toast.success(t("public.deposit.copied"));
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -59,7 +60,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
     e.preventDefault();
     const num = parseFloat(amount);
     if (isNaN(num) || num < 10) {
-      toast.error("الحد الأدنى للإيداع هو 10 دولارات");
+      toast.error(t("public.deposit.minimumError"));
       return;
     }
 
@@ -70,11 +71,11 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
         amount: num,
         screenshotUrl: "",
       });
-      toast.success("تم تقديم طلب الإيداع بنجاح، سيتم التأكيد تلقائياً بعد الفحص");
+      toast.success(t("public.deposit.success"));
       setAmount("");
       onClose();
     } catch {
-      toast.error("حدث خطأ أثناء تقديم طلب الإيداع");
+      toast.error(t("public.deposit.error"));
     } finally {
       setSubmitting(false);
     }
@@ -90,7 +91,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
         id="deposit-modal-content"
         className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-electric/40 bg-navy-deep p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-        dir="rtl"
+        dir={dir}
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border/50">
@@ -99,8 +100,8 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
               <ArrowDownLeft className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-foreground">الإيداع</h2>
-              <p className="text-[11px] text-muted-foreground">شحن الرصيد عبر العملات الرقمية</p>
+              <h2 className="text-lg font-extrabold text-foreground">{t("public.deposit.title")}</h2>
+              <p className="text-[11px] text-muted-foreground">{t("public.deposit.subtitle")}</p>
             </div>
           </div>
           <button
@@ -146,12 +147,14 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
         {/* Deposit Address Box matching Page 6 */}
         <div className="mt-4 surface-card p-3.5 glow-border">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-foreground">عنوان الإيداع</span>
-            <span className="text-[10px] text-cyan-glow font-semibold">شبكة {network}</span>
+            <span className="text-xs font-bold text-foreground">{t("public.deposit.address")}</span>
+            <span className="text-[10px] text-cyan-glow font-semibold">
+              {t("public.deposit.network").replace("{network}", network)}
+            </span>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-navy-deep border border-border/70 p-2.5">
             <code className="text-[11px] text-foreground font-mono truncate select-all" dir="ltr">
-              {currentAddress}
+              {content(currentAddress, { allowLanguageNeutral: true })}
             </code>
             <button
               id="copy-deposit-addr-btn"
@@ -160,27 +163,27 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
               className="flex shrink-0 items-center gap-1 rounded-lg brand-gradient px-2.5 py-1.5 text-[11px] font-bold text-primary-foreground shadow-glow"
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              <span>{copied ? "تم النسخ" : "نسخ العنوان"}</span>
+              <span>{copied ? t("public.deposit.copiedShort") : t("public.deposit.copyAddress")}</span>
             </button>
           </div>
 
           <div className="mt-2.5 flex items-center justify-center gap-1 text-[11px] text-cyan-glow">
             <QrCode className="h-4 w-4" />
-            <span>يمكنك مسح رمز الاستجابة السريعة (QR) للإرسال بسهولة</span>
+            <span>{t("public.deposit.qr")}</span>
           </div>
         </div>
 
         {/* Amount Input Form */}
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
-            <label className="block text-xs font-bold text-foreground mb-1">المبلغ (USDT)</label>
+            <label className="block text-xs font-bold text-foreground mb-1">{t("public.deposit.amount")}</label>
             <div className="relative">
               <input
                 id="deposit-amount-input"
                 type="number"
                 min="10"
                 step="0.01"
-                placeholder="أدخل المبلغ بالدولار"
+                placeholder={t("public.deposit.amountPlaceholder")}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
@@ -198,7 +201,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
             disabled={submitting}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
-            {submitting ? "جاري التقديم..." : "تقديم طلب الإيداع ✈"}
+            {submitting ? t("public.deposit.submitting") : t("public.deposit.submit")}
           </button>
         </form>
 
@@ -206,15 +209,15 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
         <div className="mt-4 rounded-2xl border border-cyan-glow/30 bg-surface/70 p-3 text-xs leading-relaxed space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold text-cyan-glow">
             <Info className="h-4 w-4 shrink-0" />
-            <span>ملاحظات هامة:</span>
+            <span>{t("public.notes.title")}</span>
           </div>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            الإيداع يكون على مدار 24 ساعة.
+            {t("public.deposit.hours")}
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            الحد الأدنى للإيداع هو 10 دولارات.
+            {t("public.deposit.minimum")}
           </p>
         </div>
       </div>
@@ -241,8 +244,12 @@ export function WithdrawalModal({
   existingAddress,
   onSuccess,
 }: WithdrawalModalProps) {
+  const { t, dir } = useI18n();
+  const content = useLocalizedContent();
   const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
-  const [addressInput, setAddressInput] = useState(existingAddress?.address || "");
+  const [addressInput, setAddressInput] = useState(
+    content(existingAddress?.address || "", { allowLanguageNeutral: true }),
+  );
   const [isLocked, setIsLocked] = useState(Boolean(existingAddress?.address));
   const [amount, setAmount] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -257,31 +264,29 @@ export function WithdrawalModal({
   const handleBindAddress = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addressInput.trim() || addressInput.trim().length < 15) {
-      toast.error("يرجى إدخال عنوان محفظة صحيح");
+      toast.error(t("public.withdraw.invalidAddress"));
       return;
     }
     setIsLocked(true);
-    toast.success("تم ربط وقفل عنوان السحب بحسابك بنجاح");
+    toast.success(t("public.withdraw.bindSuccess"));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addressInput.trim()) {
-      toast.error("يرجى ربط عنوان السحب أولاً");
+      toast.error(t("public.withdraw.bindFirst"));
       return;
     }
     if (numAmount < 6) {
-      toast.error("الحد الأدنى للسحب هو 6 دولارات");
+      toast.error(t("public.withdraw.minimumError"));
       return;
     }
     if (numAmount > balance) {
-      toast.error("رصيدك المتاح غير كافٍ لإتمام السحب");
+      toast.error(t("public.withdraw.insufficient"));
       return;
     }
 
     // Check withdrawal hours 09:00 - 16:00
-    const now = new Date();
-    const hours = now.getHours();
     // Allow demo submission with notice if outside window
     setSubmitting(true);
     try {
@@ -290,12 +295,12 @@ export function WithdrawalModal({
         address: addressInput.trim(),
         amount: numAmount,
       });
-      toast.success(`تم تقديم طلب السحب بمبلغ $${netAmount.toFixed(2)} (بعد خصم الرسوم 10%) بنجاح`);
+      toast.success(t("public.withdraw.success").replace("{amount}", netAmount.toFixed(2)));
       setAmount("");
       onClose();
       onSuccess?.();
     } catch {
-      toast.error("تعذر تقديم طلب السحب حالياً");
+      toast.error(t("public.withdraw.error"));
     } finally {
       setSubmitting(false);
     }
@@ -311,7 +316,7 @@ export function WithdrawalModal({
         id="withdrawal-modal-content"
         className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-electric/40 bg-navy-deep p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-        dir="rtl"
+        dir={dir}
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border/50">
@@ -320,9 +325,9 @@ export function WithdrawalModal({
               <ArrowUpRight className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-foreground">السحب</h2>
+              <h2 className="text-lg font-extrabold text-foreground">{t("public.withdraw.title")}</h2>
               <p className="text-[11px] text-muted-foreground">
-                الرصيد المتاح: <span className="text-gold font-bold">${balance.toFixed(2)}</span>
+                {t("public.withdraw.balance")} <span className="text-gold font-bold">${balance.toFixed(2)}</span>
               </p>
             </div>
           </div>
@@ -371,23 +376,23 @@ export function WithdrawalModal({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-foreground flex items-center gap-1">
               <Lock className="h-3.5 w-3.5 text-gold" />
-              ربط العنوان
+              {t("public.withdraw.bindAddress")}
             </span>
             {isLocked && (
               <span className="rounded-full bg-success/20 border border-success/40 px-2 py-0.5 text-[10px] font-bold text-success">
-                مقفل ومحمي
+                {t("public.withdraw.locked")}
               </span>
             )}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            قم بإدخال عنوان محفظتك واضغط على زر (ربط) لحفظه في حسابك.
+            {t("public.withdraw.addressInstructions")}
           </p>
 
           <div className="mt-2.5 flex items-center gap-2">
             <input
               id="withdraw-address-input"
               type="text"
-              placeholder="أدخل عنوان المحفظة (بداية بـ 0x أو T)"
+              placeholder={t("public.withdraw.addressPlaceholder")}
               value={addressInput}
               onChange={(e) => setAddressInput(e.target.value)}
               disabled={isLocked}
@@ -401,7 +406,7 @@ export function WithdrawalModal({
                 onClick={handleBindAddress}
                 className="shrink-0 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow"
               >
-                ربط 🔗
+                {t("public.withdraw.bind")}
               </button>
             ) : (
               <span className="shrink-0 flex items-center justify-center h-8 w-8 rounded-xl bg-success/20 text-success">
@@ -411,14 +416,14 @@ export function WithdrawalModal({
           </div>
 
           <p className="mt-2 text-[10px] text-cyan-glow/80">
-            * سيتم حفظ العنوان بعد الربط ولا يمكن تغييره إلا بطلب من الإدارة (حسب قواعد الأمان).
+            {t("public.withdraw.lockNotice")}
           </p>
         </div>
 
         {/* Amount Input Form matching Page 7 */}
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
           <div>
-            <label className="block text-xs font-bold text-foreground mb-1">المبلغ (USDT)</label>
+            <label className="block text-xs font-bold text-foreground mb-1">{t("public.withdraw.amount")}</label>
             <div className="relative">
               <input
                 id="withdraw-amount-input"
@@ -426,7 +431,7 @@ export function WithdrawalModal({
                 min="6"
                 max={balance}
                 step="0.01"
-                placeholder="أدخل مبلغ السحب"
+                placeholder={t("public.withdraw.amountPlaceholder")}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
@@ -442,15 +447,15 @@ export function WithdrawalModal({
           {numAmount > 0 && (
             <div className="rounded-xl border border-border/60 bg-surface/50 p-2.5 text-xs space-y-1">
               <div className="flex justify-between text-muted-foreground">
-                <span>المبلغ المطلوب:</span>
+                <span>{t("public.withdraw.requested")}</span>
                 <span>${numAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-danger">
-                <span>رسوم السحب (10%):</span>
+                <span>{t("public.withdraw.fee")}</span>
                 <span>-${feeAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-success border-t border-border/40 pt-1">
-                <span>صافي المبلغ المستلم:</span>
+                <span>{t("public.withdraw.net")}</span>
                 <span>${netAmount.toFixed(2)} USDT</span>
               </div>
             </div>
@@ -462,7 +467,7 @@ export function WithdrawalModal({
             disabled={submitting || !isLocked}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
-            {submitting ? "جاري التقديم..." : "تقديم طلب السحب ✈"}
+            {submitting ? t("public.withdraw.submitting") : t("public.withdraw.submit")}
           </button>
         </form>
 
@@ -470,19 +475,19 @@ export function WithdrawalModal({
         <div className="mt-4 rounded-2xl border border-cyan-glow/30 bg-surface/70 p-3 text-xs leading-relaxed space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold text-cyan-glow">
             <Info className="h-4 w-4 shrink-0" />
-            <span>ملاحظات هامة:</span>
+            <span>{t("public.notes.title")}</span>
           </div>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            الحد الأدنى للسحب هو 6 دولارات.
+            {t("public.withdraw.minimum")}
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
-            وقت السحب من الساعة 09:00 صباحاً إلى غاية 04:00 مساءً.
+            {t("public.withdraw.hours")}
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Coins className="h-3.5 w-3.5 text-cyan-glow shrink-0" />
-            رسوم السحب هي 10%.
+            {t("public.withdraw.feeNote")}
           </p>
         </div>
       </div>
@@ -510,15 +515,17 @@ interface SavingsFundModalProps {
 }
 
 export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalProps) {
+  const { t, dir } = useI18n();
+  const content = useLocalizedContent();
   if (!isOpen) return null;
 
   const defaultFunds = [
     {
       id: "f1",
       code: "MUMBAI",
-      nameAr: "صندوق مومباي",
-      nameEn: "MUMBAI FUND",
-      taglineAr: "استثمار ذكي .. لعوائد أسرع",
+      nameAr: t("public.fund.f1Name"),
+      nameEn: t("public.fund.f1Name"),
+      taglineAr: t("public.fund.f1Tag"),
       durationDays: 3,
       profitPercent: 3.08,
       minAmount: 5,
@@ -526,9 +533,9 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
     {
       id: "f2",
       code: "NEWMEXICO",
-      nameAr: "صندوق نيو مكسيكو",
-      nameEn: "NEW MEXICO FUND",
-      taglineAr: "فرص أكبر .. لمستقبل أكثر استقراراً",
+      nameAr: t("public.fund.f2Name"),
+      nameEn: t("public.fund.f2Name"),
+      taglineAr: t("public.fund.f2Tag"),
       durationDays: 10,
       profitPercent: 4.2,
       minAmount: 5,
@@ -536,9 +543,9 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
     {
       id: "f3",
       code: "GXR",
-      nameAr: "صندوق GXR",
-      nameEn: "GXR FUND",
-      taglineAr: "استثمار عالمي .. بعوائد مستقرة",
+      nameAr: t("public.fund.f3Name"),
+      nameEn: t("public.fund.f3Name"),
+      taglineAr: t("public.fund.f3Tag"),
       durationDays: 30,
       profitPercent: 6.4,
       minAmount: 5,
@@ -546,16 +553,21 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
     {
       id: "f4",
       code: "NBL",
-      nameAr: "صندوق NBL",
-      nameEn: "NBL FUND",
-      taglineAr: "نمو مستدام .. لثروتك المستقبلية",
+      nameAr: t("public.fund.f4Name"),
+      nameEn: t("public.fund.f4Name"),
+      taglineAr: t("public.fund.f4Tag"),
       durationDays: 160,
       profitPercent: 10.8,
       minAmount: 5,
     },
   ];
 
-  const list = funds && funds.length > 0 ? funds : defaultFunds;
+  const hasAdminFunds = Boolean(funds && funds.length > 0);
+  const list = hasAdminFunds ? funds! : defaultFunds;
+  const fundTranslationKey = (id: string, field: "Name" | "Tag") => {
+    const idNum = id.replace("f", "");
+    return `public.fund.f${idNum}${field}`;
+  };
 
   return (
     <div
@@ -567,7 +579,7 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
         id="savings-fund-modal-content"
         className="w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-electric/40 bg-navy-deep p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
-        dir="rtl"
+        dir={dir}
       >
         {/* Header matching Page 3 */}
         <div className="flex items-center justify-between pb-3 border-b border-border/50">
@@ -576,8 +588,8 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
               <Vault className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-foreground">صندوق التوفير</h2>
-              <p className="text-[11px] text-muted-foreground">استثمر اليوم .. لمستقبل أفضل</p>
+              <h2 className="text-lg font-extrabold text-foreground">{t("public.fund.title")}</h2>
+              <p className="text-[11px] text-muted-foreground">{t("public.fund.subtitle")}</p>
             </div>
           </div>
           <button
@@ -591,12 +603,12 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
 
         {/* Hero banner matching Page 3 */}
         <div className="mt-4 surface-card glow-border p-4 text-center">
-          <h3 className="text-xl font-extrabold text-gold-gradient">صندوق التوفير</h3>
+          <h3 className="text-xl font-extrabold text-gold-gradient">{t("public.fund.title")}</h3>
           <p className="mt-1 text-xs font-bold text-foreground">
-            فرص استثمارية آمنة مع عوائد مجزية
+            {t("public.fund.safe")}
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            تمنحك الاستقرار المالي والنمو المستدام
+            {t("public.fund.growth")}
           </p>
         </div>
 
@@ -609,19 +621,27 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-bold text-xs">
-                  {fund.code}
+                  {content(fund.code, { allowLanguageNeutral: true })}
                 </div>
                 <div>
-                  <h4 className="text-sm font-extrabold text-foreground">{fund.nameAr}</h4>
-                  <p className="text-[11px] text-muted-foreground">{fund.taglineAr}</p>
+                  <h4 className="text-sm font-extrabold text-foreground">
+                    {hasAdminFunds
+                      ? content({ ar: fund.nameAr, en: fund.nameEn })
+                      : t(fundTranslationKey(fund.id, "Name"))}
+                  </h4>
+                  <p className="text-[11px] text-muted-foreground">
+                    {hasAdminFunds
+                      ? content(fund.taglineAr)
+                      : t(fundTranslationKey(fund.id, "Tag"))}
+                  </p>
                   <div className="mt-1.5 flex items-center gap-3 text-[11px]">
                     <span className="flex items-center gap-1 text-cyan-glow">
                       <Clock className="h-3.5 w-3.5" />
-                      مدة الصندوق: <b>{fund.durationDays} أيام</b>
+                      {t("public.fund.duration")} <b>{fund.durationDays} {t("public.fund.days")}</b>
                     </span>
                     <span className="flex items-center gap-1 text-success font-bold">
                       <TrendingUp className="h-3.5 w-3.5" />
-                      نسبة الأرباح: {fund.profitPercent}%
+                      {t("public.fund.profit")} {fund.profitPercent}%
                     </span>
                   </div>
                 </div>
@@ -632,7 +652,7 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
                 onClick={onClose}
                 className="shrink-0 inline-flex items-center justify-center rounded-xl gold-gradient px-4 py-2 text-xs font-extrabold text-navy-deep shadow-gold-glow hover:brightness-110 transition-all"
               >
-                استثمر الآن ›
+                {t("public.fund.invest")}
               </Link>
             </div>
           ))}
@@ -641,7 +661,7 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
         {/* Min investment note matching Page 3 */}
         <div className="mt-4 rounded-2xl border border-gold/40 bg-gold/10 p-3 text-center text-xs font-bold text-gold flex items-center justify-center gap-1.5">
           <Sparkles className="h-4 w-4" />
-          <span>الحد الأدنى للاستثمار في الصناديق التوفيرية هو 5 دولارات</span>
+          <span>{t("public.fund.minimum")}</span>
         </div>
       </div>
     </div>

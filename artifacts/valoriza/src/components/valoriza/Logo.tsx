@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "@/lib/i18n";
 
 export interface LogoProps {
   size?: "xs" | "sm" | "md" | "lg" | "xl";
@@ -12,13 +13,14 @@ export interface LogoProps {
  * Faithful vector reproduction of the Valoriza brand emblem uploaded by the user.
  */
 export function ValorizaMarkIcon({ className = "h-8 w-8" }: { className?: string }) {
+  const { t } = useI18n();
   return (
     <svg
       viewBox="0 0 500 500"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`${className} shrink-0`}
-      aria-label="شعار فالوريزا"
+      aria-label={t("public.logo.aria")}
       role="img"
     >
       <defs>
@@ -107,6 +109,7 @@ export function Logo({
   variant = "horizontal",
   className = "",
 }: LogoProps) {
+  const { t } = useI18n();
   const dims =
     size === "xl"
       ? "h-14 w-14 sm:h-16 sm:w-16"
@@ -160,8 +163,8 @@ export function Logo({
           <span className="text-white">za</span>
         </div>
         {showTagline && (
-          <div className={`${sub} mt-1 font-medium tracking-wide text-muted-foreground`} dir="rtl">
-            استثمر اليوم .. لبناء مستقبلك غداً
+          <div className={`${sub} mt-1 font-medium tracking-wide text-muted-foreground`}>
+            {t("public.logo.tagline")}
           </div>
         )}
       </div>
@@ -204,9 +207,8 @@ export function Logo({
         {showTagline && (
           <div
             className={`${sub} mt-0.5 font-medium tracking-wide text-muted-foreground/90 whitespace-nowrap hidden xs:block sm:block`}
-            dir="rtl"
           >
-            استثمر اليوم .. لبناء مستقبلك غداً
+            {t("public.logo.tagline")}
           </div>
         )}
       </div>

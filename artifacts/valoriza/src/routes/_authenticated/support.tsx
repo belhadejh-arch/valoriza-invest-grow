@@ -18,24 +18,15 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export const Route = createFileRoute("/_authenticated/support")({
-  head: () => ({
-    meta: [
-      { title: "خدمة العملاء — Valoriza" },
-      {
-        name: "description",
-        content: "تواصل مع فريق خدمة العملاء وقنوات الدعم الرسمية لمنصة Valoriza.",
-      },
-      { property: "og:title", content: "خدمة العملاء — Valoriza" },
-      { property: "og:description", content: "قنوات التواصل والدعم الفني الرسمية." },
-    ],
-  }),
   component: SupportPage,
 });
 
 export function SupportPage() {
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
   const fetchSettings = getCompanySettingsAndSupport;
   const { data, isLoading } = useQuery({
     queryKey: ["support-links"],
@@ -45,33 +36,34 @@ export function SupportPage() {
   const links = data?.supportLinks ?? [
     {
       id: "sup-1",
-      label: "موظف الاستقبال",
-      sublabel: "على تيليجرام",
+      label: t("support.reception"),
+      sublabel: t("support.onTelegram"),
       platform: "telegram",
       url: "https://t.me/valoriza_support",
     },
     {
       id: "sup-2",
-      label: "موظف الاستقبال",
-      sublabel: "على واتساب",
+      label: t("support.reception"),
+      sublabel: t("support.onWhatsapp"),
       platform: "whatsapp",
       url: "https://wa.me/34600000000",
     },
     {
       id: "sup-3",
-      label: "المجموعة الرسمية",
-      sublabel: "على تيليجرام",
+      label: t("support.officialGroup"),
+      sublabel: t("support.onTelegram"),
       platform: "telegram",
       url: "https://t.me/valoriza_official_group",
     },
     {
       id: "sup-4",
-      label: "المجموعة الرسمية",
-      sublabel: "على واتساب",
+      label: t("support.officialGroup"),
+      sublabel: t("support.onWhatsapp"),
       platform: "whatsapp",
       url: "https://chat.whatsapp.com/valoriza_vip",
     },
   ];
+  const hasAuthoredLinks = Boolean(data?.supportLinks);
 
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const Chevron = isRTL ? ChevronLeft : ChevronRight;
@@ -154,13 +146,13 @@ export function SupportPage() {
 
                     <div className="min-w-0 text-start">
                       <h3 className="text-sm font-black text-foreground group-hover:text-cyan-glow transition-colors truncate">
-                        {item.label}
+                         {hasAuthoredLinks && item.label ? content(item.label) : t("support.officialChannels")}
                       </h3>
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                        {item.sublabel}
+                         {hasAuthoredLinks && item.sublabel ? content(item.sublabel) : t("support.title")}
                       </p>
                       <span className="text-[10px] font-bold text-gold uppercase tracking-wider block mt-1">
-                        {isTelegram ? "Telegram" : "WhatsApp"}
+                        {isTelegram ? t("support.telegramName") : t("support.whatsappName")}
                       </span>
                     </div>
                   </div>

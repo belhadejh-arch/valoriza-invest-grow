@@ -15,6 +15,8 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 import {
   getUserNotifications,
   markNotificationAsRead,
@@ -41,25 +43,31 @@ function getNotificationIcon(title: string, body: string) {
   return <Info className="h-4 w-4 text-cyan-glow" />;
 }
 
-function formatRelativeTime(dateStr: string) {
+function formatRelativeTime(dateStr: string, t: ReturnType<typeof useI18n>["t"], lang: string) {
   try {
     const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return t("content.unavailable");
     const now = new Date();
     const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
 
-    if (diffSec < 60) return "الآن";
-    if (diffSec < 3600) return `منذ ${Math.floor(diffSec / 60)} دقيقة`;
-    if (diffSec < 86400) return `منذ ${Math.floor(diffSec / 3600)} ساعة`;
-    if (diffSec < 172800) return "أمس";
-    return d.toLocaleDateString("ar-SA", { month: "short", day: "numeric" });
+    if (diffSec < 60) return t("public.time.now");
+    if (diffSec < 3600)
+      return t("public.time.minutes").replace("{count}", String(Math.floor(diffSec / 60)));
+    if (diffSec < 86400)
+      return t("public.time.hours").replace("{count}", String(Math.floor(diffSec / 3600)));
+    if (diffSec < 172800) return t("public.time.yesterday");
+    const locale = lang === "ar" ? "ar-SA" : lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US";
+    return d.toLocaleDateString(locale, { month: "short", day: "numeric" });
   } catch {
-    return dateStr;
+    return t("content.unavailable");
   }
 }
 
 export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t, dir, lang } = useI18n();
+  const content = useLocalizedContent();
 
   const { data, isLoading } = useQuery({
     queryKey: ["user-notifications"],
@@ -92,8 +100,12 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
 
   const handleMarkAllRead = async () => {
     if (unreadCount === 0) return;
-    await markMutation.mutateAsync({ markAll: true });
-    toast.success("تم تحديد جميع الإشعارات كمقروءة");
+    try {
+      await markMutation.mutateAsync({ markAll: true });
+      toast.success(t("public.notifications.marked"));
+    } catch {
+      toast.error(t("common.error"));
+    }
   };
 
   return (
@@ -106,7 +118,7 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
         id="notifications-drawer-panel"
         className="h-full w-full max-w-sm overflow-y-auto border-r border-cyan-glow/40 bg-navy-deep p-4 shadow-2xl flex flex-col justify-between animate-in slide-in-from-left duration-300"
         onClick={(e) => e.stopPropagation()}
-        dir="rtl"
+        dir={dir}
       >
         <div className="flex-1 flex flex-col min-h-0">
           {/* Header */}
@@ -117,15 +129,15 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
               </div>
               <div>
                 <h2 className="text-sm font-extrabold text-foreground flex items-center gap-2">
-                  مركز الإشعارات
+                  {t("public.notifications.title")}
                   {unreadCount > 0 && (
                     <span className="rounded-full bg-danger px-2 py-0.5 text-[10px] font-extrabold text-white animate-pulse">
-                      {unreadCount} جديد
+                      {unreadCount} {t("public.notifications.new")}
                     </span>
                   )}
                 </h2>
                 <p className="text-[10px] text-muted-foreground">
-                  تحديثات المعاملات والمهام والمكافآت
+                  {t("public.notifications.subtitle")}
                 </p>
               </div>
             </div>
@@ -149,7 +161,7 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
                 className="flex items-center gap-1 text-[11px] font-bold text-cyan-glow hover:underline active:opacity-80"
               >
                 <CheckCheck className="h-3.5 w-3.5" />
-                <span>تحديد الكل كمقروء</span>
+                <span>{t("public.notifications.markAll")}</span>
               </button>
             </div>
           )}
@@ -159,16 +171,16 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
             {isLoading ? (
               <div className="py-12 text-center text-xs text-muted-foreground">
                 <div className="mx-auto h-6 w-6 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent mb-2" />
-                جارٍ تحميل الإشعارات...
+                {t("public.notifications.loading")}
               </div>
             ) : notifications.length === 0 ? (
               <div className="py-16 text-center">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-surface/80 border border-border/60 text-muted-foreground mb-3">
                   <Bell className="h-7 w-7 text-muted-foreground/60" />
                 </div>
-                <p className="text-xs font-bold text-foreground">لا توجد إشعارات جديدة</p>
+                <p className="text-xs font-bold text-foreground">{t("public.notifications.empty")}</p>
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  ستظهر هنا إشعارات إيداعاتك، مهامك، ومكافآتك اليومية.
+                  {t("public.notifications.emptyDesc")}
                 </p>
               </div>
             ) : (
@@ -195,12 +207,12 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
                           n.isRead ? "text-foreground/90" : "text-cyan-glow"
                         }`}
                       >
-                        {n.title}
+                        {content(n.title)}
                       </h3>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
                           <Clock className="h-2.5 w-2.5" />
-                          {formatRelativeTime(n.createdAt)}
+                          {formatRelativeTime(n.createdAt, t, lang)}
                         </span>
                         {!n.isRead && (
                           <span className="h-2 w-2 rounded-full bg-cyan-glow shadow-[0_0_8px_oklch(0.82_0.14_205/0.8)]" />
@@ -209,7 +221,7 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
                     </div>
 
                     <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                      {n.body}
+                      {content(n.body)}
                     </p>
                   </div>
                 </div>
@@ -221,7 +233,7 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
         {/* Footer */}
         <div className="pt-3 mt-2 border-t border-border/40 text-center">
           <p className="text-[10px] text-muted-foreground">
-            نظام الإشعارات الآلي الفوري · Valoriza Platform
+            {t("public.notifications.footer")}
           </p>
         </div>
       </div>

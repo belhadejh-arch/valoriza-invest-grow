@@ -23,16 +23,9 @@ import {
   type TasksPageData,
 } from "@/lib/valoriza-tasks.functions";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
-  head: () => ({
-    meta: [
-      { title: "المهام — Valoriza" },
-      { name: "description", content: "شاهد الفيديوهات الترويجية واكسب عمولتك اليومية فوراً." },
-      { property: "og:title", content: "المهام — Valoriza" },
-      { property: "og:description", content: "المهام اليومية وعمولات المشاهدة." },
-    ],
-  }),
   component: TasksPage,
 });
 
@@ -46,6 +39,7 @@ function getYouTubeEmbedUrl(url: string): string {
 
 function TasksPage() {
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"tasks" | "daily">("tasks");
 
@@ -75,7 +69,7 @@ function TasksPage() {
         } else if (result.reason === "ALREADY_COMPLETED_TODAY") {
           toast.error(t("tasks.completedToday"));
         } else {
-          toast.error(result.message || t("common.error"));
+          toast.error(t("common.error"));
         }
       }
     },
@@ -210,7 +204,7 @@ function TasksPage() {
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-black/30 backdrop-blur-md px-3 py-1 text-xs font-black text-cyan-glow border border-cyan-glow/40">
                   <Crown className="h-3.5 w-3.5 text-gold" />
-                  {data?.vipName || `VIP ${vipLevel}`}
+                  {data?.vipName ? content(data.vipName) : `VIP ${vipLevel}`}
                 </span>
                 <span className="flex items-center gap-1.5 text-xs font-bold text-primary-foreground/90">
                   <Sparkles className="h-3.5 w-3.5 text-gold" />
@@ -251,7 +245,7 @@ function TasksPage() {
                   {t("invest.duration")}
                 </p>
                 <p className="mt-0.5 text-sm font-black text-primary-foreground">
-                  {durationSec} ثوانٍ
+                  {durationSec} {t("tasks.secondsShort")}
                 </p>
               </div>
             </div>
@@ -276,7 +270,7 @@ function TasksPage() {
                   <div className="relative h-48 w-full overflow-hidden bg-surface">
                     <img
                       src={task.thumbnailUrl}
-                      alt={task.title}
+                      alt={content(task.title)}
                       className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                       loading="lazy"
                     />
@@ -287,7 +281,7 @@ function TasksPage() {
                       type="button"
                       onClick={() => handleStartTask(task)}
                       disabled={task.isCompletedToday || remaining <= 0}
-                      aria-label={`مشاهدة ${task.title}`}
+                      aria-label={t("tasks.watchTask").replace("{title}", content(task.title))}
                       className={`absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full transition-all duration-300 active:scale-95 ${
                         task.isCompletedToday
                           ? "bg-emerald-500/80 text-white cursor-default"
@@ -316,7 +310,7 @@ function TasksPage() {
                     <div className="absolute bottom-3 inset-x-3 flex items-center justify-between">
                       <span className="flex items-center gap-1 rounded-lg bg-black/70 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white/90">
                         <Clock className="h-3 w-3 text-cyan-glow" />
-                        {task.durationSeconds} ثانية
+                        {task.durationSeconds} {t("tasks.secondsUnit")}
                       </span>
                       <span className="flex items-center gap-1 rounded-lg bg-emerald-500/90 backdrop-blur-md px-2.5 py-1 text-xs font-black text-white shadow">
                         +${commission.toFixed(2)}
@@ -326,9 +320,9 @@ function TasksPage() {
 
                   <div className="p-4 space-y-1.5 text-start">
                     <h3 className="text-sm font-black text-foreground leading-snug">
-                      {task.title}
+                      {content(task.title)}
                     </h3>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{content(task.description)}</p>
                   </div>
                 </div>
 
@@ -395,11 +389,11 @@ function TasksPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-xs font-black text-foreground truncate">
-                    {activeWatchTask.title}
+                    {content(activeWatchTask.title)}
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
                     {t("tasks.taskNumber")} {activeWatchTask.taskNumber} ·{" "}
-                    {activeWatchTask.durationSeconds}s
+                  {activeWatchTask.durationSeconds} {t("tasks.secondsShort")}
                   </p>
                 </div>
               </div>
@@ -417,7 +411,7 @@ function TasksPage() {
             <div className="relative mt-3.5 aspect-video w-full overflow-hidden rounded-2xl bg-black border border-border">
               <iframe
                 src={getYouTubeEmbedUrl(activeWatchTask.videoUrl)}
-                title={activeWatchTask.title}
+                title={content(activeWatchTask.title)}
                 className="h-full w-full object-cover border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
@@ -427,7 +421,7 @@ function TasksPage() {
               <div className="absolute top-2.5 right-2.5 rtl:right-auto rtl:left-2.5 z-10 flex items-center gap-1.5 rounded-full bg-black/80 backdrop-blur-md px-3 py-1 border border-cyan-glow/40 shadow-lg">
                 <Clock className="h-3.5 w-3.5 text-cyan-glow animate-spin" />
                 <span className="text-xs font-black text-white">
-                  {secondsRemaining > 0 ? `${secondsRemaining} ${isRTL ? "ثوانٍ" : "s"}` : t("tasks.completed")}
+                  {secondsRemaining > 0 ? `${secondsRemaining} ${t("tasks.secondsShort")}` : t("tasks.completed")}
                 </span>
               </div>
             </div>
@@ -489,7 +483,7 @@ function TasksPage() {
                 ) : secondsRemaining > 0 ? (
                   <>
                     <Clock className="h-4 w-4" />
-                    <span>{secondsRemaining}s</span>
+                    <span>{secondsRemaining} {t("tasks.secondsShort")}</span>
                   </>
                 ) : (
                   <>

@@ -27,32 +27,28 @@ import { AdminWheelTab } from "@/components/valoriza/admin/AdminWheelTab";
 import { AdminSettingsTab } from "@/components/valoriza/admin/AdminSettingsTab";
 import { AdminBroadcastTab } from "@/components/valoriza/admin/AdminBroadcastTab";
 import { AdminAuditLogsTab } from "@/components/valoriza/admin/AdminAuditLogsTab";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/admin")({
-  head: () => ({
-    meta: [
-      { title: "لوحة تحكم الإدارة — فالوريزا" },
-      { name: "description", content: "لوحة التحكم الإدارية لمنصة فالوريزا." },
-    ],
-  }),
   component: AdminDashboardPage,
 });
 
 function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<string>("overview");
+  const { t } = useI18n();
 
   const tabs = [
-    { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },
-    { id: "deposits", label: "الإيداعات", icon: ArrowDownLeft },
-    { id: "withdrawals", label: "السحوبات", icon: ArrowUpRight },
-    { id: "users", label: "المستخدمين", icon: Users },
-    { id: "investments", label: "الصناديق", icon: TrendingUp },
-    { id: "vip", label: "باقات VIP", icon: Crown },
-    { id: "tasks", label: "المهام", icon: Video },
-    { id: "wheel", label: "عجلة الحظ", icon: Sparkles },
-    { id: "broadcast", label: "التعاميم", icon: Bell },
-    { id: "settings", label: "الإعدادات", icon: Settings },
-    { id: "audit", label: "سجل التدقيق", icon: Shield },
+    { id: "overview", label: t("admin.overview"), icon: LayoutDashboard },
+    { id: "deposits", label: t("admin.depositsTab"), icon: ArrowDownLeft },
+    { id: "withdrawals", label: t("admin.withdrawalsTab"), icon: ArrowUpRight },
+    { id: "users", label: t("admin.users"), icon: Users },
+    { id: "investments", label: t("admin.funds"), icon: TrendingUp },
+    { id: "vip", label: t("admin.vipPackages"), icon: Crown },
+    { id: "tasks", label: t("admin.tasks"), icon: Video },
+    { id: "wheel", label: t("admin.wheel"), icon: Sparkles },
+    { id: "broadcast", label: t("admin.broadcast"), icon: Bell },
+    { id: "settings", label: t("admin.settings"), icon: Settings },
+    { id: "audit", label: t("admin.audit"), icon: Shield },
   ];
 
   return (
@@ -66,7 +62,7 @@ function AdminDashboardPage() {
               className="flex items-center gap-1 rounded-xl bg-surface border border-border px-2.5 py-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowRight className="h-4 w-4" />
-              <span>العودة للتطبيق</span>
+              <span>{t("admin.backToApp")}</span>
             </Link>
 
             <div className="flex items-center gap-2 border-r border-border/60 pr-3">
@@ -74,8 +70,8 @@ function AdminDashboardPage() {
                 <ShieldCheck className="h-4 w-4" />
               </span>
               <div>
-                <h1 className="text-xs font-black text-foreground">لوحة إدارة فالوريزا</h1>
-                <p className="text-[10px] text-amber-400 font-bold">وحدة تحكم الإدارة</p>
+                <h1 className="text-xs font-black text-foreground">{t("admin.dashboard")}</h1>
+                <p className="text-[10px] text-amber-400 font-bold">{t("admin.controlPanel")}</p>
               </div>
             </div>
           </div>
@@ -83,7 +79,7 @@ function AdminDashboardPage() {
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              النظام نشط
+              {t("admin.systemActive")}
             </span>
           </div>
         </div>

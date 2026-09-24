@@ -29,26 +29,20 @@ import { getAccountData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export const Route = createFileRoute("/_authenticated/account")({
-  head: () => ({
-    meta: [
-      { title: "حسابي — Valoriza" },
-      {
-        name: "description",
-        content: "الملف الشخصي، رصيد الحساب، المكافأة اليومية وسجلات المعاملات.",
-      },
-      { property: "og:title", content: "حسابي — Valoriza" },
-      { property: "og:description", content: "بيانات حسابك ورصيدك في منصة Valoriza." },
-    ],
-  }),
   component: AccountPage,
 });
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number | null | undefined) => {
+  const value = Number.isFinite(Number(n)) ? Number(n) : 0;
+  return `$${value.toFixed(2)}`;
+};
 
 function AccountPage() {
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
@@ -101,12 +95,12 @@ function AccountPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      toast.success(t("account.passwordSuccess"));
+      toast.success(t("account.passwordChangedSuccess"));
       setPasswordModalOpen(false);
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      toast.error(err.message || t("common.error"));
+      toast.error(t("common.error"));
     } finally {
       setPasswordLoading(false);
     }
@@ -134,6 +128,15 @@ function AccountPage() {
     );
   }
 
+  const rawProfile = data.profile ?? {};
+  const profile = {
+    username: rawProfile.username ?? "",
+    email: rawProfile.email ?? "",
+    referralCode: rawProfile.referralCode ?? rawProfile.referral_code ?? "",
+    vipLevel: Number(rawProfile.vipLevel ?? rawProfile.vip_level ?? 0),
+    trialActive: Boolean(rawProfile.trialActive ?? rawProfile.trial_active),
+  };
+  const dailyReward = data.dailyReward ?? { amount: 0, claimed: false };
   const Chevron = isRTL ? ChevronLeft : ChevronRight;
 
   return (
@@ -154,11 +157,11 @@ function AccountPage() {
                   {/* Avatar */}
                   <div className="relative shrink-0">
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl brand-gradient text-primary-foreground font-black text-2xl shadow-glow">
-                      {data.profile.username.slice(0, 2).toUpperCase()}
+                      {content(profile.username, { allowUserIdentifier: true }).slice(0, 2).toUpperCase()}
                     </div>
                     <div className="absolute -bottom-1.5 -start-1.5 flex items-center gap-1 rounded-full bg-background border border-gold px-2 py-0.5 text-[10px] font-black text-gold shadow-md">
                       <Crown className="h-3 w-3 text-gold fill-gold" />
-                      <span>VIP {data.profile.vipLevel}</span>
+                      <span>VIP {profile.vipLevel}</span>
                     </div>
                   </div>
 
@@ -166,22 +169,22 @@ function AccountPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h1 className="text-lg font-black text-foreground truncate">
-                        {data.profile.username}
+                        {content(profile.username, { allowUserIdentifier: true })}
                       </h1>
-                      {data.profile.trialActive && (
+                      {profile.trialActive && (
                         <span className="rounded-full bg-cyan-glow/20 border border-cyan-glow/40 px-2 py-0.5 text-[10px] font-bold text-cyan-glow">
                           {t("account.trialPeriod")}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate mt-1">
-                      {data.profile.email}
+                      {content(profile.email, { allowUserIdentifier: true })}
                     </p>
                     <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface px-2.5 py-1 text-xs font-mono text-cyan-glow">
                       <Ticket className="h-3.5 w-3.5" />
                       <span>{t("team.inviteCode")}:</span>
                       <span className="font-black select-all text-gold">
-                        {data.profile.referralCode}
+                        {content(profile.referralCode, { allowLanguageNeutral: true })}
                       </span>
                     </div>
                   </div>
@@ -198,7 +201,7 @@ function AccountPage() {
                         {t("rewards.claimToday")}
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        +{money(data.dailyReward.amount)}
+                        +{money(dailyReward.amount)}
                       </p>
                     </div>
                   </div>
@@ -206,15 +209,15 @@ function AccountPage() {
                   <button
                     id="btn-claim-daily-reward"
                     type="button"
-                    disabled={data.dailyReward.claimed || claimMutation.isPending}
+                    disabled={dailyReward.claimed || claimMutation.isPending}
                     onClick={() => claimMutation.mutate()}
                     className={`shrink-0 rounded-xl px-3.5 py-2 text-xs font-black shadow-md transition-all cursor-pointer ${
-                      data.dailyReward.claimed
+                      dailyReward.claimed
                         ? "bg-surface text-muted-foreground border border-border cursor-not-allowed"
                         : "brand-gradient text-primary-foreground shadow-glow hover:opacity-95 active:scale-95"
                     }`}
                   >
-                    {data.dailyReward.claimed ? t("rewards.claimedToday") : t("rewards.claimToday")}
+                    {dailyReward.claimed ? t("rewards.claimedToday") : t("rewards.claimToday")}
                   </button>
                 </div>
               </section>
@@ -370,12 +373,12 @@ function AccountPage() {
                 <div className="rounded-2xl border border-border bg-surface p-3.5 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">{t("home.vipStatus")}:</span>
-                    <span className="font-black text-gold">VIP {data.profile.vipLevel}</span>
+                    <span className="font-black text-gold">VIP {profile.vipLevel}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">حماية وتشفير البيانات:</span>
+                    <span className="text-muted-foreground">{t("account.dataProtection")}</span>
                     <span className="font-black text-success">
-                      تشفير مالي آمن 256 بت (SSL)
+                      {t("account.sslEncryption")}
                     </span>
                   </div>
                 </div>

@@ -3,8 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Sparkles, Plus, Edit2, CheckCircle2, XCircle, X, RefreshCw, Percent } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminWheelPrizes, saveWheelPrize } from "@/lib/valoriza-admin.functions";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export function AdminWheelTab() {
+  const { t } = useI18n();
+  const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
@@ -27,12 +31,12 @@ export function AdminWheelTab() {
   const saveMutation = useMutation({
     mutationFn: saveWheelPrize,
     onSuccess: () => {
-      toast.success("تم تحديث جائزة عجلة الحظ بنجاح");
+      toast.success(t("admin.wheelPrizeUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-wheel-prizes"] });
       queryClient.invalidateQueries({ queryKey: ["wheel-prizes"] });
       setModalOpen(false);
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: () => toast.error(t("common.error")),
   });
 
   const totalWeight = prizes.reduce(
@@ -52,7 +56,7 @@ export function AdminWheelTab() {
 
   const handleOpenCreate = () => {
     setEditingPrize(null);
-    setLabel("جائزة نقدية");
+    setLabel("");
     setAmount(1.0);
     setProbabilityWeight(10);
     setColor("#FFD700");
@@ -64,9 +68,9 @@ export function AdminWheelTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xs font-extrabold text-foreground">إدارة قطاعات وجوائز عجلة الحظ</h2>
+          <h2 className="text-xs font-extrabold text-foreground">{t("admin.manageWheelPrizes")}</h2>
           <p className="text-[10px] text-muted-foreground">
-            تعديل مبالغ الجوائز ونسب احتمالية الفوز (Weights).
+            {t("admin.wheelPrizeDescription")}
           </p>
         </div>
         <button
@@ -75,14 +79,14 @@ export function AdminWheelTab() {
           className="flex items-center gap-1.5 rounded-xl brand-gradient px-3 py-1.5 text-xs font-black text-primary-foreground shadow-glow"
         >
           <Plus className="h-3.5 w-3.5" />
-          <span>إضافة جائزة جديدة</span>
+          <span>{t("admin.addNewPrize")}</span>
         </button>
       </div>
 
       {isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
-          جارٍ جلب جوائز العجلة...
+          {t("admin.loadingWheelPrizes")}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -104,7 +108,7 @@ export function AdminWheelTab() {
                       className="h-4 w-4 rounded-full border border-white/20 shadow-sm"
                       style={{ backgroundColor: prize.color || "#00E5FF" }}
                     />
-                    <h3 className="text-xs font-black text-foreground">{prize.label}</h3>
+                    <h3 className="text-xs font-black text-foreground">{content(prize.label)}</h3>
                   </div>
 
                   <button
@@ -119,16 +123,16 @@ export function AdminWheelTab() {
                 <div className="mt-3 text-center">
                   <p className="text-xl font-black text-gold">${Number(prize.amount).toFixed(2)}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    الاحتمالية: {chance}% ({prize.probability_weight} نقاط)
+                    {t("admin.probability")}: {chance}% ({prize.probability_weight} {t("admin.points")})
                   </p>
                 </div>
 
                 <div className="mt-3 pt-2 border-t border-border/50 flex items-center justify-between text-[10px]">
-                  <span className="text-muted-foreground">الحالة:</span>
+                  <span className="text-muted-foreground">{t("common.status")}:</span>
                   {prize.is_active ? (
-                    <span className="font-bold text-emerald-400">نشطة في العجلة</span>
+                    <span className="font-bold text-emerald-400">{t("admin.activeOnWheel")}</span>
                   ) : (
-                    <span className="font-bold text-muted-foreground">معطلة</span>
+                    <span className="font-bold text-muted-foreground">{t("admin.disabled")}</span>
                   )}
                 </div>
               </div>
@@ -143,7 +147,9 @@ export function AdminWheelTab() {
           <div className="w-full max-w-sm rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                {editingPrize ? `تعديل جائزة: ${editingPrize.label}` : "إضافة قطاع جائزة"}
+                {editingPrize
+                  ? `${t("admin.editPrize")}: ${content(editingPrize.label)}`
+                  : t("admin.addPrizeSegment")}
               </h3>
               <button
                 type="button"
@@ -157,11 +163,12 @@ export function AdminWheelTab() {
             <div className="mt-3 space-y-3">
               <div>
                 <label className="text-[10px] text-muted-foreground font-bold">
-                  اسم / نص الجائزة
+                  {t("admin.prizeLabelArabicSource")}
                 </label>
                 <input
                   type="text"
                   value={label}
+                  placeholder={t("admin.arabicPrizeLabelPlaceholder")}
                   onChange={(e) => setLabel(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                 />
@@ -169,7 +176,7 @@ export function AdminWheelTab() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">المبلغ ($)</label>
+                  <label className="text-[10px] text-muted-foreground font-bold">{t("admin.amountUsd")}</label>
                   <input
                     type="number"
                     step="0.05"
@@ -180,7 +187,7 @@ export function AdminWheelTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    وزن الاحتمالية (Weight)
+                    {t("admin.probabilityWeight")}
                   </label>
                   <input
                     type="number"
@@ -194,7 +201,7 @@ export function AdminWheelTab() {
 
               <div>
                 <label className="text-[10px] text-muted-foreground font-bold">
-                  لون القطاع في العجلة
+                  {t("admin.wheelSegmentColor")}
                 </label>
                 <div className="mt-1 flex items-center gap-2">
                   <input
@@ -216,7 +223,7 @@ export function AdminWheelTab() {
                   className="h-4 w-4 rounded border-border text-cyan-glow focus:ring-0"
                 />
                 <label htmlFor="prize-is-active" className="text-xs font-bold text-foreground">
-                  تفعيل الجائزة في العجلة
+                  {t("admin.activatePrize")}
                 </label>
               </div>
 
@@ -235,7 +242,7 @@ export function AdminWheelTab() {
                 }
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {saveMutation.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+                {saveMutation.isPending ? t("admin.saving") : t("admin.saveChanges")}
               </button>
             </div>
           </div>

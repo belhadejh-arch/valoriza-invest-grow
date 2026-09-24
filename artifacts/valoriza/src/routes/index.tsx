@@ -26,27 +26,13 @@ export const Route = createFileRoute("/")({
       ref: typeof search.ref === "string" ? search.ref : undefined,
     } as { ref?: string };
   },
-  head: () => ({
-    meta: [
-      { title: "تسجيل الدخول — فالوريزا | استثمر اليوم .. لبناء مستقبلك غداً" },
-      {
-        name: "description",
-        content: "سجل الدخول إلى حساب Valoriza: منصة عالمية وفرص حقيقية لربح المال بأمان وسهولة.",
-      },
-      { property: "og:title", content: "فالوريزا — استثمر اليوم .. لبناء مستقبلك غداً" },
-      {
-        property: "og:description",
-        content: "منصة عالمية .. فرص حقيقية لربح المال. آمن - سهل - سريع.",
-      },
-    ],
-  }),
   component: AuthPage,
 });
 
 function AuthPage() {
   const navigate = useNavigate();
   const search = Route.useSearch();
-  const { t, isRTL } = useI18n();
+  const { t } = useI18n();
   const [mode, setMode] = useState<"login" | "register">(search.ref ? "register" : "login");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -67,49 +53,59 @@ function AuthPage() {
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
   function getFriendlyErrorMessage(rawMsg: string): string {
-    if (!rawMsg) return "حدث خطأ غير متوقع أثناء معالجة الطلب";
+    if (!rawMsg) return t("public.auth.errorUnexpected");
     if (
       rawMsg.includes("ACCOUNT_EXISTS") ||
       rawMsg.includes("already registered") ||
       rawMsg.includes("مسجل بالفعل")
     ) {
-      return "هذا البريد الإلكتروني مسجل بالفعل! يمكنك تسجيل الدخول مباشرة.";
+      return t("public.auth.accountExists");
     }
     if (rawMsg.includes("INVALID_CREDENTIALS") || rawMsg.includes("Invalid login")) {
-      return "بيانات الدخول غير صحيحة، يرجى التأكد من البريد الإلكتروني وكلمة المرور.";
+      return t("public.auth.invalidCredentials");
     }
     if (rawMsg.includes("ACCOUNT_BLOCKED")) {
-      return "تم تجميد هذا الحساب من قبل إدارة المنصة.";
+      return t("public.auth.blocked");
     }
     if (rawMsg.includes("INVALID_REGISTRATION")) {
-      return "بيانات التسجيل غير مكتملة، كلمة المرور يجب أن تكون 6 أحرف على الأقل.";
+      return t("public.auth.invalidRegistration");
     }
     if (
       rawMsg.includes("fetch") ||
       rawMsg.includes("Failed to fetch") ||
       rawMsg.includes("Network")
     ) {
-      return "تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.";
+      return t("public.auth.networkError");
     }
-    return rawMsg;
+    return t("public.auth.errorUnexpected");
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
+    if (mode === "register" && form.username.trim().length < 3) {
+      toast.error(t("auth.errUsernameLen"));
+      return;
+    }
+    const email = form.email.trim();
+    const invalidEmailMessage =
+      mode === "register"
+        ? t("public.auth.invalidRegistration")
+        : t("public.auth.invalidCredentials");
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error(invalidEmailMessage);
+      return;
+    }
+    if (form.password.length < 6) {
+      toast.error(t("auth.errPasswordLen"));
+      return;
+    }
+
     setLoading(true);
     try {
       if (mode === "register") {
-        if (form.username.trim().length < 3) {
-          toast.error(t("auth.errUsernameLen"));
-          return;
-        }
-        if (form.password.length < 6) {
-          toast.error(t("auth.errPasswordLen"));
-          return;
-        }
         const { error } = await supabase.auth.signUp({
-          email: form.email.trim(),
+          email,
           password: form.password,
           options: {
             data: {
@@ -127,7 +123,7 @@ function AuthPage() {
         navigate({ to: "/home", replace: true });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email: form.email.trim(),
+          email,
           password: form.password,
         });
         if (error) {
@@ -140,7 +136,7 @@ function AuthPage() {
     } catch (err: unknown) {
       console.error("Auth submit error:", err);
       const msg =
-        err instanceof Error ? getFriendlyErrorMessage(err.message) : "تعذر الاتصال بالسيرفر";
+        err instanceof Error ? getFriendlyErrorMessage(err.message) : t("public.auth.serverError");
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -174,7 +170,7 @@ function AuthPage() {
             <div className="relative overflow-hidden rounded-3xl glow-border shadow-2xl">
               <img
                 src={heroCity}
-                alt="المقر الرئيسي لشركة فالوريزا في مدريد"
+                alt={t("public.auth.heroAlt")}
                 width={1280}
                 height={720}
                 className="h-64 lg:h-72 w-full object-cover"
@@ -188,7 +184,7 @@ function AuthPage() {
                 <h1 className="text-3xl font-black text-white">{t("auth.heroTitle")}</h1>
                 <p className="text-base font-bold text-gold-soft mt-1">{t("auth.heroSubtitle")}</p>
                 <p className="text-xs text-slate-300 mt-1">
-                  باسيو دي لا كاستيلانا 95، مدريد، إسبانيا · رقم التسجيل B-88392104
+                  {t("public.auth.heroAddress")}
                 </p>
               </div>
             </div>
@@ -245,7 +241,7 @@ function AuthPage() {
                 </p>
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-2.5 sm:space-y-3">
+              <form noValidate onSubmit={handleSubmit} className="space-y-2.5 sm:space-y-3">
                 {mode === "register" && (
                   <Field
                     id="auth-field-username"
@@ -352,7 +348,7 @@ function AuthPage() {
 
       {/* Footer copyright */}
       <footer className="py-2 text-center text-[10px] text-muted-foreground border-t border-border/40">
-        شركة فالوريزا للاستثمار · مدريد، إسبانيا · سجل تجاري رقم B-88392104
+        {t("public.auth.footer")}
       </footer>
     </div>
   );

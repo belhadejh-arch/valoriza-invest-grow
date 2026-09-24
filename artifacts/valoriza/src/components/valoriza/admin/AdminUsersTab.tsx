@@ -24,8 +24,12 @@ import {
   updateUserVipLevel,
   manualBalanceAdjustment,
 } from "@/lib/valoriza-admin.functions";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export function AdminUsersTab() {
+  const { t } = useI18n();
+  const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
@@ -51,34 +55,34 @@ export function AdminUsersTab() {
   const blockMutation = useMutation({
     mutationFn: toggleUserBlock,
     onSuccess: () => {
-      toast.success("تم تحديث حالة المستخدم بنجاح");
+      toast.success(t("admin.userStatusUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: () => toast.error(t("common.error")),
   });
 
   const vipMutation = useMutation({
     mutationFn: updateUserVipLevel,
     onSuccess: () => {
-      toast.success("تم تحديث مستوى VIP بنجاح");
+      toast.success(t("admin.vipLevelUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setVipModalOpen(false);
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: () => toast.error(t("common.error")),
   });
 
   const balanceMutation = useMutation({
     mutationFn: manualBalanceAdjustment,
     onSuccess: (res) => {
-      toast.success("تم تعديل رصيد المستخدم بنجاح وتوثيق العملية");
+      toast.success(t("admin.balanceUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
       setAdjustBalanceOpen(false);
       setAdjustAmount("");
       setAdjustReason("");
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: () => toast.error(t("common.error")),
   });
 
   const filteredUsers = users.filter((u: any) => {
@@ -99,7 +103,7 @@ export function AdminUsersTab() {
           <Search className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="البحث باسم المستخدم، البريد، أو كود الإحالة..."
+            placeholder={t("admin.searchUsersPlaceholder")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full rounded-xl border border-border bg-surface pr-9 pl-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
@@ -111,43 +115,49 @@ export function AdminUsersTab() {
           className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-bold text-muted-foreground hover:text-foreground active:scale-95"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          <span>تحديث ({filteredUsers.length})</span>
+          <span>{t("admin.refresh")} ({filteredUsers.length})</span>
         </button>
       </div>
 
       {isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
-          جارٍ جلب حسابات المستخدمين...
+          {t("admin.loadingUsers")}
         </div>
       ) : filteredUsers.length === 0 ? (
         <div className="surface-card rounded-2xl p-8 text-center text-xs text-muted-foreground">
-          لم يتم العثور على أي مستخدم مطابق للبحث.
+          {t("admin.noMatchingUsers")}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface/50">
           <table className="w-full text-right text-xs">
             <thead className="border-b border-border/80 bg-surface/80 text-[11px] font-bold text-muted-foreground">
               <tr>
-                <th className="p-3">المستخدم</th>
-                <th className="p-3">كود الإحالة</th>
-                <th className="p-3">رتبة VIP</th>
-                <th className="p-3">الرصيد المتاح</th>
-                <th className="p-3">إجمالي الإيداع</th>
-                <th className="p-3">إجمالي السحب</th>
-                <th className="p-3">أعضاء الفريق</th>
-                <th className="p-3">الحالة</th>
-                <th className="p-3 text-center">إجراءات</th>
+                <th className="p-3">{t("admin.user")}</th>
+                <th className="p-3">{t("admin.referralCode")}</th>
+                <th className="p-3">{t("admin.vipRank")}</th>
+                <th className="p-3">{t("admin.availableBalance")}</th>
+                <th className="p-3">{t("admin.totalDeposits")}</th>
+                <th className="p-3">{t("admin.totalWithdrawals")}</th>
+                <th className="p-3">{t("admin.teamMembers")}</th>
+                <th className="p-3">{t("common.status")}</th>
+                <th className="p-3 text-center">{t("admin.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
               {filteredUsers.map((user: any) => (
                 <tr key={user.id} className="hover:bg-surface/80 transition-colors">
                   <td className="p-3">
-                    <p className="font-extrabold text-foreground">{user.username || "بدون اسم"}</p>
-                    <p className="text-[10px] text-muted-foreground">{user.email}</p>
+                    <p className="font-extrabold text-foreground">
+                      {content(user.username || t("admin.noName"), { allowUserIdentifier: true })}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {content(user.email || "", { allowUserIdentifier: true })}
+                    </p>
                   </td>
-                  <td className="p-3 font-mono font-bold text-cyan-glow">{user.referralCode}</td>
+                  <td className="p-3 font-mono font-bold text-cyan-glow">
+                    {content(user.referralCode, { allowLanguageNeutral: true })}
+                  </td>
                   <td className="p-3">
                     <span className="inline-flex items-center gap-1 rounded-full border border-vip/40 bg-vip/10 px-2 py-0.5 text-[10px] font-extrabold text-vip-soft">
                       <Crown className="h-3 w-3 text-gold" />
@@ -165,11 +175,11 @@ export function AdminUsersTab() {
                   <td className="p-3">
                     {user.isBlocked ? (
                       <span className="rounded-md bg-danger/15 px-2 py-0.5 text-[10px] font-bold text-danger border border-danger/30">
-                        محظور
+                        {t("admin.blocked")}
                       </span>
                     ) : (
                       <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-400 border border-emerald-500/30">
-                        نشط
+                        {t("status.active")}
                       </span>
                     )}
                   </td>
@@ -182,7 +192,7 @@ export function AdminUsersTab() {
                           setSelectedUser(user);
                           setAdjustBalanceOpen(true);
                         }}
-                        title="تعديل الرصيد يدوياً"
+                        title={t("admin.adjustBalanceManually")}
                         className="rounded-lg bg-surface border border-gold/40 p-1.5 text-gold hover:bg-gold/10"
                       >
                         <Wallet className="h-3.5 w-3.5" />
@@ -196,7 +206,7 @@ export function AdminUsersTab() {
                           setTargetVipLevel(user.vipLevel);
                           setVipModalOpen(true);
                         }}
-                        title="تغيير مستوى VIP"
+                        title={t("admin.changeVipLevel")}
                         className="rounded-lg bg-surface border border-vip/40 p-1.5 text-vip-soft hover:bg-vip/10"
                       >
                         <Crown className="h-3.5 w-3.5" />
@@ -211,7 +221,7 @@ export function AdminUsersTab() {
                             isBlocked: !user.isBlocked,
                           })
                         }
-                        title={user.isBlocked ? "إلغاء الحظر" : "حظر المستخدم"}
+                        title={user.isBlocked ? t("admin.unblockUser") : t("admin.blockUser")}
                         className={`rounded-lg border p-1.5 ${
                           user.isBlocked
                             ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20"
@@ -239,7 +249,7 @@ export function AdminUsersTab() {
           <div className="w-full max-w-sm rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                تعديل رصيد: {selectedUser.username}
+                {t("admin.adjustBalanceTitle")}: {content(selectedUser.username || t("admin.noName"), { allowUserIdentifier: true })}
               </h3>
               <button
                 type="button"
@@ -253,7 +263,7 @@ export function AdminUsersTab() {
             <div className="mt-3 space-y-3">
               <div>
                 <p className="text-[11px] text-muted-foreground">
-                  الرصيد الحالي: ${selectedUser.balance.toFixed(2)}
+                  {t("admin.currentBalance")}: ${selectedUser.balance.toFixed(2)}
                 </p>
                 <div className="mt-2 flex rounded-xl bg-surface p-1 border border-border">
                   <button
@@ -264,7 +274,7 @@ export function AdminUsersTab() {
                     }`}
                   >
                     <PlusCircle className="h-3.5 w-3.5" />
-                    إيداع (زيادة)
+                    {t("admin.creditBalance")}
                   </button>
                   <button
                     type="button"
@@ -274,13 +284,13 @@ export function AdminUsersTab() {
                     }`}
                   >
                     <MinusCircle className="h-3.5 w-3.5" />
-                    خصم (إنقاص)
+                    {t("admin.debitBalance")}
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">المبلغ ($)</label>
+                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.amountUsd")}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -293,10 +303,10 @@ export function AdminUsersTab() {
               </div>
 
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">سبب التعديل</label>
+                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.adjustmentReason")}</label>
                 <input
                   type="text"
-                  placeholder="مثال: تصحيح إيداع، مكافأة تشجيعية، إلخ..."
+                  placeholder={t("admin.adjustmentReasonPlaceholder")}
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
@@ -320,7 +330,7 @@ export function AdminUsersTab() {
                 }
                 className="w-full mt-2 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {balanceMutation.isPending ? "جارٍ الحفظ والتوثيق..." : "تأكيد تعديل الرصيد"}
+                {balanceMutation.isPending ? t("admin.savingAndLogging") : t("admin.confirmBalanceAdjustment")}
               </button>
             </div>
           </div>
@@ -333,7 +343,7 @@ export function AdminUsersTab() {
           <div className="w-full max-w-sm rounded-3xl border border-vip/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                ترقية VIP للمستخدم: {selectedUser.username}
+                {t("admin.upgradeVipForUser")}: {content(selectedUser.username || t("admin.noName"), { allowUserIdentifier: true })}
               </h3>
               <button
                 type="button"
@@ -345,7 +355,7 @@ export function AdminUsersTab() {
             </div>
 
             <div className="mt-3 space-y-3">
-              <p className="text-[11px] text-muted-foreground">اختر مستوى VIP الجديد:</p>
+              <p className="text-[11px] text-muted-foreground">{t("admin.selectVipLevel")}</p>
               <div className="grid grid-cols-4 gap-2">
                 {[0, 1, 2, 3, 4, 5, 6, 7].map((lvl) => (
                   <button
@@ -358,7 +368,7 @@ export function AdminUsersTab() {
                         : "border-border bg-surface text-foreground hover:border-vip/50"
                     }`}
                   >
-                    {lvl === 0 ? "عادي" : `VIP ${lvl}`}
+                    {lvl === 0 ? t("admin.standard") : `VIP ${lvl}`}
                   </button>
                 ))}
               </div>
@@ -374,7 +384,7 @@ export function AdminUsersTab() {
                 }
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {vipMutation.isPending ? "جارٍ التحديث..." : "حفظ الترقية"}
+                {vipMutation.isPending ? t("admin.updating") : t("admin.saveUpgrade")}
               </button>
             </div>
           </div>

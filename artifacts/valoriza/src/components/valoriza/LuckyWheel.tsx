@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export type PrizeItem = {
   id: string;
@@ -42,12 +43,16 @@ interface LuckyWheelProps {
 const PERIMETER_ORDER = [0, 1, 2, 5, 8, 7, 6, 3, 4];
 
 export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelProps) {
-  const { t, isRTL } = useI18n();
+  const { t, dir, lang } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
-  const [winModal, setWinModal] = useState<{ label: string; value: number; cash: boolean } | null>(
-    null,
-  );
+  const [winModal, setWinModal] = useState<{
+    label: string;
+    value: number;
+    cash: boolean;
+    prizeType: string;
+  } | null>(null);
+  const content = useLocalizedContent();
   const spinTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -60,7 +65,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
   const default9Boxes: PrizeItem[] = [
     {
       id: "w-50",
-      label: "50 دولار",
+      label: t("public.wheel.prize50"),
       prizeType: "cash",
       prizeValue: 50,
       icon: "banknote",
@@ -68,7 +73,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-05",
-      label: "0.5 دولار",
+      label: t("public.wheel.prize05"),
       prizeType: "cash",
       prizeValue: 0.5,
       icon: "coin",
@@ -76,7 +81,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-luck1",
-      label: "حظ سعيد",
+      label: t("public.wheel.luck"),
       prizeType: "none",
       prizeValue: 0,
       icon: "smile",
@@ -84,7 +89,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-2",
-      label: "2 دولار",
+      label: t("public.wheel.prize2"),
       prizeType: "cash",
       prizeValue: 2,
       icon: "coins",
@@ -92,7 +97,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-phone",
-      label: "هاتف نقال",
+      label: t("public.wheel.phone"),
       prizeType: "item",
       prizeValue: 0,
       icon: "smartphone",
@@ -100,7 +105,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-luck2",
-      label: "حظ سعيد",
+      label: t("public.wheel.luck"),
       prizeType: "none",
       prizeValue: 0,
       icon: "smile",
@@ -108,7 +113,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-80",
-      label: "80 دولار",
+      label: t("public.wheel.prize80"),
       prizeType: "cash",
       prizeValue: 80,
       icon: "money-bag",
@@ -116,7 +121,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-1",
-      label: "1 دولار",
+      label: t("public.wheel.prize1"),
       prizeType: "cash",
       prizeValue: 1,
       icon: "coin",
@@ -124,7 +129,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-vip",
-      label: "ترقيات VIP",
+      label: t("public.wheel.vip"),
       prizeType: "vip",
       prizeValue: 0,
       icon: "crown",
@@ -133,6 +138,30 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
   ];
 
   const gridPrizes = prizes && prizes.length === 9 ? prizes : default9Boxes;
+  const displayPrizeLabel = (label: string, prizeType?: string, value?: number) => {
+    const translated: Record<string, string> = {
+      "50 دولار": t("public.wheel.prize50"),
+      "0.5 دولار": t("public.wheel.prize05"),
+      "حظ سعيد": t("public.wheel.luck"),
+      "2 دولار": t("public.wheel.prize2"),
+      "هاتف نقال": t("public.wheel.phone"),
+      "80 دولار": t("public.wheel.prize80"),
+      "1 دولار": t("public.wheel.prize1"),
+      "ترقيات VIP": t("public.wheel.vip"),
+    };
+    if (translated[label]) return translated[label];
+    if (Object.values(translated).includes(label)) return label;
+    if (prizeType === "cash" && value !== undefined) {
+      const locale =
+        lang === "ar" ? "ar-SA" : lang === "fr" ? "fr-FR" : lang === "es" ? "es-ES" : "en-US";
+      return new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+    return content(label);
+  };
 
   const getBoxStyle = (p: PrizeItem, isLit: boolean) => {
     const base =
@@ -197,7 +226,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
   const handleStartSpin = async () => {
     if (isSpinning || disabled) return;
     if (spinsLeft <= 0) {
-      toast.error(t("wheel.noSpins"));
+      toast.error(t("public.wheel.noSpins"));
       return;
     }
 
@@ -227,7 +256,11 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
           if (!res.ok) {
             setIsSpinning(false);
             setHighlightedIndex(null);
-            toast.error(res.reason === "NO_SPINS_LEFT" ? "انتهت فرصك اليوم" : "تعذر تشغيل العجلة");
+            toast.error(
+              res.reason === "NO_SPINS_LEFT"
+                ? t("public.wheel.noSpinsToday")
+                : t("public.wheel.error"),
+            );
             return;
           }
 
@@ -255,8 +288,9 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               setHighlightedIndex(targetIndex);
               setWinModal({
                 label: res.label || gridPrizes[targetIndex].label,
-                value: res.value || 0,
+                value: res.value ?? gridPrizes[targetIndex].prizeValue,
                 cash: Boolean(res.cash),
+                prizeType: gridPrizes[targetIndex].prizeType,
               });
             } else {
               spinTimerRef.current = setTimeout(decelerate, intervalMs);
@@ -271,7 +305,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     } catch {
       setIsSpinning(false);
       setHighlightedIndex(null);
-      toast.error("حدث خطأ في تشغيل العجلة");
+      toast.error(t("public.wheel.errorUnexpected"));
     }
   };
 
@@ -282,10 +316,10 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
         <div className="flex items-center justify-center gap-2">
           <Gift className="h-6 w-6 text-gold animate-bounce" />
           <h3 className="text-2xl font-black text-gold-gradient tracking-wide">
-            {t("wheel.title")}
+            {t("public.wheel.title")}
           </h3>
         </div>
-        <p className="mt-1 text-xs font-semibold text-foreground/90">{t("wheel.subtitle")}</p>
+        <p className="mt-1 text-xs font-semibold text-foreground/90">{t("public.wheel.subtitle")}</p>
       </div>
 
       {/* Main Grid + Action Panel matching Page 2 */}
@@ -303,7 +337,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               >
                 {renderIcon(prize)}
                 <span className="text-[11px] sm:text-xs font-black leading-tight truncate w-full">
-                  {prize.label}
+                  {displayPrizeLabel(prize.label, prize.prizeType, prize.prizeValue)}
                 </span>
               </div>
             );
@@ -314,7 +348,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
         <div className="md:col-span-4 surface-card border-border/80 p-3.5 flex flex-col justify-between items-center text-center">
           <div className="flex flex-col items-center">
             <Ticket className="h-7 w-7 text-gold mb-1" />
-            <span className="text-xs font-bold text-foreground">{t("wheel.spinsLeft")}</span>
+            <span className="text-xs font-bold text-foreground">{t("public.wheel.spinsLeftLabel")}</span>
             <div
               id="wheel-spins-left-counter"
               className="mt-1 text-4xl font-extrabold text-foreground"
@@ -332,10 +366,10 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               className="w-full rounded-2xl gold-gradient py-3 px-4 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
             >
               <RotateCw className={`h-4 w-4 ${isSpinning ? "animate-spin" : ""}`} />
-              <span>{isSpinning ? t("wheel.spinning") : t("wheel.spinBtn")}</span>
+              <span>{isSpinning ? t("public.wheel.spinning") : t("public.wheel.spin")}</span>
             </button>
             <p className="mt-2 text-[10px] text-muted-foreground font-medium">
-              {t("wheel.spinsCost")}
+              {t("public.wheel.spinCost")}
             </p>
           </div>
         </div>
@@ -351,7 +385,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
           <div
             className="surface-card glow-gold max-w-sm w-full p-6 text-center animate-in zoom-in-90 duration-300"
             onClick={(e) => e.stopPropagation()}
-            dir="rtl"
+            dir={dir}
           >
             <div className="flex justify-center mb-3">
               <div className="flex h-16 w-16 items-center justify-center rounded-3xl gold-gradient shadow-gold-glow">
@@ -364,16 +398,22 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
             </div>
 
             <h4 className="text-xl font-black text-gold-gradient">
-              {winModal.cash ? "تهانينا! فوز رائع 🎉" : "نتيجة السحب 🎯"}
+              {winModal.cash ? t("public.wheel.congrats") : t("public.wheel.result")}
             </h4>
 
             <p className="mt-2 text-sm text-foreground">
-              لقد حصلت على: <strong className="text-gold font-bold">{winModal.label}</strong>
+              {t("public.wheel.received")}{" "}
+              <strong className="text-gold font-bold">
+                {displayPrizeLabel(winModal.label, winModal.prizeType, winModal.value)}
+              </strong>
             </p>
 
             {winModal.cash && (
               <p className="mt-1 text-xs text-success font-semibold">
-                تم إضافة {winModal.label} مباشرةً إلى رصيد محفظتك وسجل المعاملات!
+                {t("public.wheel.credited").replace(
+                  "{prize}",
+                  displayPrizeLabel(winModal.label, winModal.prizeType, winModal.value),
+                )}
               </p>
             )}
 
@@ -382,7 +422,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               onClick={() => setWinModal(null)}
               className="mt-5 w-full rounded-2xl gold-gradient py-2.5 text-xs font-black text-navy-deep shadow-gold-glow"
             >
-              استلام ومتابعة
+              {t("public.wheel.claim")}
             </button>
           </div>
         </div>

@@ -28,14 +28,6 @@ import {
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/withdrawal")({
-  head: () => ({
-    meta: [
-      { title: "السحب — Valoriza" },
-      { name: "description", content: "سحب أرباحك ورصيدك إلى محفظتك الرقمية بأمان وبأقل رسوم." },
-      { property: "og:title", content: "السحب — Valoriza" },
-      { property: "og:description", content: "سحب الرصيد في منصة Valoriza." },
-    ],
-  }),
   component: WithdrawalPage,
 });
 
@@ -115,7 +107,7 @@ function WithdrawalPage() {
         toast.success(t("withdraw.bindSuccess"));
         qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
       } else {
-        toast.error(res.message || t("common.error"));
+        toast.error(t("common.error"));
       }
     },
     onError: () => toast.error(t("common.error")),
@@ -135,11 +127,11 @@ function WithdrawalPage() {
         qc.invalidateQueries({ queryKey: ["account"] });
       } else {
         if (res.reason === "INSUFFICIENT_BALANCE") {
-          toast.error(t("common.error"));
+           toast.error(t("withdraw.insufficientBalance"));
         } else if (res.reason === "BELOW_MIN_WITHDRAWAL") {
           toast.error(`${t("withdraw.minNotice")} (${minWithdrawal}$)`);
         } else if (res.reason === "ADDRESS_MISMATCH") {
-          toast.error(res.message);
+           toast.error(t("withdraw.addressMismatch"));
         } else {
           toast.error(t("common.error"));
         }
@@ -289,7 +281,7 @@ function WithdrawalPage() {
                     onClick={handleBind}
                     className="shrink-0 rounded-2xl brand-gradient px-4 py-3 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all cursor-pointer"
                   >
-                    {bindMutation.isPending ? "..." : t("withdraw.bindBtn")}
+                    {bindMutation.isPending ? t("withdraw.binding") : t("withdraw.bindBtn")}
                   </button>
                 ) : (
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-success/20 text-success border border-success/30">

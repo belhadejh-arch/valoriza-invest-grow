@@ -11,8 +11,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminSettings, saveAdminSettings } from "@/lib/valoriza-admin.functions";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export function AdminSettingsTab() {
+  const { t } = useI18n();
+  const content = useLocalizedContent();
   const queryClient = useQueryClient();
 
   const {
@@ -40,12 +44,12 @@ export function AdminSettingsTab() {
   const saveMutation = useMutation({
     mutationFn: saveAdminSettings,
     onSuccess: () => {
-      toast.success("تم حفظ إعدادات المنصة بنجاح 🎉");
+      toast.success(t("admin.settingsSaved"));
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
       queryClient.invalidateQueries({ queryKey: ["home"] });
       queryClient.invalidateQueries({ queryKey: ["account-data"] });
     },
-    onError: (err: any) => toast.error(err.message || "حدث خطأ"),
+    onError: () => toast.error(t("common.error")),
   });
 
   const handleChange = (key: string, value: string) => {
@@ -72,7 +76,7 @@ export function AdminSettingsTab() {
     return (
       <div className="py-20 text-center text-xs text-muted-foreground">
         <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
-        جارٍ جلب إعدادات المنصة...
+        {t("admin.loadingSettings")}
       </div>
     );
   }
@@ -83,13 +87,13 @@ export function AdminSettingsTab() {
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
           <DollarSign className="h-4 w-4 text-gold" />
-          <span>الحدود المالية ورسوم السحب</span>
+          <span>{t("admin.financialLimitsAndFees")}</span>
         </h3>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              الحد الأدنى للإيداع ($)
+              {t("admin.minimumDepositUsd")}
             </label>
             <input
               type="number"
@@ -102,7 +106,7 @@ export function AdminSettingsTab() {
 
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              الحد الأدنى للسحب ($)
+              {t("admin.minimumWithdrawalUsd")}
             </label>
             <input
               type="number"
@@ -114,7 +118,7 @@ export function AdminSettingsTab() {
           </div>
 
           <div>
-            <label className="text-[10px] text-muted-foreground font-bold">رسوم السحب (%)</label>
+            <label className="text-[10px] text-muted-foreground font-bold">{t("admin.withdrawalFeePercent")}</label>
             <input
               type="number"
               step="0.5"
@@ -126,7 +130,7 @@ export function AdminSettingsTab() {
 
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              مكافأة تسجيل الدخول ($)
+              {t("admin.loginRewardUsd")}
             </label>
             <input
               type="number"
@@ -143,13 +147,13 @@ export function AdminSettingsTab() {
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
           <DollarSign className="h-4 w-4 text-cyan-glow" />
-          <span>نسب عمولات الإحالة (مستويات الفريق)</span>
+          <span>{t("admin.referralCommissionRates")}</span>
         </h3>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              عمولة المستوى الأول (%)
+              {t("admin.levelOneCommission")}
             </label>
             <input
               type="number"
@@ -161,7 +165,7 @@ export function AdminSettingsTab() {
           </div>
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              عمولة المستوى الثاني (%)
+              {t("admin.levelTwoCommission")}
             </label>
             <input
               type="number"
@@ -173,7 +177,7 @@ export function AdminSettingsTab() {
           </div>
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              عمولة المستوى الثالث (%)
+              {t("admin.levelThreeCommission")}
             </label>
             <input
               type="number"
@@ -190,17 +194,17 @@ export function AdminSettingsTab() {
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
           <Wallet className="h-4 w-4 text-cyan-glow" />
-          <span>عناوين محافظ الإيداع الرسمية (USDT)</span>
+          <span>{t("admin.officialDepositWalletAddresses")}</span>
         </h3>
 
         <div className="mt-4 space-y-3">
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              عنوان شبكة TRC20 (Tron)
+              {t("admin.trc20Address")}
             </label>
             <input
               type="text"
-              value={form["deposit_address_trc20"] || ""}
+              value={content(form["deposit_address_trc20"] || "", { allowLanguageNeutral: true })}
               onChange={(e) => handleChange("deposit_address_trc20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
@@ -208,11 +212,11 @@ export function AdminSettingsTab() {
 
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              عنوان شبكة BEP20 (BNB Smart Chain)
+              {t("admin.bep20Address")}
             </label>
             <input
               type="text"
-              value={form["deposit_address_bep20"] || ""}
+              value={content(form["deposit_address_bep20"] || "", { allowLanguageNeutral: true })}
               onChange={(e) => handleChange("deposit_address_bep20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
@@ -220,11 +224,11 @@ export function AdminSettingsTab() {
 
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              عنوان شبكة ERC20 (Ethereum)
+              {t("admin.erc20Address")}
             </label>
             <input
               type="text"
-              value={form["deposit_address_erc20"] || ""}
+              value={content(form["deposit_address_erc20"] || "", { allowLanguageNeutral: true })}
               onChange={(e) => handleChange("deposit_address_erc20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
@@ -236,27 +240,27 @@ export function AdminSettingsTab() {
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
           <Headphones className="h-4 w-4 text-purple-400" />
-          <span>خدمة العملاء والروابط الرسمية</span>
+          <span>{t("admin.customerServiceAndLinks")}</span>
         </h3>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              رابط تليجرام للدعم
+              {t("admin.telegramSupportUrl")}
             </label>
             <input
               type="text"
-              value={form["telegram_support_url"] || ""}
+              value={content(form["telegram_support_url"] || "", { allowLanguageNeutral: true })}
               onChange={(e) => handleChange("telegram_support_url", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
             />
           </div>
 
           <div>
-            <label className="text-[10px] text-muted-foreground font-bold">رابط واتساب للدعم</label>
+            <label className="text-[10px] text-muted-foreground font-bold">{t("admin.whatsappSupportUrl")}</label>
             <input
               type="text"
-              value={form["whatsapp_support_url"] || ""}
+              value={content(form["whatsapp_support_url"] || "", { allowLanguageNeutral: true })}
               onChange={(e) => handleChange("whatsapp_support_url", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
             />
@@ -264,11 +268,12 @@ export function AdminSettingsTab() {
 
           <div className="sm:col-span-2">
             <label className="text-[10px] text-muted-foreground font-bold">
-              شعار المنصة (Slogan)
+              {t("admin.platformSloganArabicSource")}
             </label>
             <input
               type="text"
-              value={form["app_slogan"] || "Invest Today .. Build Tomorrow"}
+              value={form["app_slogan"] || ""}
+              placeholder={t("admin.platformSloganArabicPlaceholder")}
               onChange={(e) => handleChange("app_slogan", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
             />
@@ -286,12 +291,12 @@ export function AdminSettingsTab() {
           {saveMutation.isPending ? (
             <>
               <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>جارٍ حفظ الإعدادات...</span>
+              <span>{t("admin.savingSettings")}</span>
             </>
           ) : (
             <>
               <Save className="h-4 w-4" />
-              <span>حفظ جميع إعدادات المنصة</span>
+              <span>{t("admin.saveAllSettings")}</span>
             </>
           )}
         </button>

@@ -28,25 +28,11 @@ import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal
 import { DepositModal, WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 import heroCityImg from "@/assets/hero-city.jpg";
 import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
 
 export const Route = createFileRoute("/_authenticated/home")({
-  head: () => ({
-    meta: [
-      { title: "الرئيسية — Valoriza" },
-      {
-        name: "description",
-        content:
-          "استثمر اليوم .. لبناء مستقبلك غداً. محفظتك وعجلة الحظ وصناديق التوفير في منصة Valoriza.",
-      },
-      { property: "og:title", content: "الرئيسية — Valoriza" },
-      {
-        property: "og:description",
-        content: "محفظتك وأرباحك اليومية وعجلة الحظ وصناديق التوفير.",
-      },
-    ],
-  }),
   component: HomePage,
 });
 
@@ -55,24 +41,24 @@ const money = (n: number) => `$${n.toFixed(2)}`;
 // Slides for the Hero Banner matching Section 3
 const HERO_SLIDES = [
   {
-    title: "استثمر اليوم",
-    subtitle: "لبناء مستقبلك غداً",
-    caption: "فرص استثمارية آمنة .. عوائد مستدامة",
-    ctaLabel: "ابدأ الآن",
+    titleKey: "home.slideInvest",
+    subtitleKey: "home.slideFuture",
+    captionKey: "home.slideSafe",
+    ctaKey: "home.startNow",
     ctaTo: "/investment",
   },
   {
-    title: "صناديق التوفير الذكية",
-    subtitle: "أرباح يومية تصل إلى 10.8%",
-    caption: "خطط ادخارية تبدأ من 5 دولارات فقط",
-    ctaLabel: "استكشف الصناديق",
+    titleKey: "home.slideFunds",
+    subtitleKey: "home.slideProfit",
+    captionKey: "home.slidePlans",
+    ctaKey: "home.exploreFunds",
     ctaTo: "/investment",
   },
   {
-    title: "نظام الفريق والمكافآت",
-    subtitle: "عمولات حقيقية على 3 مستويات",
-    caption: "اربح مع كل صديق ينضم إلى شبكتك الاستثمارية",
-    ctaLabel: "عرض فريقي",
+    titleKey: "home.slideTeam",
+    subtitleKey: "home.slideCommission",
+    captionKey: "home.slideReferral",
+    ctaKey: "home.viewTeam",
     ctaTo: "/team",
   },
 ];
@@ -83,6 +69,7 @@ function HomePage() {
   const claim = claimDailyLoginReward;
   const spin = spinLuckyWheel;
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
 
   const [slideIndex, setSlideIndex] = useState(0);
 
@@ -142,9 +129,9 @@ function HomePage() {
 
   const currentSlide = HERO_SLIDES[slideIndex];
   const settings = data.settings;
-  const companyInfo =
-    settings.about_company ||
-    "تأسست شركة Valoriza للاستثمار في عام 2018 في العاصمة، ويقع مقرها الرئيسي في مدريد، إسبانيا. تعمل على توفير فرص استثمارية مبتكرة وآمنة لعملائنا حول العالم.";
+  const companyInfo = settings.about_company
+    ? content(settings.about_company)
+    : t("home.companyDescription");
   const membersCount = settings.members_count || "75,000";
 
   return (
@@ -155,7 +142,7 @@ function HomePage() {
       {/* 1. App Header with Hamburger & Profile & Desktop Navigation */}
       <AppHeader
         vipLevel={data.profile.vipLevel}
-        username={data.profile.username}
+        username={content(data.profile.username, { allowUserIdentifier: true })}
         balance={data.wallet.balance}
         onOpenDeposit={() => setDepositOpen(true)}
         onOpenWithdraw={() => setWithdrawalOpen(true)}
@@ -173,7 +160,7 @@ function HomePage() {
           {/* Background Hero Image */}
           <img
             src={heroCityImg}
-            alt="أفق استثمار فالوريزا"
+            alt={t("home.heroAlt")}
             className="absolute inset-0 h-full w-full object-cover brightness-[0.38] contrast-125 transition-all duration-700"
           />
 
@@ -185,13 +172,13 @@ function HomePage() {
             <div className="max-w-xl">
               <span className="inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold/15 px-2.5 py-0.5 text-[10px] sm:text-xs font-extrabold text-gold shadow-gold-glow">
                 <Sparkles className="h-3 w-3" />
-                {currentSlide.title}
+                {t(currentSlide.titleKey)}
               </span>
               <h2 className="mt-1.5 text-2xl sm:text-3xl md:text-4xl font-black text-white drop-shadow-md">
-                {currentSlide.subtitle}
+                {t(currentSlide.subtitleKey)}
               </h2>
               <p className="mt-1 text-xs sm:text-sm font-semibold text-cyan-glow drop-shadow">
-                {currentSlide.caption}
+                {t(currentSlide.captionKey)}
               </p>
             </div>
 
@@ -202,7 +189,7 @@ function HomePage() {
                 to={currentSlide.ctaTo}
                 className="inline-flex items-center gap-2 rounded-2xl gold-gradient px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
               >
-                <span>{currentSlide.ctaLabel}</span>
+                <span>{t(currentSlide.ctaKey)}</span>
                 <span className="text-sm font-black">›</span>
               </Link>
 
@@ -211,7 +198,7 @@ function HomePage() {
                 <button
                   type="button"
                   onClick={prevSlide}
-                  aria-label="الشريحة السابقة"
+                  aria-label={t("home.previousSlide")}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
                 >
                   <ChevronRight className="h-4 w-4 rtl:rotate-180" />
@@ -219,7 +206,7 @@ function HomePage() {
                 <button
                   type="button"
                   onClick={nextSlide}
-                  aria-label="الشريحة التالية"
+                  aria-label={t("home.nextSlide")}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
@@ -423,7 +410,7 @@ function HomePage() {
               <div className="relative h-36 sm:h-40 w-full">
                 <img
                   src={madridHQImg}
-                  alt="المقر الرئيسي لشركة فالوريزا في مدريد"
+                  alt={t("home.hqAlt")}
                   className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/50 to-transparent" />
@@ -433,7 +420,7 @@ function HomePage() {
                     {t("nav.about")}
                   </h4>
                   <span className="rounded-full bg-navy-deep/90 border border-cyan-glow/50 px-2 py-0.5 text-[10px] font-bold text-cyan-glow">
-                    مدريد، إسبانيا 🇪🇸
+                    {t("home.madrid")}
                   </span>
                 </div>
               </div>
@@ -451,7 +438,7 @@ function HomePage() {
                     <Info className="h-3.5 w-3.5" />
                     <span>{t("nav.about")}</span>
                   </Link>
-                  <span className="text-[10px] text-muted-foreground font-semibold">تأسست 2018</span>
+                  <span className="text-[10px] text-muted-foreground font-semibold">{t("home.founded")}</span>
                 </div>
               </div>
             </div>
@@ -470,7 +457,7 @@ function HomePage() {
                     +{membersCount}
                   </span>
                   <span className="block text-[10px] text-cyan-glow font-medium">
-                    مستثمر نشط حول العالم
+                    {t("home.activeInvestors")}
                   </span>
                 </div>
               </div>

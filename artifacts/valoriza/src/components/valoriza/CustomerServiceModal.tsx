@@ -1,6 +1,7 @@
-import { useState } from "react";
 import { Headphones, MessageCircle, Send, X } from "lucide-react";
 import supportAgentImg from "@/assets/images/support_agent_1789808781142.jpg";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export type CustomerSupportLink = {
   id?: string;
@@ -17,30 +18,32 @@ interface CustomerServiceModalProps {
 }
 
 export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerServiceModalProps) {
+  const { t, dir } = useI18n();
+  const content = useLocalizedContent();
   if (!isOpen) return null;
 
   const defaultLinks: CustomerSupportLink[] = [
     {
-      title: "موظف الاستقبال",
-      subtitle: "على تيليجرام",
+      title: t("public.support.reception"),
+      subtitle: t("public.support.telegram"),
       platform: "telegram",
       url: "https://t.me/valoriza_support",
     },
     {
-      title: "موظف الاستقبال",
-      subtitle: "على واتساب",
+      title: t("public.support.reception"),
+      subtitle: t("public.support.whatsapp"),
       platform: "whatsapp",
       url: "https://wa.me/34600000000",
     },
     {
-      title: "المجموعة الرسمية",
-      subtitle: "على تيليجرام",
+      title: t("public.support.officialGroup"),
+      subtitle: t("public.support.telegram"),
       platform: "telegram",
       url: "https://t.me/valoriza_official_group",
     },
     {
-      title: "المجموعة الرسمية",
-      subtitle: "على واتساب",
+      title: t("public.support.officialGroup"),
+      subtitle: t("public.support.whatsapp"),
       platform: "whatsapp",
       url: "https://chat.whatsapp.com/valoriza_vip",
     },
@@ -58,7 +61,7 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
         id="customer-service-modal-content"
         className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl border border-electric/40 bg-navy-deep p-5 shadow-2xl animate-in slide-in-from-bottom-6 duration-300"
         onClick={(e) => e.stopPropagation()}
-        dir="rtl"
+        dir={dir}
       >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-border/50">
@@ -67,8 +70,8 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
               <Headphones className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-extrabold text-foreground">خدمة العملاء</h2>
-              <p className="text-[11px] text-muted-foreground">فريق الدعم الفني متواجد 24/7</p>
+              <h2 className="text-lg font-extrabold text-foreground">{t("public.support.title")}</h2>
+              <p className="text-[11px] text-muted-foreground">{t("public.support.subtitle")}</p>
             </div>
           </div>
           <button
@@ -76,7 +79,7 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="إغلاق"
+            aria-label={t("public.support.close")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -88,7 +91,7 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
             <div className="relative mb-2">
               <img
                 src={supportAgentImg}
-                alt="خدمة العملاء"
+                alt={t("public.support.alt")}
                 className="h-20 w-20 rounded-full object-cover border-2 border-cyan-glow shadow-[0_0_16px_oklch(0.82_0.14_205/0.4)]"
               />
               <span className="absolute bottom-0 right-1 flex h-4 w-4">
@@ -96,9 +99,9 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
                 <span className="relative inline-flex h-4 w-4 rounded-full bg-success border-2 border-navy-deep" />
               </span>
             </div>
-            <h3 className="text-xl font-extrabold text-gold-gradient">خدمة العملاء</h3>
+            <h3 className="text-xl font-extrabold text-gold-gradient">{t("public.support.title")}</h3>
             <p className="mt-1 text-xs font-semibold text-foreground/90">
-              تواصل معنا وسنكون في خدمتك دائماً
+              {t("public.support.invite")}
             </p>
           </div>
         </div>
@@ -136,10 +139,10 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
-                      {link.title}
+                      {customLinks?.length ? content(link.title) : link.title}
                     </p>
                     <p className="text-[11px] font-semibold text-muted-foreground">
-                      {link.subtitle}
+                      {customLinks?.length ? content(link.subtitle) : link.subtitle}
                     </p>
                   </div>
                 </div>
@@ -160,7 +163,7 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
 
         {/* Footer note */}
         <p className="mt-4 text-center text-[10px] text-muted-foreground leading-relaxed">
-          جميع قنوات التواصل مؤمنة ومشفرة بالكامل لخدمتكم على مدار 24 ساعة.
+          {t("public.support.footer")}
         </p>
       </div>
     </div>

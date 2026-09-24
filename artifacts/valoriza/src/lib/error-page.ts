@@ -1,9 +1,17 @@
-export function renderErrorPage(): string {
+import { translations, type LanguageCode } from "./i18n";
+
+export function renderErrorPage(lang: LanguageCode = "ar"): string {
+  const selected = lang in translations ? lang : "ar";
+  const dict = translations[selected] as Record<string, string>;
+  const title = dict["public.root.errorTitle"];
+  const description = dict["public.root.errorDesc"];
+  const retry = dict["public.root.retry"];
+  const home = dict["nav.home"];
   return `<!doctype html>
-<html lang="ar" dir="rtl">
+<html lang="${selected}" dir="${selected === "ar" ? "rtl" : "ltr"}">
   <head>
     <meta charset="utf-8" />
-    <title>تعذّر تحميل الصفحة — فالوريزا</title>
+    <title>${title} — Valoriza</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       body { font: 15px/1.6 system-ui, -apple-system, sans-serif; background: #071328; color: #f1f5f9; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 1.5rem; text-align: center; }
@@ -18,11 +26,11 @@ export function renderErrorPage(): string {
   </head>
   <body>
     <div class="card">
-      <h1>تعذّر تحميل الصفحة</h1>
-      <p>حدث خطأ غير متوقع أثناء معالجة الطلب. يمكنك إعادة المحاولة أو العودة إلى الصفحة الرئيسية.</p>
+      <h1>${title}</h1>
+      <p>${description}</p>
       <div class="actions">
-        <button class="primary" onclick="location.reload()">إعادة المحاولة</button>
-        <a class="secondary" href="/">الصفحة الرئيسية</a>
+        <button class="primary" onclick="location.reload()">${retry}</button>
+        <a class="secondary" href="/">${home}</a>
       </div>
     </div>
   </body>

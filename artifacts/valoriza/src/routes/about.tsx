@@ -21,29 +21,18 @@ import { Logo } from "@/components/valoriza/Logo";
 import { getAboutData } from "@/lib/valoriza-pages.functions";
 import { LoadingState, ErrorState } from "@/components/valoriza/StatusStates";
 import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
 
 export const Route = createFileRoute("/about")({
-  head: () => ({
-    meta: [
-      { title: "حول المنصة — Valoriza" },
-      {
-        name: "description",
-        content:
-          "تعرف على شركة Valoriza للاستثمار: مقرنا في مدريد، إسبانيا، رؤيتنا، أهدافنا وأرقامنا القياسية.",
-      },
-      { property: "og:title", content: "حول المنصة — Valoriza" },
-      {
-        property: "og:description",
-        content: "استثمر اليوم .. لبناء مستقبلك غداً مع منصة Valoriza.",
-      },
-    ],
-  }),
   component: AboutPage,
 });
 
 function AboutPage() {
   const [supportOpen, setSupportOpen] = useState(false);
+  const { t, dir } = useI18n();
+  const content = useLocalizedContent();
   const fetchData = getAboutData;
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -54,7 +43,7 @@ function AboutPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <LoadingState message="جاري تحميل معلومات المنصة..." />
+        <LoadingState message={t("public.about.loading")} />
       </div>
     );
   }
@@ -63,31 +52,46 @@ function AboutPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <ErrorState
-          title="تعذر تحميل بيانات المنصة"
-          description="يرجى المحاولة مجدداً للاتصال بقاعدة البيانات."
+          title={t("public.about.loadError")}
+          description={t("public.about.retry")}
           onRetry={() => refetch()}
         />
       </div>
     );
   }
 
-  const s = data.settings;
-  const companyDesc =
-    s.about_company ||
-    "تأسست شركة Valoriza للاستثمار في عام 2018 في العاصمة، ويقع مقرها الرئيسي في مدريد، إسبانيا. تعمل على توفير فرص استثمارية مبتكرة وآمنة لعملائنا حول العالم.";
-  const visionText =
-    s.platform_vision ||
-    "ريادة الاستثمار الرقمي العالمي وتقديم أفضل عائد مستدام وتوفير بيئة مالية آمنة وشفافة لجميع المستثمرين حول العالم.";
-  const goalsText =
-    s.platform_goals ||
-    "تنمية الثروات الفردية وتوفير دخل يومي مستدام، حماية رؤوس الأموال، وتقديم حلول مالية مبتكرة تدعم الاستقرار المالي.";
-  const membersCount = s.members_count || "75,000";
-  const establishedYear = s.established_year || "2018";
-  const headquarters = s.headquarters || "مدريد، إسبانيا";
-  const fundsCount = s.funds_count || "4 صناديق استثمارية";
+  const s = data.settings ?? {};
+  const companyDesc = s.about_company
+    ? content(s.about_company)
+    : t("public.about.companyDefault");
+  const visionText = s.platform_vision
+    ? content(s.platform_vision)
+    : t("public.about.visionDefault");
+  const goalsText = s.platform_goals
+    ? content(s.platform_goals)
+    : t("public.about.goalsDefault");
+  const localizeMetric = (value: string | number | null | undefined, fallback: string) => {
+    if (value === null || value === undefined || value === "") return fallback;
+    const digits = String(value).replace(/[٠-٩]/g, (digit) =>
+      String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)),
+    );
+    const numeric = digits.match(/[\d,.]+/)?.[0];
+    return numeric ?? content(String(value));
+  };
+  const membersCount = localizeMetric(s.members_count, "75,000");
+  const establishedYear = localizeMetric(s.established_year, "2018");
+  const headquarters = s.headquarters
+    ? content(s.headquarters)
+    : t("public.about.headquartersDefault");
+  const fundsCount = s.funds_count
+    ? content(s.funds_count)
+    : t("public.about.fundsDefault");
+  const supportLinks = Array.isArray(data.supportLinks)
+    ? data.supportLinks.filter((link: unknown) => link !== null && typeof link === "object")
+    : [];
 
   return (
-    <div id="about-page" className="min-h-screen bg-background" dir="rtl">
+    <div id="about-page" className="min-h-screen bg-background" dir={dir}>
       {/* Top Header matching Section 4 */}
       <header className="sticky top-0 z-30 border-b border-border/80 bg-navy-deep/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-lg items-center justify-between px-4 py-3">
@@ -97,7 +101,7 @@ function AboutPage() {
             className="inline-flex items-center gap-1.5 rounded-full border border-cyan-glow/50 bg-surface/70 px-3 py-1.5 text-xs font-bold text-cyan-glow hover:bg-surface transition-all shadow-[0_0_10px_oklch(0.82_0.14_205/0.2)]"
           >
             <ArrowRight className="h-4 w-4" />
-            <span>الرجوع للرئيسية</span>
+            <span>{t("public.about.back")}</span>
           </Link>
           <Logo size="sm" />
         </div>
@@ -109,7 +113,7 @@ function AboutPage() {
           <div className="relative h-44 sm:h-52 w-full">
             <img
               src={madridHQImg}
-              alt="المقر الرئيسي لشركة Valoriza في مدريد، إسبانيا"
+              alt={t("public.about.hqAlt")}
               className="h-full w-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/60 to-transparent" />
@@ -118,10 +122,10 @@ function AboutPage() {
               <div>
                 <span className="inline-flex items-center gap-1 rounded-full bg-navy-deep/90 border border-gold/50 px-2.5 py-0.5 text-[11px] font-extrabold text-gold shadow-gold-glow">
                   <Building2 className="h-3.5 w-3.5 text-gold" />
-                  المقر الرئيسي
+                  {t("public.about.hq")}
                 </span>
                 <h1 className="mt-1 text-xl sm:text-2xl font-black text-foreground drop-shadow-md">
-                  فالوريزا للاستثمار
+                  {t("public.about.name")}
                 </h1>
               </div>
 
@@ -145,7 +149,7 @@ function AboutPage() {
         <section id="about-statistics-section">
           <h2 className="text-sm font-extrabold text-foreground mb-2 flex items-center gap-1.5">
             <Sparkles className="h-4 w-4 text-gold" />
-            أرقام وإحصائيات المنصة
+            {t("public.about.stats")}
           </h2>
           <div className="grid grid-cols-2 gap-2.5">
             {/* Stat 1: Year */}
@@ -154,7 +158,7 @@ function AboutPage() {
                 <Calendar className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">سنة التأسيس</p>
+                <p className="text-[10px] text-muted-foreground font-semibold">{t("public.about.founded")}</p>
                 <p className="text-base font-black text-gold-gradient">{establishedYear}</p>
               </div>
             </div>
@@ -165,7 +169,7 @@ function AboutPage() {
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">الأعضاء النشطون</p>
+                <p className="text-[10px] text-muted-foreground font-semibold">{t("public.about.members")}</p>
                 <p className="text-base font-black text-cyan-glow">+{membersCount}</p>
               </div>
             </div>
@@ -176,7 +180,7 @@ function AboutPage() {
                 <MapPin className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">المقر الرسمي</p>
+                <p className="text-[10px] text-muted-foreground font-semibold">{t("public.about.official")}</p>
                 <p className="text-xs font-black text-foreground">{headquarters}</p>
               </div>
             </div>
@@ -188,7 +192,7 @@ function AboutPage() {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold">
-                  الصناديق الاستثمارية
+                  {t("public.about.funds")}
                 </p>
                 <p className="text-xs font-black text-success">{fundsCount}</p>
               </div>
@@ -202,7 +206,7 @@ function AboutPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-cyan-glow/50 text-cyan-glow">
               <Compass className="h-4 w-4" />
             </div>
-            <h3 className="text-sm font-extrabold text-foreground">رؤية المنصة</h3>
+            <h3 className="text-sm font-extrabold text-foreground">{t("public.about.vision")}</h3>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground text-justify">{visionText}</p>
         </section>
@@ -213,7 +217,7 @@ function AboutPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface border border-gold/50 text-gold">
               <Target className="h-4 w-4" />
             </div>
-            <h3 className="text-sm font-extrabold text-foreground">أهداف المنصة</h3>
+            <h3 className="text-sm font-extrabold text-foreground">{t("public.about.goals")}</h3>
           </div>
           <p className="text-xs leading-relaxed text-muted-foreground text-justify">{goalsText}</p>
         </section>
@@ -222,8 +226,8 @@ function AboutPage() {
         <section className="grid grid-cols-2 gap-2.5">
           <div className="surface-card p-3 text-center border-border/70">
             <ShieldCheck className="mx-auto h-6 w-6 text-cyan-glow mb-1" />
-            <p className="text-xs font-bold text-foreground">حماية وأمان كامل</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">معاملات مشفرة 100%</p>
+            <p className="text-xs font-bold text-foreground">{t("public.about.security")}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{t("public.about.encrypted")}</p>
           </div>
 
           <div
@@ -231,8 +235,8 @@ function AboutPage() {
             className="surface-card p-3 text-center border-border/70 cursor-pointer hover:border-cyan-glow transition-all"
           >
             <Headphones className="mx-auto h-6 w-6 text-gold mb-1" />
-            <p className="text-xs font-bold text-foreground">دعم فني 24/7</p>
-            <p className="text-[10px] text-cyan-glow mt-0.5 font-bold">تواصل الآن ›</p>
+            <p className="text-xs font-bold text-foreground">{t("public.about.support")}</p>
+            <p className="text-[10px] text-cyan-glow mt-0.5 font-bold">{t("public.about.contact")}</p>
           </div>
         </section>
 
@@ -243,7 +247,7 @@ function AboutPage() {
             to="/home"
             className="w-full inline-flex items-center justify-center gap-2 rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] transition-all"
           >
-            <span>العودة إلى الصفحة الرئيسية</span>
+            <span>{t("public.about.home")}</span>
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -253,11 +257,11 @@ function AboutPage() {
       <CustomerServiceModal
         isOpen={supportOpen}
         onClose={() => setSupportOpen(false)}
-        customLinks={data.supportLinks.map((l: any) => ({
-          title: l.label,
-          subtitle: l.sublabel || "",
+        customLinks={supportLinks.map((l: any) => ({
+          title: l.label ? content(l.label) : t("content.unavailable"),
+          subtitle: l.sublabel ? content(l.sublabel) : "",
           platform: l.platform,
-          url: l.url,
+          url: l.url ? content(l.url, { allowLanguageNeutral: true }) : "",
         }))}
       />
     </div>

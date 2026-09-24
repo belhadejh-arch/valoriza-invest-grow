@@ -14,8 +14,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminTasks, saveAdminTask } from "@/lib/valoriza-admin.functions";
+import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export function AdminTasksTab() {
+  const { t } = useI18n();
+  const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
@@ -42,13 +46,13 @@ export function AdminTasksTab() {
   const saveMutation = useMutation({
     mutationFn: saveAdminTask,
     onSuccess: () => {
-      toast.success("تم حفظ المهمة بنجاح");
+      toast.success(t("admin.taskSaved"));
       queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
       setModalOpen(false);
       resetForm();
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: () => toast.error(t("common.error")),
   });
 
   const resetForm = () => {
@@ -91,9 +95,9 @@ export function AdminTasksTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xs font-extrabold text-foreground">إدارة مهام المشاهدة والعمولات</h2>
+          <h2 className="text-xs font-extrabold text-foreground">{t("admin.manageVideoTasks")}</h2>
           <p className="text-[10px] text-muted-foreground">
-            إضافة فيديوهات جديدة، تعديل مدة المشاهدة، وتعيين متطلبات VIP.
+            {t("admin.taskManagementDescription")}
           </p>
         </div>
         <button
@@ -102,14 +106,14 @@ export function AdminTasksTab() {
           className="flex items-center gap-1.5 rounded-xl brand-gradient px-3 py-1.5 text-xs font-black text-primary-foreground shadow-glow"
         >
           <Plus className="h-3.5 w-3.5" />
-          <span>إضافة مهمة فيديو</span>
+          <span>{t("admin.addVideoTask")}</span>
         </button>
       </div>
 
       {isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
-          جارٍ جلب المهام...
+          {t("admin.loadingTasks")}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -125,13 +129,13 @@ export function AdminTasksTab() {
               <div className="relative h-32 w-full bg-navy-deep">
                 <img
                   src={task.thumbnail_url}
-                  alt={task.title}
+                  alt={content(task.title)}
                   className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
 
                 <span className="absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-bold text-white border border-white/20">
-                  مهمة {task.task_number}
+                  {t("admin.taskNumber")} {task.task_number}
                 </span>
 
                 <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-vip/80 px-2 py-0.5 text-[9px] font-bold text-white">
@@ -142,7 +146,7 @@ export function AdminTasksTab() {
                 <div className="absolute bottom-2 inset-x-2 flex items-center justify-between text-[10px] text-white">
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3 text-cyan-glow" />
-                    {task.duration_seconds} ثوانٍ
+                    {task.duration_seconds} {t("admin.seconds")}
                   </span>
                   <span className="font-black text-emerald-400">
                     +${Number(task.reward_amount).toFixed(2)}
@@ -151,14 +155,14 @@ export function AdminTasksTab() {
               </div>
 
               <div className="p-3">
-                <h3 className="text-xs font-black text-foreground truncate">{task.title}</h3>
+                <h3 className="text-xs font-black text-foreground truncate">{content(task.title)}</h3>
                 <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
-                  {task.description}
+                  {content(task.description)}
                 </p>
 
                 <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between">
                   <span className="text-[10px] font-bold text-muted-foreground">
-                    {task.is_active ? "نشطة" : "معطلة"}
+                    {task.is_active ? t("admin.enabled") : t("admin.disabled")}
                   </span>
 
                   <button
@@ -167,7 +171,7 @@ export function AdminTasksTab() {
                     className="flex items-center gap-1 rounded-lg bg-surface border border-border px-2.5 py-1 text-[10px] font-bold text-foreground hover:text-cyan-glow hover:border-cyan-glow"
                   >
                     <Edit2 className="h-3 w-3" />
-                    تعديل
+                    {t("admin.edit")}
                   </button>
                 </div>
               </div>
@@ -182,7 +186,9 @@ export function AdminTasksTab() {
           <div className="w-full max-w-md rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                {editingTask ? `تعديل مهمة: ${editingTask.title}` : "إضافة مهمة فيديو جديدة"}
+                {editingTask
+                  ? `${t("admin.editTask")}: ${content(editingTask.title)}`
+                  : t("admin.addNewVideoTask")}
               </h3>
               <button
                 type="button"
@@ -195,22 +201,22 @@ export function AdminTasksTab() {
 
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">عنوان المهمة</label>
+                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.taskTitleArabic")}</label>
                 <input
                   type="text"
                   value={title}
-                  placeholder="مثال: اكتشف أجمل الوجهات السياحية"
+                  placeholder={t("admin.taskTitleArabicPlaceholder")}
                   onChange={(e) => setTitle(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">الوصف</label>
+                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.taskDescriptionArabic")}</label>
                 <input
                   type="text"
                   value={description}
-                  placeholder="شاهد مقطعاً تعريفياً عن استثمارات السياحة والخدمات الفندقية."
+                  placeholder={t("admin.taskDescriptionArabicPlaceholder")}
                   onChange={(e) => setDescription(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                 />
@@ -218,7 +224,7 @@ export function AdminTasksTab() {
 
               <div>
                 <label className="text-[10px] text-muted-foreground font-bold">
-                  رابط الفيديو (MP4)
+                  {t("admin.videoUrlMp4")}
                 </label>
                 <input
                   type="text"
@@ -230,7 +236,7 @@ export function AdminTasksTab() {
 
               <div>
                 <label className="text-[10px] text-muted-foreground font-bold">
-                  رابط صورة الغلاف (Thumbnail)
+                  {t("admin.thumbnailUrl")}
                 </label>
                 <input
                   type="text"
@@ -242,7 +248,7 @@ export function AdminTasksTab() {
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">رقم المهمة</label>
+                  <label className="text-[10px] text-muted-foreground font-bold">{t("admin.taskNumber")}</label>
                   <input
                     type="number"
                     min="1"
@@ -253,7 +259,7 @@ export function AdminTasksTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    المدة (ثوانٍ)
+                    {t("admin.durationSeconds")}
                   </label>
                   <input
                     type="number"
@@ -265,7 +271,7 @@ export function AdminTasksTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    أقل رتبة VIP
+                    {t("admin.minimumVipLevel")}
                   </label>
                   <input
                     type="number"
@@ -287,7 +293,7 @@ export function AdminTasksTab() {
                   className="h-4 w-4 rounded border-border text-cyan-glow focus:ring-0"
                 />
                 <label htmlFor="task-is-active" className="text-xs font-bold text-foreground">
-                  تفعيل المهمة للمستخدمين
+                  {t("admin.activateTask")}
                 </label>
               </div>
 
@@ -310,7 +316,7 @@ export function AdminTasksTab() {
                 }
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {saveMutation.isPending ? "جارٍ الحفظ..." : "حفظ المهمة"}
+                {saveMutation.isPending ? t("admin.saving") : t("admin.saveTask")}
               </button>
             </div>
           </div>

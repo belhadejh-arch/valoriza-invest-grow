@@ -21,25 +21,22 @@ import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getRewardsData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
-  head: () => ({
-    meta: [
-      { title: "المكافآت — Valoriza" },
-      { name: "description", content: "سجل مكافآتك اليومية، وعمولات المهام، وجوائز عجلة الحظ." },
-      { property: "og:title", content: "المكافآت — Valoriza" },
-      { property: "og:description", content: "سجل مكافآتك اليومية وجوائزك." },
-    ],
-  }),
   component: RewardsPage,
 });
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number | null | undefined) => {
+  const value = Number.isFinite(Number(n)) ? Number(n) : 0;
+  return `$${value.toFixed(2)}`;
+};
 
 type RewardSource = "all" | "daily_login" | "task_reward" | "lucky_wheel" | "referral" | "vip";
 
 function RewardsPage() {
   const { t, isRTL } = useI18n();
+  const content = useLocalizedContent();
   const qc = useQueryClient();
   const fetchData = getRewardsData;
   const claim = claimDailyLoginReward;
@@ -134,11 +131,12 @@ function RewardsPage() {
     filter === "all"
       ? rewardsList
       : rewardsList.filter((r: any) => {
-          if (filter === "daily_login") return r.source === "daily_login";
-          if (filter === "task_reward") return r.source === "task_reward";
-          if (filter === "lucky_wheel") return r.source === "lucky_wheel";
-          if (filter === "referral") return r.source.includes("referral");
-          if (filter === "vip") return r.source.includes("vip");
+          const source = String(r?.source ?? "");
+          if (filter === "daily_login") return source === "daily_login";
+          if (filter === "task_reward") return source === "task_reward";
+          if (filter === "lucky_wheel") return source === "lucky_wheel";
+          if (filter === "referral") return source.includes("referral");
+          if (filter === "vip") return source.includes("vip");
           return true;
         });
 
@@ -297,7 +295,7 @@ function RewardsPage() {
                               </span>
                             </div>
                             <p className="mt-1 truncate text-xs font-black text-foreground">
-                              {r.description || info.label}
+                              {r.description ? content(r.description) : info.label}
                             </p>
                             <p className="text-[11px] text-muted-foreground mt-0.5">
                               {new Date(r.createdAt).toLocaleDateString(undefined, {

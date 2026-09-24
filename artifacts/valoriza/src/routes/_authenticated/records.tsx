@@ -18,20 +18,13 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getUserFinancialRecords } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { useLocalizedContent } from "@/lib/localized-content";
 
 type RecordsTab = "deposits" | "withdrawals" | "transactions" | "rewards";
 
 export const Route = createFileRoute("/_authenticated/records")({
   validateSearch: (search: Record<string, unknown>): { tab?: RecordsTab } => ({
     tab: (search.tab as RecordsTab) || "transactions",
-  }),
-  head: () => ({
-    meta: [
-      { title: "سجل العمليات المالية — Valoriza" },
-      { name: "description", content: "سجل الإيداعات والسحوبات والتحويلات والمكافآت." },
-      { property: "og:title", content: "سجل العمليات المالية — Valoriza" },
-      { property: "og:description", content: "كشف الحساب والعمليات المالية." },
-    ],
   }),
   component: RecordsPage,
 });
@@ -157,6 +150,7 @@ function RecordsPage() {
 }
 
 function DepositsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolean }) {
+  const content = useLocalizedContent();
   if (items.length === 0) {
     return (
       <div className="surface-card p-12 text-center text-xs text-muted-foreground rounded-3xl">
@@ -178,7 +172,7 @@ function DepositsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolea
               </div>
               <div>
                 <p className="text-base font-black text-foreground">+{money(item.amount)}</p>
-                <p className="text-xs text-muted-foreground font-semibold">{item.network}</p>
+                <p className="text-xs text-muted-foreground font-semibold">{content(item.network ?? "", { allowLanguageNeutral: true })}</p>
               </div>
             </div>
 
@@ -201,7 +195,7 @@ function DepositsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolea
 
           <div className="border-t border-border/50 pt-2.5 flex items-center justify-between text-xs text-muted-foreground">
             <span className="truncate max-w-[180px] font-mono" dir="ltr">
-              {item.address}
+              {content(item.address ?? "", { allowLanguageNeutral: true })}
             </span>
             <span>
               {new Date(item.createdAt).toLocaleDateString(undefined, {
@@ -218,7 +212,7 @@ function DepositsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolea
               className="rounded-xl bg-surface border border-border px-3 py-1.5 text-[11px] font-mono text-muted-foreground truncate"
               dir="ltr"
             >
-              Tx: {item.txHash}
+              {t("records.txId")} {item.txHash}
             </div>
           )}
         </div>
@@ -228,6 +222,7 @@ function DepositsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolea
 }
 
 function WithdrawalsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolean }) {
+  const content = useLocalizedContent();
   if (items.length === 0) {
     return (
       <div className="surface-card p-12 text-center text-xs text-muted-foreground rounded-3xl">
@@ -276,7 +271,7 @@ function WithdrawalsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boo
 
           <div className="border-t border-border/50 pt-2.5 flex items-center justify-between text-xs text-muted-foreground">
             <span className="truncate max-w-[180px] font-mono" dir="ltr">
-              {item.network}: {item.address}
+              {content(item.network ?? "", { allowLanguageNeutral: true })}: {content(item.address ?? "", { allowLanguageNeutral: true })}
             </span>
             <span>
               {new Date(item.createdAt).toLocaleDateString(undefined, {
@@ -290,7 +285,7 @@ function WithdrawalsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boo
 
           {item.adminNote && (
             <p className="text-xs text-danger bg-danger/10 p-2.5 rounded-xl border border-danger/20">
-              {t("records.adminNote")}: {item.adminNote}
+              {t("records.adminNote")}: {content(item.adminNote)}
             </p>
           )}
         </div>
@@ -300,6 +295,7 @@ function WithdrawalsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boo
 }
 
 function TransactionsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolean }) {
+  const content = useLocalizedContent();
   if (items.length === 0) {
     return (
       <div className="surface-card p-12 text-center text-xs text-muted-foreground rounded-3xl">
@@ -328,7 +324,9 @@ function TransactionsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: bo
                 {isPositive ? "+" : "−"}
               </div>
               <div className="min-w-0">
-                <p className="font-black text-foreground truncate">{tx.description || tx.type}</p>
+                <p className="font-black text-foreground truncate">
+                  {tx.description ? content(tx.description) : content(tx.type ?? "", { allowLanguageNeutral: true })}
+                </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {new Date(tx.createdAt).toLocaleDateString(undefined, {
                     month: "short",
@@ -358,6 +356,7 @@ function TransactionsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: bo
 }
 
 function RewardsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolean }) {
+  const content = useLocalizedContent();
   if (items.length === 0) {
     return (
       <div className="surface-card p-12 text-center text-xs text-muted-foreground rounded-3xl">
@@ -378,7 +377,7 @@ function RewardsView({ items, t, isRTL }: { items: any[]; t: any; isRTL: boolean
             </div>
             <div className="min-w-0">
               <p className="font-black text-foreground truncate">
-                {r.description || t("rewards.title")}
+                {r.description ? content(r.description) : t("rewards.title")}
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {new Date(r.createdAt).toLocaleDateString(undefined, {
