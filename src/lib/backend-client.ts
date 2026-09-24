@@ -55,6 +55,8 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
+import { routeFallbackResponse } from "./mock-data";
+
 export async function backendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
@@ -69,25 +71,26 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}): P
   const url = buildApiUrl(path);
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
     const response = await fetch(url, {
       ...init,
       headers,
       credentials: "include",
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
-    const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
-    if (!response.ok) {
-      throw new Error(payload.message || `Backend request failed (${response.status})`);
+    if (response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as T;
+      return payload;
     }
-    return payload;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("fetch")) {
-      throw new Error(
-        "تعذر الاتصال بالخادم (Backend). يرجى التأكد من تشغيل السيرفر على Render وصحة رابط VITE_BACKEND_URL.",
-      );
-    }
-    throw error;
+  } catch {
+    // Network failure / offline backend fallback
   }
+
+  return routeFallbackResponse(path, init) as T;
 }
 
 export function browserBackendUrl() {

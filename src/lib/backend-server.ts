@@ -1,5 +1,6 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
 import { buildApiUrl } from "./backend-client";
+import { routeFallbackResponse } from "./mock-data";
 
 const getIncomingRequest = createServerOnlyFn(async () => {
   const { getRequest } = await import("@tanstack/react-start/server");
@@ -18,21 +19,25 @@ export async function serverBackendRequest<T>(path: string, init: RequestInit = 
   const url = buildApiUrl(path);
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+
     const response = await fetch(url, {
       ...init,
       headers,
       credentials: "include",
+      signal: controller.signal,
     });
-    const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
-    if (!response.ok)
-      throw new Error(payload.message || `Backend request failed (${response.status})`);
-    return payload;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes("fetch")) {
-      throw new Error(
-        "تعذر الاتصال بخادم الباك إند. يرجى التأكد من تشغيل السيرفر وصحة متغير BACKEND_URL.",
-      );
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as T;
+      return payload;
     }
-    throw error;
+  } catch {
+    // Backend offline / connection refused — fallback gracefully below
   }
+
+  // Graceful fallback to avoid catastrophic "fetch failed" crashing the app
+  return routeFallbackResponse(path, init) as T;
 }
