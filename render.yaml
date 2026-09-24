@@ -2,8 +2,8 @@ services:
   - type: web
     name: valoriza-backend
     runtime: node
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build
-    startCommand: pnpm --filter @workspace/api-server run start
+    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm --filter @workspace/api-server run build
+    startCommand: corepack pnpm --filter @workspace/api-server run start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV

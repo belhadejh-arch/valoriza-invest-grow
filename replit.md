@@ -46,7 +46,7 @@ Registration, sign-in, account/wallet, investments, tasks, rewards, deposits and
 
 - The development schema was applied from the imported SQL. On a fresh database, apply `artifacts/api-server/migrations/001_init.sql` before using the API.
 - No default admin account is created. Promote a verified existing account to the admin role through a trusted database operation before using the admin UI.
-- Render's original `npm install && npm run build:backend` setting belongs to the pre-import project and no longer works. The root `render.yaml` describes a backend-only pnpm build; existing Render services must also update their build/start commands in the Render dashboard because adding a Blueprint file does not change an existing service's settings.
+- Render's original `npm install && npm run build:backend` setting belongs to the pre-import project and no longer works. Use `corepack pnpm` directly, not `corepack enable` (Render's `/usr/bin` is read-only). The root `render.yaml` describes a backend-only build; existing Render services must also update their build/start commands in the Render dashboard because adding a Blueprint file does not change an existing service's settings.
 
 ## Pointers
 
