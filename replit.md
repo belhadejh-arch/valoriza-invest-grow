@@ -1,14 +1,15 @@
-# [Project name]
+# Valoriza
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Valoriza is an Arabic investment platform with accounts, funds, rewards, referrals, and administration.
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/valoriza run dev` — run the web application
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- The imported PostgreSQL schema is in `artifacts/api-server/migrations/001_init.sql`; do not replace it with the empty Drizzle schema.
 - Required env: `DATABASE_URL` — Postgres connection string
 
 ## Stack
@@ -18,27 +19,33 @@ _Replace the heading above with the project's name, and this line with one sente
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Build: esbuild API bundle and Vite frontend
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- Frontend: `artifacts/valoriza/src/`, using client-side TanStack Router and `styles.css`.
+- API: `artifacts/api-server/src/legacy/` mounts the original Valoriza routes into the workspace server.
+- Contract: `lib/api-spec/openapi.yaml`; team UI reads `/api/app/team`.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Team totals and per-level earnings derive from actual referral commissions on approved deposits.
+- Referral reward percentages are stored as percentages (0–100) in `platform_settings` and require an authenticated admin to change them; the reference image's values are not seeded.
+- The imported backend's old `initDatabase` helper is deliberately not invoked, because it creates default accounts and hardcoded financial values.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Registration, sign-in, account/wallet, investments, tasks, rewards, deposits and withdrawals, referral teams, and administrator management.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Do not use mock data or the reference image's financial figures as real team data.
+- Preserve the other existing pages and functions when changing the team experience.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The development schema was applied from the imported SQL. On a fresh database, apply `artifacts/api-server/migrations/001_init.sql` before using the API.
+- No default admin account is created. Promote a verified existing account to the admin role through a trusted database operation before using the admin UI.
 
 ## Pointers
 

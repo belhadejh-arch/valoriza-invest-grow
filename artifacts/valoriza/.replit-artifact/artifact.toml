@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Valoriza"
+description = "منصة Valoriza للاستثمار والمكافآت وإدارة الفريق والإحالات."
+version = "1.0.0"
+id = "artifacts/valoriza"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22658
+
+[services.development]
+run = "pnpm --filter @workspace/valoriza run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/valoriza", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/valoriza/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22658"
+BASE_PATH = "/"

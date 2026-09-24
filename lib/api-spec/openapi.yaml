@@ -11,6 +11,47 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /app/team:
+    get:
+      operationId: getTeam
+      tags: [team]
+      summary: Team of the authenticated user
+      responses:
+        "200":
+          description: Team summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+  /admin/settings:
+    get:
+      operationId: getAdminSettings
+      tags: [admin]
+      summary: Read financial configuration
+      responses:
+        "200":
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamSettings"
+    post:
+      operationId: saveAdminSettings
+      tags: [admin]
+      summary: Update financial configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamSettingsUpdate"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamSettings"
   /healthz:
     get:
       operationId: healthCheck
@@ -26,6 +67,50 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    TeamLevel:
+      type: object
+      required: [level, members, earnings, rewardRate]
+      properties:
+        level: { type: integer }
+        members: { type: integer }
+        earnings: { type: number }
+        rewardRate: { type: number }
+    TeamMember:
+      type: object
+      required: [id, email, level, vipLevel]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        level: { type: integer }
+        vipLevel: { type: integer }
+    Team:
+      type: object
+      required: [referralCode, referralLink, teamIncome, teamRewards, totalMembers, levels, members]
+      properties:
+        referralCode: { type: string }
+        referralLink: { type: string }
+        teamIncome: { type: number }
+        teamRewards: { type: number }
+        totalMembers: { type: integer }
+        levels:
+          type: array
+          items: { $ref: "#/components/schemas/TeamLevel" }
+        members:
+          type: array
+          items: { $ref: "#/components/schemas/TeamMember" }
+    TeamSettings:
+      type: object
+      required: [referral_rate_l1, referral_rate_l2, referral_rate_l3]
+      properties:
+        referral_rate_l1: { type: number }
+        referral_rate_l2: { type: number }
+        referral_rate_l3: { type: number }
+    TeamSettingsUpdate:
+      type: object
+      properties:
+        referral_rate_l1: { type: number, minimum: 0, maximum: 100 }
+        referral_rate_l2: { type: number, minimum: 0, maximum: 100 }
+        referral_rate_l3: { type: number, minimum: 0, maximum: 100 }
     HealthStatus:
       type: object
       properties:
