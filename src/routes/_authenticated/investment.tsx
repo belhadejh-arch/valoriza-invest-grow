@@ -66,18 +66,56 @@ function InvestmentPage() {
     initialData: getMockInvestmentData,
   });
 
-  const balance = data?.wallet?.balance ?? 0;
+  const balance = data?.wallet?.balance ?? (data as any)?.walletBalance ?? 0;
+  const userVipLevel = data?.profile?.vipLevel ?? (data as any)?.profile?.vip_level ?? 0;
+  const isTrialActive = !!(data?.profile?.trialActive ?? (data as any)?.profile?.trial_active);
+
+  const fundsList = (data?.funds || []).map((fund: any) => ({
+    ...fund,
+    id: fund.id,
+    code: fund.code,
+    nameAr: fund.nameAr || fund.name_ar || fund.code,
+    nameEn: fund.nameEn || fund.name_en || fund.code,
+    taglineAr: fund.taglineAr || fund.tagline_ar || "",
+    durationDays: Number(fund.durationDays || fund.duration_days || 0),
+    profitPercent: Number(fund.profitPercent || fund.profit_percent || 0),
+    minAmount: Number(fund.minAmount || fund.min_amount || 5),
+  }));
+
+  const packagesList = (data?.packages || (data as any)?.vipPackages || []).map((pkg: any) => ({
+    ...pkg,
+    id: pkg.id,
+    level: Number(pkg.level),
+    name: pkg.name,
+    price: Number(pkg.price),
+    dailyProfit: Number(pkg.dailyProfit ?? pkg.daily_profit ?? 0),
+    dailyTasks: Number(pkg.dailyTasks ?? pkg.daily_tasks ?? 0),
+    taskReward: Number(pkg.taskReward ?? pkg.task_reward ?? 0),
+    durationDays: Number(pkg.durationDays ?? pkg.duration_days ?? 365),
+    isActive: pkg.isActive !== false && pkg.is_active !== false,
+  }));
+
+  const userInvestmentsList = (data?.userInvestments || (data as any)?.investments || []).map(
+    (inv: any) => ({
+      ...inv,
+      id: inv.id,
+      fundName: inv.fundName || inv.name_ar || inv.code || "صندوق استثماري",
+      amount: Number(inv.amount),
+      expectedProfit: Number(inv.expectedProfit ?? inv.expected_profit ?? 0),
+      maturesAt: inv.maturesAt || inv.matures_at || new Date().toISOString(),
+    }),
+  );
 
   const trialMutation = useMutation({
     mutationFn: () => trial(),
-    onSuccess: (res) => {
-      if (res.ok) {
+    onSuccess: (res: any) => {
+      if (res?.ok) {
         toast.success("تم تفعيل الفترة التجريبية المجانية بنجاح!");
         qc.invalidateQueries({ queryKey: ["investment"] });
         qc.invalidateQueries({ queryKey: ["home"] });
       } else {
         toast.error(
-          res.reason === "HAS_VIP"
+          res?.reason === "HAS_VIP"
             ? "لديك باقة VIP نشطة بالفعل"
             : "تم استخدام الفترة التجريبية مسبقاً لهذا الحساب",
         );
@@ -87,16 +125,17 @@ function InvestmentPage() {
   });
 
   const buyMutation = useMutation({
-    mutationFn: (packageId: string) => buy({ data: { packageId } }),
-    onSuccess: (res) => {
-      if (res.ok) {
-        toast.success(`تم ترقية حسابك إلى VIP ${res.level} بنجاح!`);
+    mutationFn: (pkg: { id: string; level: number }) =>
+      buy({ data: { packageId: pkg.id, level: pkg.level } }),
+    onSuccess: (res: any) => {
+      if (res?.ok) {
+        toast.success(`تم ترقية حسابك إلى VIP ${res.level ?? res.vipLevel} بنجاح!`);
         qc.invalidateQueries({ queryKey: ["investment"] });
         qc.invalidateQueries({ queryKey: ["home"] });
         qc.invalidateQueries({ queryKey: ["account"] });
       } else {
         toast.error(
-          res.reason === "INSUFFICIENT_BALANCE"
+          res?.reason === "INSUFFICIENT_BALANCE"
             ? "رصيدك غير كافٍ لإتمام ترقية هذه الباقة. يرجى شحن الرصيد أولاً."
             : "الباقة غير متاحة حالياً",
         );
@@ -107,10 +146,10 @@ function InvestmentPage() {
 
   const investMutation = useMutation({
     mutationFn: (vals: { fundId: string; amount: number }) => invest({ data: vals }),
-    onSuccess: (res) => {
-      if (res.ok) {
+    onSuccess: (res: any) => {
+      if (res?.ok) {
         toast.success(
-          `تم الاستثمار بنجاح في ${res.fundName}! الأرباح المتوقعة: +${money(res.expectedProfit)}`,
+          `تم الاستثمار بنجاح في ${res.fundName || "الصندوق"}! الأرباح المتوقعة: +${money(res.expectedProfit ?? 0)}`,
         );
         setSelectedFund(null);
         setInvestAmount("5");
@@ -118,9 +157,9 @@ function InvestmentPage() {
         qc.invalidateQueries({ queryKey: ["account"] });
         qc.invalidateQueries({ queryKey: ["financial-records"] });
       } else {
-        if (res.reason === "INSUFFICIENT_BALANCE") {
+        if (res?.reason === "INSUFFICIENT_BALANCE") {
           toast.error("رصيدك المتاح غير كافٍ لإتمام الاستثمار");
-        } else if (res.reason === "BELOW_MIN_AMOUNT") {
+        } else if (res?.reason === "BELOW_MIN_AMOUNT") {
           toast.error(`الحد الأدنى للاستثمار في هذا الصندوق هو ${res.minAmount}$`);
         } else {
           toast.error("تعذر إتمام الاستثمار");
@@ -182,13 +221,13 @@ function InvestmentPage() {
                 <p className="text-xs text-muted-foreground">{t("investment.activeVip")}</p>
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-gold px-3 py-1 text-xs font-black text-gold shadow-sm mt-0.5">
                   <Crown className="h-3.5 w-3.5 fill-gold text-gold" />
-                  <span>VIP {data.profile.vipLevel}</span>
+                  <span>VIP {userVipLevel}</span>
                 </span>
               </div>
             </section>
 
             {/* Trial Banner if VIP 0 */}
-            {!data.profile.trialActive && data.profile.vipLevel === 0 && (
+            {!isTrialActive && userVipLevel === 0 && (
               <div className="rounded-2xl border border-cyan-glow/40 bg-surface/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
                 <div className="flex items-center gap-3 text-start">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/20 text-cyan-glow">
@@ -259,7 +298,7 @@ function InvestmentPage() {
 
                 {/* 4 Savings Funds Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {data.funds.map((fund) => (
+                  {fundsList.map((fund: any) => (
                     <div
                       key={fund.id}
                       className="surface-card glow-border p-4 flex flex-col justify-between gap-3 hover:border-cyan-glow/50 transition-all shadow-md"
@@ -314,17 +353,17 @@ function InvestmentPage() {
                 </div>
 
                 {/* My Active Investments List */}
-                {data.userInvestments && data.userInvestments.length > 0 && (
+                {userInvestmentsList && userInvestmentsList.length > 0 && (
                   <section className="mt-6">
                     <h3 className="text-sm font-black text-foreground mb-3 flex items-center gap-2 text-start">
                       <Clock className="h-4 w-4 text-cyan-glow" />
                       <span>
-                        {t("investment.activeInvestments")} ({data.userInvestments.length})
+                        {t("investment.activeInvestments")} ({userInvestmentsList.length})
                       </span>
                     </h3>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {data.userInvestments.map((inv) => (
+                      {userInvestmentsList.map((inv: any) => (
                         <div
                           key={inv.id}
                           className="surface-card p-3.5 flex flex-col justify-between gap-2 text-xs text-start"
@@ -369,9 +408,9 @@ function InvestmentPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {data.packages.map((pkg) => {
-                    const isCurrent = data.profile.vipLevel === pkg.level;
-                    const isOwned = data.profile.vipLevel >= pkg.level;
+                  {packagesList.map((pkg: any) => {
+                    const isCurrent = userVipLevel === pkg.level;
+                    const isOwned = userVipLevel >= pkg.level;
                     const isLocked = !pkg.isActive || pkg.level === 7;
 
                     const vipColors: Record<number, string> = {
@@ -468,7 +507,7 @@ function InvestmentPage() {
                             <button
                               type="button"
                               disabled={buyMutation.isPending}
-                              onClick={() => buyMutation.mutate(pkg.id)}
+                              onClick={() => buyMutation.mutate({ id: pkg.id, level: pkg.level })}
                               className="rounded-xl brand-gradient px-4 sm:px-5 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
                             >
                               {buyMutation.isPending
