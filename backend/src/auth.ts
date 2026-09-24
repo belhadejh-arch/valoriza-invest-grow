@@ -4,14 +4,10 @@ import jwt from "jsonwebtoken";
 import type { Request, Response } from "express";
 import { query } from "./db.js";
 
-if (!process.env.JWT_SECRET && !process.env.SESSION_SECRET) {
-  console.warn("⚠️ Warning: Neither JWT_SECRET nor SESSION_SECRET is set. Using default secret key.");
-}
-
 const JWT_SECRET: string =
   process.env.JWT_SECRET ||
   process.env.SESSION_SECRET ||
-  "valoriza-secure-fallback-jwt-secret-key-2026-production";
+  "valoriza-super-secret-jwt-key-2025-secure-production-fallback";
 
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 30);
 export const SESSION_COOKIE = "valoriza_session";

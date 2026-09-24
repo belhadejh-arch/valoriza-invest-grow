@@ -60,15 +60,32 @@ function AuthPage() {
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  function getAuthErrorMessage(msg: string): string {
-    if (msg.includes("EMAIL_EXISTS")) return "البريد الإلكتروني مسجل بالفعل، يرجى تسجيل الدخول";
-    if (msg.includes("USERNAME_EXISTS")) return "اسم المستخدم مسجل مسبقاً، يرجى اختيار اسم مستخدم آخر";
-    if (msg.includes("ACCOUNT_EXISTS")) return "هذا الحساب مسجل بالفعل، يرجى تسجيل الدخول";
-    if (msg.includes("INVALID_REGISTRATION")) return "يرجى التأكد من ملء جميع الحقول بصورة صحيحة";
-    if (msg.includes("INVALID_CREDENTIALS")) return t("auth.errInvalidCreds");
-    if (msg.includes("ACCOUNT_BLOCKED")) return "تم تجميد هذا الحساب، يرجى مراجعة الدعم الفني";
-    if (msg.includes("PASSWORD_TOO_SHORT")) return t("auth.errPasswordLen");
-    return msg;
+  function getFriendlyErrorMessage(rawMsg: string): string {
+    if (!rawMsg) return "حدث خطأ غير متوقع أثناء معالجة الطلب";
+    if (
+      rawMsg.includes("ACCOUNT_EXISTS") ||
+      rawMsg.includes("already registered") ||
+      rawMsg.includes("مسجل بالفعل")
+    ) {
+      return "هذا البريد الإلكتروني مسجل بالفعل! يمكنك تسجيل الدخول مباشرة.";
+    }
+    if (rawMsg.includes("INVALID_CREDENTIALS") || rawMsg.includes("Invalid login")) {
+      return "بيانات الدخول غير صحيحة، يرجى التأكد من البريد الإلكتروني وكلمة المرور.";
+    }
+    if (rawMsg.includes("ACCOUNT_BLOCKED")) {
+      return "تم تجميد هذا الحساب من قبل إدارة المنصة.";
+    }
+    if (rawMsg.includes("INVALID_REGISTRATION")) {
+      return "بيانات التسجيل غير مكتملة، كلمة المرور يجب أن تكون 6 أحرف على الأقل.";
+    }
+    if (
+      rawMsg.includes("fetch") ||
+      rawMsg.includes("Failed to fetch") ||
+      rawMsg.includes("Network")
+    ) {
+      return "تعذر الاتصال بالخادم. يرجى التأكد من تشغيل الباك إند على Render وضبط VITE_BACKEND_URL.";
+    }
+    return rawMsg;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -97,31 +114,37 @@ function AuthPage() {
           },
         });
         if (error) {
-          toast.error(getAuthErrorMessage(error.message));
+          toast.error(getFriendlyErrorMessage(error.message));
           return;
         }
         toast.success(t("auth.accountCreated"));
         navigate({ to: "/home", replace: true });
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
           email: form.email.trim(),
           password: form.password,
         });
         if (error) {
-          toast.error(getAuthErrorMessage(error.message));
+          toast.error(getFriendlyErrorMessage(error.message));
           return;
         }
         toast.success(t("auth.welcomeBack"));
-        if (data?.user?.role === "admin") {
-          navigate({ to: "/admin", replace: true });
-        } else {
-          navigate({ to: "/home", replace: true });
-        }
+        navigate({ to: "/home", replace: true });
       }
+    } catch (err: unknown) {
+      console.error("Auth submit error:", err);
+      const msg =
+        err instanceof Error ? getFriendlyErrorMessage(err.message) : "تعذر الاتصال بالسيرفر";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   }
+
+  const fillAdmin = () => {
+    setMode("login");
+    setForm((f) => ({ ...f, email: "admin@valoriza.com", password: "ValorizaAdmin2025!" }));
+  };
 
   return (
     <div
@@ -235,9 +258,9 @@ function AuthPage() {
 
                 <Field
                   id="auth-field-email"
-                  icon={mode === "login" ? User : Mail}
-                  type={mode === "login" ? "text" : "email"}
-                  placeholder={mode === "login" ? "البريد الإلكتروني أو اسم المستخدم" : t("auth.email")}
+                  icon={Mail}
+                  type="email"
+                  placeholder={t("auth.email")}
                   value={form.email}
                   onChange={set("email")}
                   required
@@ -290,16 +313,27 @@ function AuthPage() {
               </form>
 
               {/* Mode Switch Button */}
-              <div className="mt-3 sm:mt-4 text-center text-xs text-muted-foreground border-t border-border/50 pt-2.5">
-                <span>{mode === "login" ? t("auth.noAccount") : t("auth.hasAccount")}</span>{" "}
-                <button
-                  id="auth-toggle-mode-btn"
-                  type="button"
-                  onClick={() => setMode(mode === "login" ? "register" : "login")}
-                  className="font-black text-gold hover:underline underline-offset-4 focus:outline-none"
-                >
-                  {mode === "login" ? t("auth.switchRegister") : t("auth.switchLogin")}
-                </button>
+              <div className="mt-3 sm:mt-4 text-center text-xs text-muted-foreground border-t border-border/50 pt-2.5 space-y-2">
+                <div>
+                  <span>{mode === "login" ? t("auth.noAccount") : t("auth.hasAccount")}</span>{" "}
+                  <button
+                    id="auth-toggle-mode-btn"
+                    type="button"
+                    onClick={() => setMode(mode === "login" ? "register" : "login")}
+                    className="font-black text-gold hover:underline underline-offset-4 focus:outline-none"
+                  >
+                    {mode === "login" ? t("auth.switchRegister") : t("auth.switchLogin")}
+                  </button>
+                </div>
+                {mode === "login" && (
+                  <button
+                    type="button"
+                    onClick={fillAdmin}
+                    className="text-[11px] text-cyan-400/80 hover:text-cyan-300 underline underline-offset-2 transition-colors block mx-auto"
+                  >
+                    🔑 ملء بيانات حساب المشرف (Admin)
+                  </button>
+                )}
               </div>
             </div>
 

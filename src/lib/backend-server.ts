@@ -1,5 +1,5 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import { formatBackendUrl } from "./backend-client";
+import { buildApiUrl } from "./backend-client";
 
 const getIncomingRequest = createServerOnlyFn(async () => {
   const { getRequest } = await import("@tanstack/react-start/server");
@@ -14,19 +14,25 @@ export async function serverBackendRequest<T>(path: string, init: RequestInit = 
   const authorization = request?.headers.get("authorization");
   if (cookie) headers.set("cookie", cookie);
   if (authorization) headers.set("authorization", authorization);
-  const response = await fetch(formatBackendUrl(path), {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-  const text = await response.text();
-  let payload: any = {};
+
+  const url = buildApiUrl(path);
+
   try {
-    payload = JSON.parse(text);
-  } catch {
-    payload = { message: `خطأ في الاتصال بالخادم (${response.status})` };
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+    const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
+    if (!response.ok)
+      throw new Error(payload.message || `Backend request failed (${response.status})`);
+    return payload;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("fetch")) {
+      throw new Error(
+        "تعذر الاتصال بخادم الباك إند. يرجى التأكد من تشغيل السيرفر وصحة متغير BACKEND_URL.",
+      );
+    }
+    throw error;
   }
-  if (!response.ok)
-    throw new Error(payload.message || `خطأ في الخادم (${response.status})`);
-  return payload as T;
 }

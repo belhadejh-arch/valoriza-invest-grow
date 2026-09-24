@@ -1,52 +1,93 @@
-export function backendBaseUrl() {
+export function backendBaseUrl(): string {
   const configured =
     (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
-    (typeof process !== "undefined" ? process.env?.BACKEND_URL : undefined);
-  if (configured) return String(configured).replace(/\/$/, "");
-  if (typeof window !== "undefined") return "";
-  return "http://127.0.0.1:4000";
+    (typeof process !== "undefined"
+      ? process.env?.BACKEND_URL || process.env?.VITE_BACKEND_URL
+      : undefined);
+
+  if (configured) {
+    // Strip trailing slash and trailing /api if present so URL building is deterministic
+    return String(configured)
+      .replace(/\/+$/, "")
+      .replace(/\/api$/, "");
+  }
+
+  // In browser, relative to current host
+  if (typeof window !== "undefined") {
+    return "";
+  }
+
+  // In Node/SSR server default to local express port
+  return "http://localhost:4000";
 }
 
-export function formatBackendUrl(path: string): string {
+export function buildApiUrl(path: string): string {
   const base = backendBaseUrl();
-  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const rawPath = path.startsWith("/") ? path : `/${path}`;
+  // Ensure the route starts with /api
+  const apiPath = rawPath.startsWith("/api/") || rawPath === "/api" ? rawPath : `/api${rawPath}`;
+
   if (!base) {
-    return cleanPath.startsWith("/api/") || cleanPath === "/api" ? cleanPath : `/api${cleanPath}`;
+    return apiPath;
   }
-  if (base.endsWith("/api")) {
-    return `${base}${cleanPath.replace(/^\/api/, "")}`;
-  }
-  const apiPath = cleanPath.startsWith("/api/") || cleanPath === "/api" ? cleanPath : `/api${cleanPath}`;
   return `${base}${apiPath}`;
+}
+
+export function getStoredToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem("valoriza_session_token");
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredToken(token: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (token) {
+      localStorage.setItem("valoriza_session_token", token);
+    } else {
+      localStorage.removeItem("valoriza_session_token");
+    }
+  } catch {
+    // Ignore localStorage access errors
+  }
 }
 
 export async function backendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("content-type", "application/json");
-
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("valoriza_token");
-    if (token && !headers.has("authorization")) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
+  if (!headers.has("content-type")) {
+    headers.set("content-type", "application/json");
   }
 
-  const url = formatBackendUrl(path);
-  const response = await fetch(url, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-  const text = await response.text();
-  let payload: any = {};
+  const token = getStoredToken();
+  if (token && !headers.has("authorization")) {
+    headers.set("authorization", `Bearer ${token}`);
+  }
+
+  const url = buildApiUrl(path);
+
   try {
-    payload = JSON.parse(text);
-  } catch {
-    payload = { message: `خطأ في الاتصال بالخادم (${response.status})` };
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      credentials: "include",
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
+    if (!response.ok) {
+      throw new Error(payload.message || `Backend request failed (${response.status})`);
+    }
+    return payload;
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes("fetch")) {
+      throw new Error(
+        "تعذر الاتصال بالخادم (Backend). يرجى التأكد من تشغيل السيرفر على Render وصحة رابط VITE_BACKEND_URL.",
+      );
+    }
+    throw error;
   }
-  if (!response.ok)
-    throw new Error(payload.message || `خطأ في الخادم (${response.status})`);
-  return payload as T;
 }
 
 export function browserBackendUrl() {

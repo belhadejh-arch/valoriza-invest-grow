@@ -3,9 +3,10 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { pool, query, withTransaction } from "./db.js";
-import { runMigrations } from "./migrate.js";
-import { seedDatabase } from "./seed.js";
 import {
   clearSessionCookie,
   createSession,
@@ -18,26 +19,28 @@ import {
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
-const rawOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "")
+const allowedOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "")
   .split(",")
-  .map((value) => value.trim().replace(/\/$/, ""))
+  .map((value) => value.trim())
   .filter(Boolean);
 
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true);
-      const cleanOrigin = origin.replace(/\/$/, "");
       if (
-        rawOrigins.length === 0 ||
-        rawOrigins.includes(cleanOrigin) ||
-        cleanOrigin.endsWith(".vercel.app") ||
-        cleanOrigin.includes("localhost") ||
-        cleanOrigin.includes("127.0.0.1")
+        !origin ||
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes("*") ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost") ||
+        origin.includes("127.0.0.1") ||
+        origin.includes(".run.app")
       ) {
-        return callback(null, true);
+        callback(null, true);
+      } else {
+        callback(null, true); // Permissive CORS for cross-deployment compatibility
       }
-      return callback(null, true);
     },
     credentials: true,
   }),
@@ -52,6 +55,19 @@ app.get("/health", async (_request, response) => {
   } catch {
     response.status(503).json({ ok: false, service: "valoriza-backend", database: "unavailable" });
   }
+});
+
+app.get("/api/health", async (_request, response) => {
+  try {
+    await query("SELECT 1");
+    response.json({ ok: true, service: "valoriza-backend", database: "connected" });
+  } catch {
+    response.status(503).json({ ok: false, service: "valoriza-backend", database: "unavailable" });
+  }
+});
+
+app.get("/api/ping", (_request, response) => {
+  response.json({ ok: true, time: new Date().toISOString() });
 });
 
 function number(value: unknown) {
@@ -105,7 +121,7 @@ async function changeBalance(
   return after;
 }
 
-app.post(["/api/auth/register", "/auth/register"], async (request, response, next) => {
+app.post("/api/auth/register", async (request, response, next) => {
   try {
     const { username, email, phone, password, referralCode } = request.body ?? {};
     if (
@@ -119,138 +135,84 @@ app.post(["/api/auth/register", "/auth/register"], async (request, response, nex
       return response.status(400).json({ message: "INVALID_REGISTRATION" });
     }
     const emailValue = email.trim().toLowerCase();
-    const usernameValue = username.trim();
     const passwordHash = await hashPassword(password);
-
     const result = await withTransaction(async (client) => {
-      const existingEmail = await client.query("SELECT id FROM users WHERE LOWER(email) = LOWER($1)", [emailValue]);
-      if (existingEmail.rows.length > 0) {
-        const err = new Error("EMAIL_EXISTS");
-        (err as any).code = "EMAIL_EXISTS";
-        throw err;
-      }
-
-      const existingUsername = await client.query("SELECT id FROM profiles WHERE LOWER(username) = LOWER($1)", [usernameValue]);
-      if (existingUsername.rows.length > 0) {
-        const err = new Error("USERNAME_EXISTS");
-        (err as any).code = "USERNAME_EXISTS";
-        throw err;
-      }
-
       const user = await client.query<{ id: string }>(
         "INSERT INTO users (email, password_hash) VALUES ($1,$2) RETURNING id",
         [emailValue, passwordHash],
       );
       const userId = user.rows[0].id;
-
       const referral =
         typeof referralCode === "string" && referralCode.trim()
-          ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE UPPER(referral_code) = $1", [
+          ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE referral_code = $1", [
               referralCode.trim().toUpperCase(),
             ])
           : { rows: [] };
-
-      const userReferralCode = `VZ${userId.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-
       await client.query(
         `INSERT INTO profiles (id, username, email, phone, referral_code, referred_by)
-         VALUES ($1,$2,$3,$4,$5,$6)
-         ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username, email = EXCLUDED.email`,
+         VALUES ($1,$2,$3,$4,$5,$6)`,
         [
           userId,
-          usernameValue,
+          username.trim(),
           emailValue,
           phone?.trim() || null,
-          userReferralCode,
+          `VZ${userId.slice(0, 8).toUpperCase()}`,
           referral.rows[0]?.id ?? null,
         ],
       );
-      await client.query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [userId]);
-      await client.query("INSERT INTO user_roles (user_id, role) VALUES ($1, 'user') ON CONFLICT (user_id, role) DO NOTHING", [userId]);
-
-      return { id: userId, email: emailValue, username: usernameValue, role: "user" };
+      await client.query("INSERT INTO wallets (user_id) VALUES ($1)", [userId]);
+      await client.query("INSERT INTO user_roles (user_id, role) VALUES ($1, 'user')", [userId]);
+      return userId;
     });
-
-    const token = await createSession(result.id, response);
+    const token = await createSession(result, response);
     return response.status(201).json({
       ok: true,
       token,
       user: {
-        id: result.id,
-        email: result.email,
-        username: result.username,
+        id: result,
+        email: emailValue,
+        username: username.trim(),
         role: "user",
       },
     });
-  } catch (error: any) {
-    if (error.code === "EMAIL_EXISTS" || error.message === "EMAIL_EXISTS") {
-      return response.status(409).json({ message: "EMAIL_EXISTS" });
-    }
-    if (error.code === "USERNAME_EXISTS" || error.message === "USERNAME_EXISTS") {
-      return response.status(409).json({ message: "USERNAME_EXISTS" });
-    }
-    if (error.code === "23505") {
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505")
       return response.status(409).json({ message: "ACCOUNT_EXISTS" });
-    }
     return next(error);
   }
 });
 
-app.post(["/api/auth/login", "/auth/login"], async (request, response, next) => {
+app.post("/api/auth/login", async (request, response, next) => {
   try {
     const { email, password } = request.body ?? {};
-    const identifier = String(email ?? "").trim();
-    if (!identifier || !password) {
-      return response.status(400).json({ message: "EMAIL_AND_PASSWORD_REQUIRED" });
-    }
-
-    const result = await query<{
-      id: string;
-      email: string;
-      password_hash: string;
-      is_blocked: boolean;
-      username: string | null;
-      role: string;
-    }>(
-      `SELECT u.id, u.email, u.password_hash,
-              COALESCE(p.is_blocked, false) AS is_blocked,
-              p.username,
-              COALESCE((SELECT role FROM user_roles WHERE user_id = u.id ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
-       FROM users u
-       LEFT JOIN profiles p ON p.id = u.id
-       WHERE LOWER(u.email) = LOWER($1) OR LOWER(COALESCE(p.username, '')) = LOWER($1)
-       LIMIT 1`,
-      [identifier],
+    const result = await query<{ id: string; password_hash: string; is_blocked: boolean }>(
+      `SELECT u.id, u.password_hash, p.is_blocked FROM users u JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
+      [
+        String(email ?? "")
+          .trim()
+          .toLowerCase(),
+      ],
     );
-
     const row = result.rows[0];
     if (!row || !(await verifyPassword(String(password ?? ""), row.password_hash))) {
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
-    if (row.is_blocked) {
-      return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
-    }
-
-    if (!row.username) {
-      const usernameFallback = row.email.split("@")[0] || "user";
-      await query(
-        `INSERT INTO profiles (id, username, email, referral_code)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (id) DO NOTHING`,
-        [row.id, usernameFallback, row.email, `VZ${row.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`],
-      );
-    }
-    await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [row.id]);
-
+    if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
     const token = await createSession(row.id, response);
+    const userProfile = await query<{ username: string; email: string; role: string }>(
+      `SELECT p.username, p.email,
+              COALESCE((SELECT role FROM user_roles WHERE user_id = p.id ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
+       FROM profiles p WHERE p.id = $1`,
+      [row.id],
+    );
     return response.json({
       ok: true,
       token,
       user: {
         id: row.id,
-        email: row.email,
-        username: row.username || row.email.split("@")[0],
-        role: row.role,
+        email: userProfile.rows[0]?.email || String(email).trim().toLowerCase(),
+        username: userProfile.rows[0]?.username || "user",
+        role: userProfile.rows[0]?.role || "user",
       },
     });
   } catch (error) {
@@ -258,14 +220,13 @@ app.post(["/api/auth/login", "/auth/login"], async (request, response, next) => 
   }
 });
 
-app.post(["/api/auth/logout", "/auth/logout"], async (request, response, next) => {
+app.post("/api/auth/logout", async (request, response, next) => {
   try {
-    const token = request.cookies?.valoriza_session || request.header("authorization")?.replace(/^Bearer /, "");
-    if (token) {
+    const token = request.cookies?.valoriza_session;
+    if (token)
       await query("DELETE FROM sessions WHERE token_hash = encode(digest($1, 'sha256'), 'hex')", [
         token,
       ]);
-    }
     clearSessionCookie(response);
     response.json({ ok: true });
   } catch (error) {
@@ -273,11 +234,11 @@ app.post(["/api/auth/logout", "/auth/logout"], async (request, response, next) =
   }
 });
 
-app.post(["/api/auth/password", "/auth/password"], async (request, response, next) => {
+app.post("/api/auth/password", async (request, response, next) => {
   try {
     const user = await requireAuth(request);
     const password = String(request.body?.password ?? "");
-    if (password.length < 6) return response.status(400).json({ message: "PASSWORD_TOO_SHORT" });
+    if (password.length < 8) return response.status(400).json({ message: "PASSWORD_TOO_SHORT" });
     await query("UPDATE users SET password_hash = $1 WHERE id = $2", [
       await hashPassword(password),
       user.id,
@@ -288,7 +249,7 @@ app.post(["/api/auth/password", "/auth/password"], async (request, response, nex
   }
 });
 
-app.get(["/api/auth/session", "/auth/session"], async (request, response, next) => {
+app.get("/api/auth/session", async (request, response, next) => {
   try {
     const user = await getAuthUser(request);
     response.json({ session: user ? { user } : null });
@@ -1113,13 +1074,7 @@ app.post("/api/admin/users/balance", async (request, response, next) => {
     const amount = Number(request.body?.amount);
     const reason = String(request.body?.reason ?? "تعديل إداري");
     const result = await withTransaction(async (client) => {
-      const balance = await changeBalance(
-        client,
-        targetUserId,
-        amount,
-        "admin_adjustment",
-        reason,
-      );
+      const balance = await changeBalance(client, targetUserId, amount, "admin_adjustment", reason);
       await client.query(
         "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,'ADJUST_BALANCE',$2,$3)",
         [admin.id, targetUserId, JSON.stringify({ amount, reason })],
@@ -1171,8 +1126,7 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
         amount: string;
         status: string;
       }>("SELECT id,user_id,amount,status FROM deposits WHERE id=$1 FOR UPDATE", [depositId]);
-      if (!deposit.rowCount)
-        throw Object.assign(new Error("DEPOSIT_NOT_FOUND"), { status: 404 });
+      if (!deposit.rowCount) throw Object.assign(new Error("DEPOSIT_NOT_FOUND"), { status: 404 });
       if (deposit.rows[0].status !== "pending")
         throw Object.assign(new Error("ALREADY_PROCESSED"), { status: 409 });
       const status = action === "approve" ? "approved" : "rejected";
@@ -1244,9 +1198,7 @@ app.post("/api/admin/withdrawals/review", async (request, response, next) => {
         user_id: string;
         amount: string;
         status: string;
-      }>("SELECT id,user_id,amount,status FROM withdrawals WHERE id=$1 FOR UPDATE", [
-        withdrawalId,
-      ]);
+      }>("SELECT id,user_id,amount,status FROM withdrawals WHERE id=$1 FOR UPDATE", [withdrawalId]);
       if (!withdrawal.rowCount)
         throw Object.assign(new Error("WITHDRAWAL_NOT_FOUND"), { status: 404 });
       if (withdrawal.rows[0].status !== "pending")
@@ -1263,7 +1215,12 @@ app.post("/api/admin/withdrawals/review", async (request, response, next) => {
       }
       await client.query(
         "UPDATE withdrawals SET status=$1,reject_reason=$2,reviewed_at=now(),reviewed_by=$3 WHERE id=$4",
-        [action === "approve" ? "approved" : "rejected", rejectReason ?? null, admin.id, withdrawalId],
+        [
+          action === "approve" ? "approved" : "rejected",
+          rejectReason ?? null,
+          admin.id,
+          withdrawalId,
+        ],
       );
       await client.query(
         "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
@@ -1385,7 +1342,16 @@ app.post("/api/admin/tasks/save", async (request, response, next) => {
     if (data.id) {
       await query(
         "UPDATE tasks SET task_number=$1,title=$2,description=$3,youtube_id=$4,duration_seconds=$5,sort_order=$6,is_active=$7 WHERE id=$8",
-        [taskNumber, data.title, data.description, youtubeId, durationSeconds, sortOrder, isActive, data.id],
+        [
+          taskNumber,
+          data.title,
+          data.description,
+          youtubeId,
+          durationSeconds,
+          sortOrder,
+          isActive,
+          data.id,
+        ],
       );
     } else {
       await query(
@@ -1429,12 +1395,28 @@ app.post("/api/admin/wheel/save", async (request, response, next) => {
     if (data.id) {
       await query(
         "UPDATE lucky_wheel_configs SET label_ar=$1,prize_type=$2,prize_value=$3,probability=$4,icon=$5,accent=$6,is_active=$7 WHERE id=$8",
-        [label, prizeType, prizeValue, data.probability ?? 0, data.icon ?? null, data.accent ?? "blue", isActive, data.id],
+        [
+          label,
+          prizeType,
+          prizeValue,
+          data.probability ?? 0,
+          data.icon ?? null,
+          data.accent ?? "blue",
+          isActive,
+          data.id,
+        ],
       );
     } else {
       await query(
         "INSERT INTO lucky_wheel_configs (label_ar,prize_type,prize_value,probability,icon,accent,sort_order) VALUES ($1,$2,$3,$4,$5,$6,99)",
-        [label, prizeType, prizeValue, data.probability ?? 0, data.icon ?? null, data.accent ?? "blue"],
+        [
+          label,
+          prizeType,
+          prizeValue,
+          data.probability ?? 0,
+          data.icon ?? null,
+          data.accent ?? "blue",
+        ],
       );
     }
     response.json({ ok: true });
@@ -1511,43 +1493,201 @@ app.use(
   },
 );
 
-const server = createServer(app);
-
 async function initDatabase() {
-  const hasDb = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
-  if (!hasDb) {
-    console.warn("⚠️ Warning: No DATABASE_URL or POSTGRES_URL set. Skipping database initialization.");
+  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.warn(
+      "⚠️ No POSTGRES_URL or DATABASE_URL provided. Database features will be unavailable until configured.",
+    );
     return;
   }
-
-  if (process.env.AUTO_MIGRATE !== "false") {
-    try {
-      console.log("Checking and applying database migrations...");
-      await runMigrations();
-      console.log("Database migrations applied successfully.");
-    } catch (err: any) {
-      console.warn("Migration notice (schema may already be initialized):", err?.message || err);
-    }
-  }
-
   try {
-    const adminCheck = await query(
-      "SELECT users.id FROM users JOIN user_roles ON users.id = user_roles.user_id WHERE user_roles.role = 'admin' LIMIT 1",
-    );
-    if (!adminCheck.rows.length) {
-      console.log("No admin user found. Creating primary admin account...");
-      const creds = await seedDatabase();
-      console.log(`Primary admin account created: ${creds.adminEmail}`);
-    } else {
-      console.log("Admin account verified in database.");
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const sqlPath = path.resolve(here, "../migrations/001_init.sql");
+    try {
+      const sql = await fs.readFile(sqlPath, "utf8");
+      await query(sql);
+      console.log("✅ Database schema initialized from 001_init.sql");
+    } catch (migErr) {
+      console.warn("⚠️ Migration notice:", migErr);
     }
-  } catch (err: any) {
-    console.warn("Notice verifying admin account:", err?.message || err);
+
+    // Ensure default primary admin user exists and is linked
+    const adminEmail = (process.env.ADMIN_EMAIL || "admin@valoriza.com").trim().toLowerCase();
+    const adminPassword = process.env.ADMIN_PASSWORD || "ValorizaAdmin2025!";
+    const adminCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
+      adminEmail,
+    ]);
+    let adminId = adminCheck.rows[0]?.id;
+
+    if (!adminId) {
+      const adminHash = await hashPassword(adminPassword);
+      const res = await query<{ id: string }>(
+        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
+        [adminEmail, adminHash],
+      );
+      adminId = res.rows[0].id;
+      await query(
+        `INSERT INTO profiles (id, username, email, referral_code)
+         VALUES ($1, 'admin', $2, 'ADMIN')
+         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+        [adminId, adminEmail],
+      );
+      await query(
+        "INSERT INTO wallets (user_id, balance) VALUES ($1, 1000) ON CONFLICT (user_id) DO NOTHING",
+        [adminId],
+      );
+      await query(
+        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
+        [adminId],
+      );
+      await query(
+        "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+        [adminId],
+      );
+      console.log(`👑 Primary admin created: ${adminEmail} (password: ${adminPassword})`);
+    } else {
+      await query(
+        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
+        [adminId],
+      );
+      await query(
+        "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+        [adminId],
+      );
+      console.log(`👑 Primary admin verified: ${adminEmail}`);
+    }
+
+    // Ensure default user exists
+    const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();
+    const userPassword = process.env.USER_PASSWORD || "ValorizaUser2025!";
+    const userCheck = await query("SELECT id FROM users WHERE email = $1", [userEmail]);
+    if (!userCheck.rowCount) {
+      const userHash = await hashPassword(userPassword);
+      const res = await query<{ id: string }>(
+        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
+        [userEmail, userHash],
+      );
+      const uId = res.rows[0].id;
+      await query(
+        `INSERT INTO profiles (id, username, email, referral_code)
+         VALUES ($1, 'valoriza_user', $2, 'VALORIZAUSER')
+         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+        [uId, userEmail],
+      );
+      await query(
+        "INSERT INTO wallets (user_id, balance) VALUES ($1, 100) ON CONFLICT (user_id) DO NOTHING",
+        [uId],
+      );
+      await query(
+        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'user') ON CONFLICT (user_id, role) DO NOTHING",
+        [uId],
+      );
+      console.log(`👤 Default user created: ${userEmail}`);
+    }
+
+    // Seed default investment funds if empty
+    const fundsCount = await query("SELECT count(*)::int as count FROM investment_funds");
+    if ((fundsCount.rows[0]?.count ?? 0) === 0) {
+      const funds = [
+        [
+          "MUMBAI",
+          "صندوق مومباي",
+          "MUMBAI FUND",
+          "استثمار ذكي .. لعوائد أسرع",
+          3,
+          3.08,
+          5,
+          "cyan",
+          1,
+        ],
+        [
+          "NEWMEXICO",
+          "صندوق نيو مكسيكو",
+          "NEW MEXICO FUND",
+          "فرص أكبر .. لمستقبل أكثر استقراراً",
+          10,
+          4.2,
+          5,
+          "blue",
+          2,
+        ],
+        ["GXR", "صندوق GXR", "GXR FUND", "استثمار عالمي .. بعوائد مستقرة", 30, 6.4, 5, "gold", 3],
+        [
+          "NBL",
+          "صندوق NBL",
+          "NBL FUND",
+          "نمو مستدام .. لثروتك المستقبلية",
+          160,
+          10.8,
+          5,
+          "purple",
+          4,
+        ],
+      ];
+      for (const fund of funds) {
+        await query(
+          `INSERT INTO investment_funds (code, name_ar, name_en, tagline_ar, duration_days, profit_percent, min_amount, accent, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (code) DO NOTHING`,
+          fund,
+        );
+      }
+    }
+
+    // Seed default VIP packages if empty
+    const vipCount = await query("SELECT count(*)::int as count FROM vip_packages");
+    if ((vipCount.rows[0]?.count ?? 0) === 0) {
+      const vip = [
+        [1, "VIP 1", 13, 0.5, 2, 0.25, "green"],
+        [2, "VIP 2", 27, 1.2, 3, 0.4, "blue"],
+        [3, "VIP 3", 61, 2.9, 4, 0.725, "purple"],
+        [4, "VIP 4", 131, 6.4, 5, 1.28, "gold"],
+        [5, "VIP 5", 273, 13.5, 6, 2.25, "pink"],
+        [6, "VIP 6", 403, 20, 7, 2.857, "emerald"],
+        [7, "VIP 7", 540, 26.85, 8, 3.356, "silver"],
+      ];
+      for (const plan of vip) {
+        await query(
+          `INSERT INTO vip_packages (level, name, price, daily_profit, daily_tasks, task_reward, accent)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (level) DO NOTHING`,
+          plan,
+        );
+      }
+    }
+
+    // Seed default platform settings if empty
+    const settingsCount = await query("SELECT count(*)::int as count FROM platform_settings");
+    if ((settingsCount.rows[0]?.count ?? 0) === 0) {
+      const settings: [string, string, string, boolean][] = [
+        ["min_deposit", "10", "الحد الأدنى للإيداع بالدولار", true],
+        ["min_withdrawal", "6", "الحد الأدنى للسحب بالدولار", true],
+        ["withdrawal_fee_percent", "10", "نسبة رسوم السحب", true],
+        ["withdrawal_start_hour", "09:00", "بداية وقت السحب", true],
+        ["withdrawal_end_hour", "16:00", "نهاية وقت السحب", true],
+        ["withdrawals_enabled", "true", "تفعيل السحب", true],
+        ["min_investment", "5", "الحد الأدنى للاستثمار", true],
+        ["daily_login_reward", "0.11", "مكافأة تسجيل الدخول اليومية", true],
+        ["referral_rate_l1", "0.08", "عمولة المستوى الأول", true],
+        ["referral_rate_l2", "0.04", "عمولة المستوى الثاني", true],
+        ["referral_rate_l3", "0.01", "عمولة المستوى الثالث", true],
+        ["daily_spins", "3", "فرص عجلة الحظ اليومية", true],
+      ];
+      for (const setting of settings) {
+        await query(
+          `INSERT INTO platform_settings (key, value, description_ar, is_public)
+           VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,
+          setting,
+        );
+      }
+    }
+  } catch (err) {
+    console.error("❌ initDatabase error:", err);
   }
 }
 
+const server = createServer(app);
 server.listen(port, "0.0.0.0", async () => {
-  console.log(`Valoriza backend listening on ${port}`);
+  console.log(`Valoriza backend listening on port ${port}`);
   await initDatabase();
 });
 

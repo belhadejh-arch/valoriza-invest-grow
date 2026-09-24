@@ -1,121 +1,85 @@
-import {
-  serverAuthSession,
-  serverAuthLogin,
-  serverAuthRegister,
-  serverAuthLogout,
-  serverAuthUpdatePassword,
-  type AuthUser,
-} from "@/lib/valoriza-auth.functions";
-import { formatBackendUrl } from "@/lib/backend-client";
+import { buildApiUrl, getStoredToken, setStoredToken } from "@/lib/backend-client";
 
+export type AuthUser = { id: string; email: string; username?: string; role?: string };
 type AuthListener = (event: "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED", session: unknown) => void;
+
 const listeners = new Set<AuthListener>();
 
-function saveSession(token?: string) {
-  if (typeof window !== "undefined" && token) {
-    localStorage.setItem("valoriza_token", token);
-    try {
-      document.cookie = `valoriza_session=${token}; path=/; max-age=2592000; SameSite=Lax`;
-    } catch {
-      // ignore
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<{ data: T | null; error: Error | null }> {
+  try {
+    const url = buildApiUrl(path);
+    const headers = new Headers(init.headers);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "application/json");
     }
-  }
-}
 
-function clearSession() {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("valoriza_token");
-    try {
-      document.cookie = "valoriza_session=; path=/; max-age=0; SameSite=Lax";
-    } catch {
-      // ignore
-    }
-  }
-}
-
-async function requestFallback<T>(path: string, init: RequestInit = {}) {
-  const headers = new Headers(init.headers);
-  if (!headers.has("content-type")) {
-    headers.set("content-type", "application/json");
-  }
-
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("valoriza_token");
+    const token = getStoredToken();
     if (token && !headers.has("authorization")) {
       headers.set("authorization", `Bearer ${token}`);
     }
-  }
 
-  const url = formatBackendUrl(path);
-  try {
     const response = await fetch(url, {
       ...init,
       headers,
       credentials: "include",
     });
-    const text = await response.text();
-    let data: any = {};
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { message: `خطأ في الاتصال بالخادم (${response.status})` };
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const message =
+        data?.message ||
+        (response.status === 401
+          ? "INVALID_CREDENTIALS"
+          : response.status === 403
+            ? "ACCOUNT_BLOCKED"
+            : response.status === 409
+              ? "ACCOUNT_EXISTS"
+              : `فشل الطلب (${response.status})`);
+      return { data: null, error: new Error(message) };
     }
-    return {
-      data: data as T,
-      error: response.ok ? null : new Error(data?.message || `خطأ في الخادم (${response.status})`),
-    };
-  } catch (err: any) {
-    return {
-      data: {} as T,
-      error: new Error(err?.message || "تعذر الاتصال بالخادم"),
-    };
+
+    return { data: data as T, error: null };
+  } catch (networkError: unknown) {
+    console.error(`[Valoriza Auth] Network error calling ${path}:`, networkError);
+    const msg =
+      networkError instanceof Error && networkError.message.includes("fetch")
+        ? "تعذر الاتصال بخادم الباك إند. تأكد من تشغيل السيرفر على Render وصحة رابط VITE_BACKEND_URL"
+        : networkError instanceof Error
+          ? networkError.message
+          : "تعذر الاتصال بالخادم";
+    return { data: null, error: new Error(msg) };
   }
 }
 
 const auth = {
   async getSession() {
-    try {
-      const data = await serverAuthSession();
-      return { data: data || { session: null }, error: null };
-    } catch {
-      return requestFallback<{ session: { user: AuthUser } | null }>("/api/auth/session");
-    }
+    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+    return { data: result.data ?? { session: null }, error: result.error };
   },
 
   async getUser() {
-    try {
-      const data = await serverAuthSession();
-      return { data: { user: data?.session?.user ?? null }, error: null };
-    } catch {
-      const result = await requestFallback<{ session: { user: AuthUser } | null }>("/api/auth/session");
-      return { data: { user: result.data?.session?.user ?? null }, error: result.error };
-    }
+    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+    return { data: { user: result.data?.session?.user ?? null }, error: result.error };
   },
 
   async signInWithPassword(input: { email: string; password: string }) {
-    try {
-      const data = await serverAuthLogin({ data: input });
-      if (data?.token) {
-        saveSession(data.token);
-      }
-      listeners.forEach((listener) => listener("SIGNED_IN", data));
-      return { data, error: null };
-    } catch (err: any) {
-      // Fallback direct request
-      const fallback = await requestFallback<{ ok: boolean; token?: string; user?: AuthUser }>(
-        "/api/auth/login",
-        {
-          method: "POST",
-          body: JSON.stringify(input),
-        },
-      );
-      if (!fallback.error && fallback.data?.token) {
-        saveSession(fallback.data.token);
-        listeners.forEach((listener) => listener("SIGNED_IN", fallback.data));
-        return { data: fallback.data, error: null };
-      }
-      return { data: null, error: err?.message ? err : fallback.error };
+    const result = await request<{ ok: boolean; token?: string; user?: AuthUser }>(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    );
+
+    if (!result.error && result.data?.token) {
+      setStoredToken(result.data.token);
+      listeners.forEach((listener) => listener("SIGNED_IN", result.data));
     }
+    return result;
   },
 
   async signUp(input: {
@@ -124,60 +88,43 @@ const auth = {
     options?: { data?: Record<string, string> };
   }) {
     const metadata = input.options?.data ?? {};
-    const payload = {
-      email: input.email,
-      password: input.password,
-      username: metadata.username,
-      phone: metadata.phone,
-      referralCode: metadata.referral_code,
-    };
-    try {
-      const data = await serverAuthRegister({ data: payload });
-      if (data?.token) {
-        saveSession(data.token);
-      }
-      listeners.forEach((listener) => listener("SIGNED_IN", data));
-      return { data, error: null };
-    } catch (err: any) {
-      // Fallback direct request
-      const fallback = await requestFallback<{ ok: boolean; token?: string; user?: AuthUser }>(
-        "/api/auth/register",
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        },
-      );
-      if (!fallback.error && fallback.data?.token) {
-        saveSession(fallback.data.token);
-        listeners.forEach((listener) => listener("SIGNED_IN", fallback.data));
-        return { data: fallback.data, error: null };
-      }
-      return { data: null, error: err?.message ? err : fallback.error };
+    const result = await request<{ ok: boolean; token?: string; user?: AuthUser }>(
+      "/api/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          email: input.email,
+          password: input.password,
+          username: metadata.username,
+          phone: metadata.phone,
+          referralCode: metadata.referral_code,
+        }),
+      },
+    );
+
+    if (!result.error && result.data?.token) {
+      setStoredToken(result.data.token);
+      listeners.forEach((listener) => listener("SIGNED_IN", result.data));
     }
+    return result;
   },
 
   async signOut() {
-    clearSession();
-    try {
-      await serverAuthLogout();
-    } catch {
-      await requestFallback<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
-    }
+    const result = await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+    setStoredToken(null);
     listeners.forEach((listener) => listener("SIGNED_OUT", null));
-    return { data: { ok: true }, error: null };
+    return result;
   },
 
   async updateUser(input: { password?: string }) {
-    try {
-      const data = await serverAuthUpdatePassword({ data: input });
-      listeners.forEach((listener) => listener("USER_UPDATED", data));
-      return { data, error: null };
-    } catch (err: any) {
-      return requestFallback<{ user: AuthUser }>("/api/auth/password", {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
+    const result = await request<{ user: AuthUser }>("/api/auth/password", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    if (!result.error) {
+      listeners.forEach((listener) => listener("USER_UPDATED", result.data));
     }
+    return result;
   },
 
   onAuthStateChange(listener: AuthListener) {
@@ -187,4 +134,3 @@ const auth = {
 };
 
 export const supabase = { auth };
-export type { AuthUser };
