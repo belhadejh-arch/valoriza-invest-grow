@@ -121,11 +121,11 @@ function AboutPage() {
                   المقر الرئيسي
                 </span>
                 <h1 className="mt-1 text-xl sm:text-2xl font-black text-foreground drop-shadow-md">
-                  Valoriza Investment
+                  فالوريزا للاستثمار
                 </h1>
               </div>
 
-              <div className="text-left">
+              <div className="text-start">
                 <span className="inline-flex items-center gap-1 rounded-full bg-cyan-glow/20 border border-cyan-glow/40 px-2 py-0.5 text-[11px] font-bold text-cyan-glow">
                   <MapPin className="h-3 w-3" />
                   {headquarters}

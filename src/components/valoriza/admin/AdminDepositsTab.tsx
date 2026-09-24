@@ -202,7 +202,7 @@ export function AdminDepositsTab() {
                     >
                       <img
                         src={dep.screenshotUrl}
-                        alt="Screenshot"
+                        alt="لقطة شاشة التحويل"
                         className="h-full w-full object-cover"
                       />
                     </button>
@@ -329,7 +329,7 @@ export function AdminDepositsTab() {
             <div className="p-3 w-full flex-1 flex items-center justify-center overflow-auto max-h-[75vh]">
               <img
                 src={previewScreenshotUrl}
-                alt="Deposit Proof"
+                alt="إثبات الإيداع"
                 className="max-w-full max-h-[72vh] object-contain rounded-xl border border-[#14325e]"
               />
             </div>

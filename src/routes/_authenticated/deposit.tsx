@@ -280,7 +280,7 @@ function DepositPage() {
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
                       currentAddress,
                     )}`}
-                    alt="QR Code"
+                    alt="رمز الاستجابة السريعة QR"
                     className="h-40 w-40"
                   />
                   <span className="text-xs font-black text-gray-800 mt-2">{network}</span>
@@ -338,7 +338,7 @@ function DepositPage() {
                     {t("deposit.uploadHint")}
                   </span>
                   <span className="text-[10px] text-muted-foreground font-semibold">
-                    PNG, JPG (Max 5MB)
+                    صيغة PNG أو JPG (الحد الأقصى 5 ميجابايت)
                   </span>
                 </label>
               ) : (
@@ -346,7 +346,7 @@ function DepositPage() {
                   <div className="relative rounded-2xl overflow-hidden border border-border bg-surface max-h-56 flex items-center justify-center">
                     <img
                       src={screenshotPreview}
-                      alt="Deposit Screenshot Preview"
+                      alt="معاينة إثبات الإيداع"
                       className="w-full h-auto max-h-56 object-contain"
                     />
                     <button
@@ -433,7 +433,7 @@ function DepositPage() {
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
                     currentAddress,
                   )}`}
-                  alt="QR Code"
+                  alt="رمز الاستجابة السريعة QR"
                   className="h-36 w-36 mx-auto"
                 />
               </div>

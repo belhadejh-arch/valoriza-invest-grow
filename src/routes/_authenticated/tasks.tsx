@@ -233,7 +233,7 @@ function TasksPage() {
                   {t("invest.duration")}
                 </p>
                 <p className="mt-0.5 text-sm font-black text-primary-foreground">
-                  {durationSec} {isRTL ? "ثوانٍ" : "s"}
+                  {durationSec} ثوانٍ
                 </p>
               </div>
             </div>
@@ -269,7 +269,7 @@ function TasksPage() {
                       type="button"
                       onClick={() => handleStartTask(task)}
                       disabled={task.isCompletedToday || remaining <= 0}
-                      aria-label={`Watch ${task.title}`}
+                      aria-label={`مشاهدة ${task.title}`}
                       className={`absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full transition-all duration-300 active:scale-95 ${
                         task.isCompletedToday
                           ? "bg-emerald-500/80 text-white cursor-default"
@@ -298,7 +298,7 @@ function TasksPage() {
                     <div className="absolute bottom-3 inset-x-3 flex items-center justify-between">
                       <span className="flex items-center gap-1 rounded-lg bg-black/70 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white/90">
                         <Clock className="h-3 w-3 text-cyan-glow" />
-                        {task.durationSeconds}s
+                        {task.durationSeconds} ثانية
                       </span>
                       <span className="flex items-center gap-1 rounded-lg bg-emerald-500/90 backdrop-blur-md px-2.5 py-1 text-xs font-black text-white shadow">
                         +${commission.toFixed(2)}

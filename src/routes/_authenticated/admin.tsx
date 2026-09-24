@@ -31,8 +31,8 @@ import { AdminAuditLogsTab } from "@/components/valoriza/admin/AdminAuditLogsTab
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
-      { title: "لوحة تحكم الإدارة — Valoriza Admin" },
-      { name: "description", content: "لوحة التحكم الإدارية لمنصة Valoriza." },
+      { title: "لوحة تحكم الإدارة — فالوريزا" },
+      { name: "description", content: "لوحة التحكم الإدارية لمنصة فالوريزا." },
     ],
   }),
   component: AdminDashboardPage,
@@ -74,8 +74,8 @@ function AdminDashboardPage() {
                 <ShieldCheck className="h-4 w-4" />
               </span>
               <div>
-                <h1 className="text-xs font-black text-foreground">لوحة إدارة Valoriza</h1>
-                <p className="text-[10px] text-amber-400 font-bold">Admin Console</p>
+                <h1 className="text-xs font-black text-foreground">لوحة إدارة فالوريزا</h1>
+                <p className="text-[10px] text-amber-400 font-bold">وحدة تحكم الإدارة</p>
               </div>
             </div>
           </div>

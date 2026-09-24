@@ -353,9 +353,9 @@ function AccountPage() {
                     <span className="font-black text-gold">VIP {data.profile.vipLevel}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">SSL / TLS:</span>
+                    <span className="text-muted-foreground">حماية وتشفير البيانات:</span>
                     <span className="font-black text-success">
-                      {isRTL ? "تشفير مالي آمن 256 بت" : "256-bit Encrypted"}
+                      تشفير مالي آمن 256 بت (SSL)
                     </span>
                   </div>
                 </div>

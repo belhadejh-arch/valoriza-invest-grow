@@ -153,7 +153,7 @@ function HomePage() {
           {/* Background Hero Image */}
           <img
             src={heroCityImg}
-            alt="Valoriza Investment Skyline"
+            alt="أفق استثمار فالوريزا"
             className="absolute inset-0 h-full w-full object-cover brightness-[0.38] contrast-125 transition-all duration-700"
           />
 
@@ -191,7 +191,7 @@ function HomePage() {
                 <button
                   type="button"
                   onClick={prevSlide}
-                  aria-label="Previous Slide"
+                  aria-label="الشريحة السابقة"
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
                 >
                   <ChevronRight className="h-4 w-4 rtl:rotate-180" />
@@ -199,7 +199,7 @@ function HomePage() {
                 <button
                   type="button"
                   onClick={nextSlide}
-                  aria-label="Next Slide"
+                  aria-label="الشريحة التالية"
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
@@ -403,7 +403,7 @@ function HomePage() {
               <div className="relative h-36 sm:h-40 w-full">
                 <img
                   src={madridHQImg}
-                  alt="Valoriza Madrid Headquarters"
+                  alt="المقر الرئيسي لشركة فالوريزا في مدريد"
                   className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/50 to-transparent" />
@@ -413,7 +413,7 @@ function HomePage() {
                     {t("nav.about")}
                   </h4>
                   <span className="rounded-full bg-navy-deep/90 border border-cyan-glow/50 px-2 py-0.5 text-[10px] font-bold text-cyan-glow">
-                    Madrid, Spain 🇪🇸
+                    مدريد، إسبانيا 🇪🇸
                   </span>
                 </div>
               </div>
@@ -431,7 +431,7 @@ function HomePage() {
                     <Info className="h-3.5 w-3.5" />
                     <span>{t("nav.about")}</span>
                   </Link>
-                  <span className="text-[10px] text-muted-foreground font-semibold">Est. 2018</span>
+                  <span className="text-[10px] text-muted-foreground font-semibold">تأسست 2018</span>
                 </div>
               </div>
             </div>
@@ -450,7 +450,7 @@ function HomePage() {
                     +{membersCount}
                   </span>
                   <span className="block text-[10px] text-cyan-glow font-medium">
-                    Active Investors Globally
+                    مستثمر نشط حول العالم
                   </span>
                 </div>
               </div>

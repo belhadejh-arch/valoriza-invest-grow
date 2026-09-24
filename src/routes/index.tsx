@@ -23,12 +23,12 @@ import heroCity from "@/assets/hero-city.jpg";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "تسجيل الدخول — Valoriza | Invest Today .. Build Tomorrow" },
+      { title: "تسجيل الدخول — فالوريزا | استثمر اليوم .. لبناء مستقبلك غداً" },
       {
         name: "description",
         content: "سجل الدخول إلى حساب Valoriza: منصة عالمية وفرص حقيقية لربح المال بأمان وسهولة.",
       },
-      { property: "og:title", content: "Valoriza — Invest Today .. Build Tomorrow" },
+      { property: "og:title", content: "فالوريزا — استثمر اليوم .. لبناء مستقبلك غداً" },
       {
         property: "og:description",
         content: "منصة عالمية .. فرص حقيقية لربح المال. آمن - سهل - سريع.",
@@ -83,7 +83,7 @@ function AuthPage() {
       rawMsg.includes("Failed to fetch") ||
       rawMsg.includes("Network")
     ) {
-      return "تعذر الاتصال بالخادم. يرجى التأكد من تشغيل الباك إند على Render وضبط VITE_BACKEND_URL.";
+      return "تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.";
     }
     return rawMsg;
   }
@@ -168,7 +168,7 @@ function AuthPage() {
             <div className="relative overflow-hidden rounded-3xl glow-border shadow-2xl">
               <img
                 src={heroCity}
-                alt="Valoriza Madrid Hub"
+                alt="المقر الرئيسي لشركة فالوريزا في مدريد"
                 width={1280}
                 height={720}
                 className="h-64 lg:h-72 w-full object-cover"
@@ -182,7 +182,7 @@ function AuthPage() {
                 <h1 className="text-3xl font-black text-white">{t("auth.heroTitle")}</h1>
                 <p className="text-base font-bold text-gold-soft mt-1">{t("auth.heroSubtitle")}</p>
                 <p className="text-xs text-slate-300 mt-1">
-                  Paseo de la Castellana 95, Madrid, Spain · Reg #B-88392104
+                  باسيو دي لا كاستيلانا 95، مدريد، إسبانيا · رقم التسجيل B-88392104
                 </p>
               </div>
             </div>
@@ -346,7 +346,7 @@ function AuthPage() {
 
       {/* Footer copyright */}
       <footer className="py-2 text-center text-[10px] text-muted-foreground border-t border-border/40">
-        Valoriza Investment Corp · Madrid, Spain · Reg #B-88392104
+        شركة فالوريزا للاستثمار · مدريد، إسبانيا · سجل تجاري رقم B-88392104
       </footer>
     </div>
   );

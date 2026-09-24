@@ -19,7 +19,7 @@ export function BottomNav() {
   return (
     <nav
       id="app-bottom-nav"
-      aria-label="Bottom Navigation"
+      aria-label="شريط التنقل السفلي"
       className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 backdrop-blur-lg shadow-[0_-8px_20px_-6px_rgba(0,0,0,0.5)] transition-colors"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-between px-1 pb-[env(safe-area-inset-bottom)]">
