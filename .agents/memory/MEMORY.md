@@ -1,0 +1,1 @@
+- [Vite build runtime env](vite-build-runtime-env.md) — CI evaluates all Vite configs without Replit's preview-only PORT and BASE_PATH.

@@ -1,0 +1,21 @@
+21:53:56.142 artifacts/mockup-sandbox build: Error: PORT environment variable is required but was not provided.
+21:53:56.143 artifacts/mockup-sandbox build:     at file:///vercel/path0/artifacts/mockup-sandbox/node_modules/.vite-temp/vite.config.ts.timestamp-1790283235994-3ad8543bc4bd8.mjs:145:9
+21:53:56.143 artifacts/mockup-sandbox build:     at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+21:53:56.143 artifacts/mockup-sandbox build:     at async node:internal/modules/esm/loader:643:26
+21:53:56.143 artifacts/mockup-sandbox build:     at async loadConfigFromBundledFile (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35996:12)
+21:53:56.143 artifacts/mockup-sandbox build:     at async bundleAndLoadConfigFile (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35884:17)
+21:53:56.143 artifacts/mockup-sandbox build:     at async loadConfigFromFile (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35851:42)
+21:53:56.143 artifacts/mockup-sandbox build:     at async resolveConfig (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35500:22)
+21:53:56.143 artifacts/mockup-sandbox build:     at async createBuilder (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:33955:19)
+21:53:56.144 artifacts/mockup-sandbox build:     at async CAC.<anonymous> (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/cli.js:629:10)
+21:53:56.163 artifacts/mockup-sandbox build: Failed
+21:53:56.186 /vercel/path0/artifacts/mockup-sandbox:
+21:53:56.187  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/mockup-sandbox@2.0.0 build: vite build
+21:53:56.187 Exit status 1
+21:53:56.239  ELIFECYCLE  Command failed with exit code 1.
+21:53:56.272 Error: Command "pnpm run build" exited with 1
+
+
+اصلاح الزامي  بدون تخطي 
+
+لكتفي باصلاح المشكل فقط
