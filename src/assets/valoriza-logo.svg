@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Left Ribbon Front Gradient -->
+    <linearGradient id="vzLogoLeftGrad" x1="10%" y1="10%" x2="80%" y2="90%">
+      <stop offset="0%" stop-color="#00D2FF" />
+      <stop offset="25%" stop-color="#009BF9" />
+      <stop offset="60%" stop-color="#0C56DB" />
+      <stop offset="100%" stop-color="#073090" />
+    </linearGradient>
+
+    <!-- Right Ribbon Main Body Gradient -->
+    <linearGradient id="vzLogoRightGrad" x1="15%" y1="85%" x2="85%" y2="15%">
+      <stop offset="0%" stop-color="#062B82" />
+      <stop offset="35%" stop-color="#0B4ECC" />
+      <stop offset="75%" stop-color="#1466F6" />
+      <stop offset="100%" stop-color="#00C0FF" />
+    </linearGradient>
+
+    <!-- Right Ribbon Edge Highlight -->
+    <linearGradient id="vzLogoHighlightGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0E54E0" />
+      <stop offset="60%" stop-color="#00B8FF" />
+      <stop offset="100%" stop-color="#60D5FF" />
+    </linearGradient>
+
+    <!-- Inner Crease / 3D Shadow -->
+    <linearGradient id="vzLogoFoldShadow" x1="40%" y1="10%" x2="60%" y2="90%">
+      <stop offset="0%" stop-color="#031238" stop-opacity="0.95" />
+      <stop offset="60%" stop-color="#07205C" stop-opacity="0.75" />
+      <stop offset="100%" stop-color="#0A338A" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Arrow Gradient -->
+    <linearGradient id="vzLogoArrowGrad" x1="10%" y1="90%" x2="90%" y2="10%">
+      <stop offset="0%" stop-color="#0096F5" />
+      <stop offset="50%" stop-color="#00C2FF" />
+      <stop offset="100%" stop-color="#55D6FF" />
+    </linearGradient>
+
+    <!-- Wordmark V Gradient -->
+    <linearGradient id="vzLogoVGrad" x1="0%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#00D2FF" />
+      <stop offset="40%" stop-color="#0088FF" />
+      <stop offset="100%" stop-color="#0B4ECC" />
+    </linearGradient>
+
+    <!-- Ambient Cyan/Blue Glow Filter -->
+    <filter id="vzLogoFullGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#0099FF" flood-opacity="0.4" />
+    </filter>
+  </defs>
+
+  <g filter="url(#vzLogoFullGlow)">
+    <!-- ====== TOP MONOGRAM ====== -->
+    <!-- Right Arm / Back Ribbon -->
+    <path
+      d="M 238 245
+         C 265 195, 305 130, 334 78
+         C 338 71, 345 73, 347 80
+         L 349 100
+         C 322 148, 278 218, 250 254
+         C 243 261, 235 252, 238 245 Z"
+      fill="url(#vzLogoRightGrad)"
+    />
+
+    <!-- Right Arm Facet / Outer Highlight Edge -->
+    <path
+      d="M 326 86
+         C 335 70, 342 70, 346 80
+         L 348 104
+         C 333 132, 306 182, 276 226
+         L 269 216
+         C 294 176, 316 128, 326 86 Z"
+      fill="url(#vzLogoHighlightGrad)"
+      opacity="0.85"
+    />
+
+    <!-- Left Ribbon / Front Main Wing -->
+    <path
+      d="M 132 60
+         C 148 54, 178 74, 198 116
+         C 218 158, 238 210, 246 236
+         C 252 252, 241 262, 231 257
+         C 211 243, 185 198, 162 144
+         C 144 102, 123 68, 132 60 Z"
+      fill="url(#vzLogoLeftGrad)"
+    />
+
+    <!-- Inner Fold Shadow for 3D Depth -->
+    <path
+      d="M 192 110
+         C 210 150, 230 200, 243 230
+         C 235 224, 222 196, 208 160
+         C 198 132, 188 114, 192 110 Z"
+      fill="url(#vzLogoFoldShadow)"
+    />
+
+    <!-- Dynamic Upward Growth Arrow -->
+    <path
+      d="M 312 46
+         L 372 28
+         L 352 78
+         L 341 62
+         L 326 67
+         L 312 46 Z"
+      fill="url(#vzLogoArrowGrad)"
+    />
+
+    <!-- ====== WORDMARK "Valoriza" ====== -->
+    <!-- Stylized "V" with matching gradient -->
+    <text
+      x="74"
+      y="384"
+      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+      font-size="82"
+      font-weight="900"
+      letter-spacing="-1.5"
+      fill="url(#vzLogoVGrad)"
+    >V</text>
+
+    <!-- "alor" in pure crisp white -->
+    <text
+      x="128"
+      y="384"
+      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+      font-size="82"
+      font-weight="900"
+      letter-spacing="-1.5"
+      fill="#FFFFFF"
+    >alor</text>
+
+    <!-- 'ı' (dotless i) in white -->
+    <text
+      x="298"
+      y="384"
+      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+      font-size="82"
+      font-weight="900"
+      letter-spacing="-1.5"
+      fill="#FFFFFF"
+    >ı</text>
+
+    <!-- The Dot on the 'i' in luminous cyan -->
+    <circle
+      cx="309"
+      cy="324"
+      r="7.5"
+      fill="#00D2FF"
+      filter="drop-shadow(0 0 6px #00D2FF)"
+    />
+
+    <!-- "za" in pure crisp white -->
+    <text
+      x="323"
+      y="384"
+      font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+      font-size="82"
+      font-weight="900"
+      letter-spacing="-1.5"
+      fill="#FFFFFF"
+    >za</text>
+  </g>
+</svg>
