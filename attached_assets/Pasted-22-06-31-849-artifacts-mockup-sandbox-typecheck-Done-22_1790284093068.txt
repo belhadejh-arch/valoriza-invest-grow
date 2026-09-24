@@ -1,0 +1,28 @@
+22:06:31.849 artifacts/mockup-sandbox typecheck: Done
+22:06:31.854 scripts typecheck$ tsc -p tsconfig.json --noEmit
+22:06:33.703 scripts typecheck: Done
+22:06:40.390 artifacts/valoriza typecheck: Done
+22:06:40.931 Scope: 8 of 9 workspace projects
+22:06:40.940 artifacts/mockup-sandbox build$ vite build
+22:06:41.486 artifacts/mockup-sandbox build: failed to load config from /vercel/path0/artifacts/mockup-sandbox/vite.config.ts
+22:06:41.489 artifacts/mockup-sandbox build: error during build:
+22:06:41.490 artifacts/mockup-sandbox build: Error: PORT environment variable is required but was not provided.
+22:06:41.492 artifacts/mockup-sandbox build:     at file:///vercel/path0/artifacts/mockup-sandbox/node_modules/.vite-temp/vite.config.ts.timestamp-1790284001259-4504a40e7ad5b.mjs:145:9
+22:06:41.494 artifacts/mockup-sandbox build:     at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+22:06:41.495 artifacts/mockup-sandbox build:     at async node:internal/modules/esm/loader:643:26
+22:06:41.498 artifacts/mockup-sandbox build:     at async loadConfigFromBundledFile (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35996:12)
+22:06:41.500 artifacts/mockup-sandbox build:     at async bundleAndLoadConfigFile (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35884:17)
+22:06:41.507 artifacts/mockup-sandbox build:     at async loadConfigFromFile (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35851:42)
+22:06:41.508 artifacts/mockup-sandbox build:     at async resolveConfig (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:35500:22)
+22:06:41.508 artifacts/mockup-sandbox build:     at async createBuilder (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/chunks/config.js:33955:19)
+22:06:41.509 artifacts/mockup-sandbox build:     at async CAC.<anonymous> (file:///vercel/path0/node_modules/.pnpm/vite@7.3.6_@types+node@25.9.6_jiti@2.7.0_lightningcss@1.32.0_tsx@4.23.13_yaml@2.9.0/node_modules/vite/dist/node/cli.js:629:10)
+22:06:41.521 artifacts/mockup-sandbox build: Failed
+22:06:41.547 /vercel/path0/artifacts/mockup-sandbox:
+22:06:41.548  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/mockup-sandbox@2.0.0 build: vite build
+22:06:41.548 Exit status 1
+22:06:41.613  ELIFECYCLE  Command failed with exit code 1.
+22:06:41.669 Error: Command "pnpm run build" exited with 1
+
+
+
+لا زال المشكل حل فوري لهذا المشكل و اصلاحه ولا تكمل المهمة حتى يتم اصلاحه و ينجح بناء الفرونت اند في vercel
