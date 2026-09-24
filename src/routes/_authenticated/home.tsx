@@ -26,8 +26,8 @@ import { BottomNav } from "@/components/valoriza/BottomNav";
 import { LuckyWheel } from "@/components/valoriza/LuckyWheel";
 import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal";
 import { DepositModal, WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
-import { LoadingState, ErrorState } from "@/components/valoriza/StatusStates";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
+import { getMockHomeData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 import heroCityImg from "@/assets/hero-city.jpg";
 import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
@@ -93,16 +93,17 @@ function HomePage() {
   const [supportOpen, setSupportOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data = getMockHomeData() } = useQuery({
     queryKey: ["home"],
     queryFn: () => fetchHome(),
+    initialData: getMockHomeData,
   });
 
   const claimMutation = useMutation({
     mutationFn: () => claim(),
     onSuccess: (res) => {
       if (res.ok) {
-        toast.success(`${t("home.claimDaily")} ${money(res.amount)} ${t("common.success")}`);
+        toast.success(`${t("home.claimDaily")} ${t("common.success")}`);
       } else {
         toast.error(t("home.claimedDaily"));
       }
@@ -118,34 +119,6 @@ function HomePage() {
   const prevSlide = () => {
     setSlideIndex((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length);
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <AppHeader />
-        <div className="flex min-h-[70vh] items-center justify-center p-4">
-          <LoadingState message={t("common.loading")} />
-        </div>
-        <BottomNav />
-      </div>
-    );
-  }
-
-  if (isError || !data) {
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <AppHeader />
-        <div className="flex min-h-[70vh] items-center justify-center p-4">
-          <ErrorState
-            title={t("common.error")}
-            description={t("common.retry")}
-            onRetry={() => refetch()}
-          />
-        </div>
-        <BottomNav />
-      </div>
-    );
-  }
 
   const currentSlide = HERO_SLIDES[slideIndex];
   const settings = data.settings;
@@ -375,9 +348,7 @@ function HomePage() {
                 >
                   <Gift className="h-4 w-4" />
                   <span>
-                    {data.dailyReward.claimed
-                      ? t("home.claimedDaily")
-                      : `${t("home.claimDaily")} ${money(data.dailyReward.amount)}`}
+                    {data.dailyReward.claimed ? t("home.claimedDaily") : t("home.claimDaily")}
                   </span>
                 </button>
               </div>

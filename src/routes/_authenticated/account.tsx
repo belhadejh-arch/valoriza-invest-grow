@@ -27,6 +27,7 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getAccountData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
+import { getMockAccountData } from "@/lib/mock-data";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 
@@ -59,9 +60,10 @@ function AccountPage() {
   const fetchAccount = useServerFn(getAccountData);
   const claimDaily = useServerFn(claimDailyLoginReward);
 
-  const { data, isLoading } = useQuery({
+  const { data = getMockAccountData() } = useQuery({
     queryKey: ["account"],
     queryFn: () => fetchAccount(),
+    initialData: getMockAccountData,
   });
 
   const claimMutation = useMutation({
@@ -122,15 +124,8 @@ function AccountPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {isLoading || !data ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
-            <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>
-          </div>
-        ) : (
-          <>
-            {/* Top Bento Section (2 Columns on desktop) */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-stretch">
+        {/* Top Bento Section (2 Columns on desktop) */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6 items-stretch">
               {/* Profile Card */}
               <section className="md:col-span-6 surface-card glow-border p-6 rounded-3xl relative overflow-hidden flex flex-col justify-between text-start">
                 <div className="absolute -top-12 -left-12 h-36 w-36 rounded-full bg-cyan-glow/10 blur-2xl pointer-events-none" />
@@ -359,13 +354,13 @@ function AccountPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">SSL / TLS:</span>
-                    <span className="font-black text-success">256-bit Encrypted</span>
+                    <span className="font-black text-success">
+                      {isRTL ? "تشفير مالي آمن 256 بت" : "256-bit Encrypted"}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-          </>
-        )}
       </main>
 
       {/* Change Password Modal */}

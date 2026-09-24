@@ -22,6 +22,7 @@ import {
   type TaskItem,
   type TasksPageData,
 } from "@/lib/valoriza-tasks.functions";
+import { getMockTasksData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
@@ -54,10 +55,10 @@ function TasksPage() {
   const [secondsRemaining, setSecondsRemaining] = useState(10);
   const [watchedSeconds, setWatchedSeconds] = useState(0);
 
-  const { data, isLoading } = useQuery<TasksPageData>({
+  const { data = (getMockTasksData() as TasksPageData) } = useQuery<TasksPageData>({
     queryKey: ["tasks-data"],
     queryFn: () => getTasksData(),
-    staleTime: 5000,
+    initialData: getMockTasksData as any,
   });
 
   const completeMutation = useMutation({
@@ -231,7 +232,9 @@ function TasksPage() {
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
                   {t("invest.duration")}
                 </p>
-                <p className="mt-0.5 text-sm font-black text-primary-foreground">{durationSec}s</p>
+                <p className="mt-0.5 text-sm font-black text-primary-foreground">
+                  {durationSec} {isRTL ? "ثوانٍ" : "s"}
+                </p>
               </div>
             </div>
           </div>
@@ -241,14 +244,8 @@ function TasksPage() {
         </div>
 
         {/* Task Cards List (Bento-Grid 1-3 Columns) */}
-        {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
-            <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {tasksList.map((task) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {tasksList.map((task) => (
               <div
                 key={task.id}
                 id={`task-card-${task.id}`}
@@ -349,7 +346,6 @@ function TasksPage() {
               </div>
             ))}
           </div>
-        )}
 
         {/* Helpful Rules Section */}
         <div className="rounded-3xl surface-card glow-border p-5 text-start text-xs space-y-2">
@@ -413,7 +409,7 @@ function TasksPage() {
               <div className="absolute top-2.5 right-2.5 rtl:right-auto rtl:left-2.5 z-10 flex items-center gap-1.5 rounded-full bg-black/80 backdrop-blur-md px-3 py-1 border border-cyan-glow/40 shadow-lg">
                 <Clock className="h-3.5 w-3.5 text-cyan-glow animate-spin" />
                 <span className="text-xs font-black text-white">
-                  {secondsRemaining > 0 ? `${secondsRemaining}s` : t("tasks.completed")}
+                  {secondsRemaining > 0 ? `${secondsRemaining} ${isRTL ? "ثوانٍ" : "s"}` : t("tasks.completed")}
                 </span>
               </div>
             </div>

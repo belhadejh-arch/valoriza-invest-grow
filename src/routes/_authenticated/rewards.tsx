@@ -20,6 +20,7 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getRewardsData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
+import { getMockRewardsData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
@@ -45,7 +46,11 @@ function RewardsPage() {
   const claim = useServerFn(claimDailyLoginReward);
   const [filter, setFilter] = useState<RewardSource>("all");
 
-  const { data, isLoading } = useQuery({ queryKey: ["rewards"], queryFn: () => fetchData() });
+  const { data = getMockRewardsData() } = useQuery({
+    queryKey: ["rewards"],
+    queryFn: () => fetchData(),
+    initialData: getMockRewardsData,
+  });
 
   const claimMutation = useMutation({
     mutationFn: () => claim(),
@@ -125,14 +130,7 @@ function RewardsPage() {
       <AppHeader balance={data?.balance} showAbout={true} />
 
       <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {isLoading || !data ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
-            <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>
-          </div>
-        ) : (
-          <>
-            {/* Top Bento Section (2 Columns on desktop) */}
+        {/* Top Bento Section (2 Columns on desktop) */}
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
               {/* Total Rewards Hero Card */}
               <section className="md:col-span-7 surface-card glow-border relative overflow-hidden p-6 rounded-3xl flex flex-col justify-between text-start shadow-xl">
@@ -303,8 +301,6 @@ function RewardsPage() {
                 </div>
               )}
             </div>
-          </>
-        )}
       </main>
       <BottomNav />
     </div>

@@ -1,5 +1,5 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import { buildApiUrl } from "./backend-client";
+import { buildApiUrl, hasConfiguredBackend } from "./backend-client";
 import { routeFallbackResponse } from "./mock-data";
 
 const getIncomingRequest = createServerOnlyFn(async () => {
@@ -8,6 +8,11 @@ const getIncomingRequest = createServerOnlyFn(async () => {
 });
 
 export async function serverBackendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // If no external backend configured, immediately return rich fallback data
+  if (!hasConfiguredBackend()) {
+    return routeFallbackResponse(path, init) as T;
+  }
+
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
   const request = await getIncomingRequest();

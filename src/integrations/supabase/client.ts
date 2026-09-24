@@ -1,4 +1,4 @@
-import { buildApiUrl, getStoredToken, setStoredToken } from "@/lib/backend-client";
+import { buildApiUrl, getStoredToken, setStoredToken, hasConfiguredBackend } from "@/lib/backend-client";
 
 export type AuthUser = {
   id: string;
@@ -63,6 +63,10 @@ async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<{ data: T | null; error: Error | null }> {
+  if (!hasConfiguredBackend()) {
+    return { data: null, error: new Error("OFFLINE_LOCAL") };
+  }
+
   try {
     const url = buildApiUrl(path);
     const headers = new Headers(init.headers);
@@ -111,32 +115,41 @@ async function request<T>(
 
 const auth = {
   async getSession() {
-    // Try remote session first if available
-    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
-    if (!result.error && result.data?.session?.user) {
-      setLocalCurrentUser(result.data.session.user);
-      return { data: result.data, error: null };
-    }
-
-    // Local fallback
+    // Local session first for zero-latency instant navigation
     const localUser = getLocalCurrentUser();
     if (localUser) {
       return { data: { session: { user: localUser } }, error: null };
+    }
+
+    // Try remote session if configured
+    if (hasConfiguredBackend()) {
+      const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+      if (!result.error && result.data?.session?.user) {
+        setLocalCurrentUser(result.data.session.user);
+        return { data: result.data, error: null };
+      }
     }
 
     return { data: { session: null }, error: null };
   },
 
   async getUser() {
-    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
-    if (!result.error && result.data?.session?.user) {
-      setLocalCurrentUser(result.data.session.user);
-      return { data: { user: result.data.session.user }, error: null };
+    // Local user first for zero-latency instant navigation
+    const localUser = getLocalCurrentUser();
+    if (localUser) {
+      return { data: { user: localUser }, error: null };
     }
 
-    // Local fallback
-    const localUser = getLocalCurrentUser();
-    return { data: { user: localUser }, error: null };
+    // Try remote session if configured
+    if (hasConfiguredBackend()) {
+      const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+      if (!result.error && result.data?.session?.user) {
+        setLocalCurrentUser(result.data.session.user);
+        return { data: { user: result.data.session.user }, error: null };
+      }
+    }
+
+    return { data: { user: null }, error: null };
   },
 
   async signInWithPassword(input: { email: string; password: string }) {

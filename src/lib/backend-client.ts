@@ -1,3 +1,15 @@
+export function hasConfiguredBackend(): boolean {
+  const configured =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
+    (typeof process !== "undefined"
+      ? process.env?.BACKEND_URL || process.env?.VITE_BACKEND_URL
+      : undefined);
+
+  if (!configured || typeof configured !== "string") return false;
+  if (configured.includes("your-backend.onrender.com") || configured.includes("example.com")) return false;
+  return configured.startsWith("http://") || configured.startsWith("https://");
+}
+
 export function backendBaseUrl(): string {
   const configured =
     (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
@@ -5,7 +17,7 @@ export function backendBaseUrl(): string {
       ? process.env?.BACKEND_URL || process.env?.VITE_BACKEND_URL
       : undefined);
 
-  if (configured) {
+  if (configured && typeof configured === "string" && hasConfiguredBackend()) {
     // Strip trailing slash and trailing /api if present so URL building is deterministic
     return String(configured)
       .replace(/\/+$/, "")
@@ -58,6 +70,11 @@ export function setStoredToken(token: string | null): void {
 import { routeFallbackResponse } from "./mock-data";
 
 export async function backendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // If no external backend configured, immediately return rich fallback response with zero network latency
+  if (!hasConfiguredBackend()) {
+    return routeFallbackResponse(path, init) as T;
+  }
+
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");

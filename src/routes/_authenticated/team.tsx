@@ -19,6 +19,7 @@ import {
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getTeamData } from "@/lib/valoriza-pages.functions";
+import { getMockTeamData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/team")({
@@ -45,7 +46,11 @@ function TeamPage() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | null>(null);
 
   const fetchData = useServerFn(getTeamData);
-  const { data, isLoading } = useQuery({ queryKey: ["team"], queryFn: () => fetchData() });
+  const { data = getMockTeamData() } = useQuery({
+    queryKey: ["team"],
+    queryFn: () => fetchData(),
+    initialData: getMockTeamData,
+  });
 
   const referralCode = data?.referralCode || "";
   const origin = typeof window !== "undefined" ? window.location.origin : "";
@@ -101,15 +106,8 @@ function TeamPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {isLoading || !data ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-3">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
-            <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>
-          </div>
-        ) : (
-          <>
-            {/* Team Hero Section (Responsive 2-column on desktop) */}
-            <section className="surface-card glow-border p-5 sm:p-6 lg:p-8 rounded-3xl relative overflow-hidden">
+        {/* Team Hero Section (Responsive 2-column on desktop) */}
+        <section className="surface-card glow-border p-5 sm:p-6 lg:p-8 rounded-3xl relative overflow-hidden">
               <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-cyan-glow/10 blur-3xl pointer-events-none" />
               <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-gold/10 blur-3xl pointer-events-none" />
 
@@ -277,7 +275,7 @@ function TeamPage() {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-black text-foreground text-sm sm:text-base">
-                          {t("status.active", "Level")} {lvl.level}
+                          {t("team.level")} {lvl.level}
                         </span>
                         <span className="rounded-full bg-gold/20 border border-gold/40 px-2.5 py-0.5 text-xs font-black text-gold">
                           {rate}
@@ -314,7 +312,7 @@ function TeamPage() {
                   <span>
                     {t("team.teamMembers")}{" "}
                     {selectedLevelFilter !== null
-                      ? `(${t("status.active", "Level")} ${selectedLevelFilter})`
+                      ? `(${t("team.level")} ${selectedLevelFilter})`
                       : `(${data.totalMembers})`}
                   </span>
                 </h2>
@@ -342,7 +340,7 @@ function TeamPage() {
                         <div className="min-w-0">
                           <p className="font-black text-foreground truncate">{m.email}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">
-                            Level {m.level} • {levelPercentages[m.level]}
+                            {t("team.level")} {m.level} • {levelPercentages[m.level]}
                           </p>
                         </div>
                       </div>
@@ -355,8 +353,6 @@ function TeamPage() {
                 </div>
               )}
             </section>
-          </>
-        )}
       </main>
 
       <BottomNav />

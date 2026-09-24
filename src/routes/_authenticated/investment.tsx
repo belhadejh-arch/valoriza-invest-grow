@@ -28,6 +28,7 @@ import {
   purchaseVip,
   investInSavingsFund,
 } from "@/lib/valoriza-pages.functions";
+import { getMockInvestmentData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/investment")({
@@ -59,9 +60,10 @@ function InvestmentPage() {
   const buy = useServerFn(purchaseVip);
   const invest = useServerFn(investInSavingsFund);
 
-  const { data, isLoading } = useQuery({
+  const { data = getMockInvestmentData() } = useQuery({
     queryKey: ["investment"],
     queryFn: () => fetchData(),
+    initialData: getMockInvestmentData,
   });
 
   const balance = data?.wallet?.balance ?? 0;
@@ -162,12 +164,8 @@ function InvestmentPage() {
       <AppHeader />
 
       <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4 space-y-4">
-        {isLoading || !data ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">{t("common.loading")}</p>
-        ) : (
-          <>
-            {/* Wallet Snapshot Banner */}
-            <section className="surface-card glow-border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+        {/* Wallet Snapshot Banner */}
+        <section className="surface-card glow-border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gold/15 text-gold border border-gold/30 shadow-gold-glow">
                   <Wallet className="h-5 w-5" />
@@ -485,8 +483,6 @@ function InvestmentPage() {
                 </div>
               </div>
             )}
-          </>
-        )}
       </main>
 
       {/* Real Investment Modal Flow for Savings Fund */}

@@ -141,11 +141,6 @@ function AuthPage() {
     }
   }
 
-  const fillAdmin = () => {
-    setMode("login");
-    setForm((f) => ({ ...f, email: "admin@valoriza.com", password: "ValorizaAdmin2025!" }));
-  };
-
   return (
     <div
       id="auth-screen-container"
@@ -313,7 +308,7 @@ function AuthPage() {
               </form>
 
               {/* Mode Switch Button */}
-              <div className="mt-3 sm:mt-4 text-center text-xs text-muted-foreground border-t border-border/50 pt-2.5 space-y-2">
+              <div className="mt-3 sm:mt-4 text-center text-xs text-muted-foreground border-t border-border/50 pt-2.5">
                 <div>
                   <span>{mode === "login" ? t("auth.noAccount") : t("auth.hasAccount")}</span>{" "}
                   <button
@@ -325,15 +320,6 @@ function AuthPage() {
                     {mode === "login" ? t("auth.switchRegister") : t("auth.switchLogin")}
                   </button>
                 </div>
-                {mode === "login" && (
-                  <button
-                    type="button"
-                    onClick={fillAdmin}
-                    className="text-[11px] text-cyan-400/80 hover:text-cyan-300 underline underline-offset-2 transition-colors block mx-auto"
-                  >
-                    🔑 ملء بيانات حساب المشرف (Admin)
-                  </button>
-                )}
               </div>
             </div>
 

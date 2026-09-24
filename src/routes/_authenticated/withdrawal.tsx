@@ -25,6 +25,7 @@ import {
   requestWithdrawal,
   getUserFinancialRecords,
 } from "@/lib/valoriza-pages.functions";
+import { getMockWithdrawalData, getMockRecordsData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/withdrawal")({
@@ -53,14 +54,16 @@ function WithdrawalPage() {
   const bindAddressFn = useServerFn(bindWithdrawalAddress);
   const submitWithdrawalFn = useServerFn(requestWithdrawal);
 
-  const { data: info, isLoading: infoLoading } = useQuery({
+  const { data: info = getMockWithdrawalData() } = useQuery({
     queryKey: ["withdrawal-info"],
     queryFn: () => fetchWithdrawalInfo(),
+    initialData: getMockWithdrawalData,
   });
 
-  const { data: recordsData } = useQuery({
+  const { data: recordsData = getMockRecordsData() } = useQuery({
     queryKey: ["financial-records"],
     queryFn: () => fetchRecords(),
+    initialData: getMockRecordsData,
   });
 
   const balance = info?.balance ?? 0;
@@ -178,7 +181,7 @@ function WithdrawalPage() {
           <div className="flex items-center gap-1.5 text-xs font-black text-gold">
             <Wallet className="h-4 w-4" />
             <span>
-              {t("home.accountBalance")}: {infoLoading ? "..." : money(balance)}
+              {t("home.accountBalance")}: {money(balance)}
             </span>
           </div>
         </div>
