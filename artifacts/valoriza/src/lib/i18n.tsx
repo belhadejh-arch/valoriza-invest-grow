@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { coreTranslations } from "./locales/core";
@@ -553,7 +553,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const dir = currentLanguage.dir;
   const isRTL = dir === "rtl";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof document === "undefined") return;
     document.documentElement.lang = lang;
     document.documentElement.dir = dir;
