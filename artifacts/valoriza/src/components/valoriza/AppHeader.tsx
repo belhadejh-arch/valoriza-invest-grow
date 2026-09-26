@@ -12,7 +12,6 @@ import {
   Info,
   LogOut,
   Menu,
-  ShieldCheck,
   TrendingUp,
   User,
   Users,
@@ -167,16 +166,6 @@ export function AppHeader({
               <span>{t("nav.rewards")}</span>
             </Link>
 
-            <Link
-              to="/admin"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-300 hover:bg-surface transition-all border border-amber-500/25 bg-amber-500/5"
-              activeProps={{
-                className: "bg-surface text-amber-300 font-black border-b-2 border-amber-400",
-              }}
-            >
-              <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
-              <span>{t("nav.admin")}</span>
-            </Link>
           </nav>
 
           {/* Right Side Controls: Balance snapshot (desktop), VIP, Theme, Language, Notifications */}
@@ -407,18 +396,6 @@ export function AppHeader({
                 >
                   <Video className="h-4 w-4 text-purple-400" />
                   {t("nav.tasks")}
-                </Link>
-
-                <Link
-                  to="/admin"
-                  onClick={() => setDrawerOpen(false)}
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-300 hover:bg-surface transition-colors border border-amber-500/20 bg-amber-500/5"
-                  activeProps={{
-                    className: "bg-surface text-amber-300 border-s-2 border-amber-400",
-                  }}
-                >
-                  <ShieldCheck className="h-4 w-4 text-amber-400" />
-                  {t("nav.admin")}
                 </Link>
 
                 <button

@@ -32,13 +32,20 @@ export const Route = createFileRoute("/_authenticated/deposit")({
 
 type NetworkType = "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20";
 
+class DepositFlowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DepositFlowError";
+  }
+}
+
 function DepositPage() {
   const { t, isRTL } = useI18n();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [network, setNetwork] = useState<NetworkType>("USDT-ERC20");
+  const [network, setNetwork] = useState<NetworkType | null>(null);
   const [amount, setAmount] = useState<string>("");
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
@@ -52,12 +59,23 @@ function DepositPage() {
     queryFn: () => fetchSettings(),
   });
 
-  const currentAddress =
-    configData?.settings?.[`deposit_address_${network.replace("USDT-", "")}`] ?? "";
-  const addressDisplay = currentAddress || (isConfigLoading ? t("common.loading") : t("common.error"));
+  const currentAddress = network
+    ? configData?.settings?.[`deposit_address_${network.replace("USDT-", "")}`] ?? ""
+    : "";
+  const addressDisplay = !network
+    ? t("deposit.selectNetworkPrompt")
+    : currentAddress
+      ? currentAddress
+      : isConfigLoading
+        ? t("common.loading")
+        : t("deposit.addressNotConfigured");
   const minDeposit = Number(configData?.settings?.["min_deposit"] ?? "10");
 
   const copyAddress = async () => {
+    if (!currentAddress) {
+      toast.error(t("deposit.selectConfiguredAddressToCopy"));
+      return;
+    }
     try {
       await navigator.clipboard.writeText(currentAddress);
       setCopied(true);
@@ -74,11 +92,13 @@ function DepositPage() {
 
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       toast.error(t("deposit.invalidImage"));
+      e.target.value = "";
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
       toast.error(t("deposit.fileTooLarge"));
+      e.target.value = "";
       return;
     }
 
@@ -99,39 +119,84 @@ function DepositPage() {
 
   const depositMutation = useMutation({
     mutationFn: async (vals: { network: NetworkType; amount: number; file: File }) => {
-      const upload = await backendRequest<{
+      let upload: {
+        proofId?: string;
         uploadURL?: string;
-        uploadUrl?: string;
-        signedUrl?: string;
         objectPath?: string;
-      }>("/api/app/deposit-proof/upload-url", {
-        method: "POST",
-        body: JSON.stringify({
-          name: vals.file.name,
-          size: vals.file.size,
-          contentType: vals.file.type,
-        }),
-      });
-      const uploadURL = upload.uploadURL ?? upload.uploadUrl ?? upload.signedUrl;
-      if (!uploadURL || !upload.objectPath) {
-        throw new Error("Deposit proof upload URL response is incomplete");
+      };
+      try {
+        upload = await backendRequest("/api/app/deposit-proof/upload-url", {
+          method: "POST",
+          body: JSON.stringify({
+            name: vals.file.name,
+            size: vals.file.size,
+            contentType: vals.file.type,
+          }),
+        });
+      } catch (error) {
+        const status =
+          error instanceof Error
+            ? error.message.match(/API request failed: (\d{3})/)?.[1]
+            : null;
+        throw new DepositFlowError(
+          status
+            ? t("deposit.uploadLinkServerError", undefined, { status })
+            : t("deposit.uploadLinkConnectionError"),
+        );
       }
-      const uploadResponse = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": vals.file.type },
-        body: vals.file,
-      });
+
+      if (
+        typeof upload.proofId !== "string" ||
+        !upload.proofId ||
+        typeof upload.uploadURL !== "string" ||
+        !upload.uploadURL ||
+        typeof upload.objectPath !== "string" ||
+        !upload.objectPath
+      ) {
+        throw new DepositFlowError(
+          t("deposit.incompleteUploadDetails"),
+        );
+      }
+
+      let uploadResponse: Response;
+      try {
+        uploadResponse = await fetch(upload.uploadURL, {
+          method: "PUT",
+          headers: { "Content-Type": vals.file.type },
+          body: vals.file,
+        });
+      } catch {
+        throw new DepositFlowError(
+          t("deposit.imageUploadConnectionError"),
+        );
+      }
       if (!uploadResponse.ok) {
-        throw new Error(`Deposit proof upload failed: ${uploadResponse.status}`);
+        throw new DepositFlowError(
+          t("deposit.imageUploadServerError", undefined, { status: uploadResponse.status }),
+        );
       }
-      return backendRequest("/api/app/deposit", {
-        method: "POST",
-        body: JSON.stringify({
-          network: vals.network,
-          amount: vals.amount,
-          objectPath: upload.objectPath,
-        }),
-      });
+
+      try {
+        return await backendRequest("/api/app/deposit", {
+          method: "POST",
+          body: JSON.stringify({
+            network: vals.network,
+            amount: vals.amount,
+            proofId: upload.proofId,
+            objectPath: upload.objectPath,
+          }),
+        });
+      } catch (error) {
+        const status =
+          error instanceof Error
+            ? error.message.match(/API request failed: (\d{3})/)?.[1]
+            : null;
+        throw new DepositFlowError(
+          status
+            ? t("deposit.depositServerError", undefined, { status })
+            : t("deposit.depositConnectionError"),
+        );
+      }
     },
     onSuccess: (res: any) => {
       if (res.ok) {
@@ -151,16 +216,28 @@ function DepositPage() {
         toast.error(t("deposit.uploadHint"));
       } else if (res.reason === "BELOW_MIN_DEPOSIT") {
         toast.error(`${t("deposit.minNotice")} (${minDeposit}$)`);
+      } else if (res.reason) {
+        toast.error(t("deposit.requestRejectedReason", undefined, { reason: res.reason }));
       } else {
-        toast.error(t("common.error"));
+        toast.error(t("deposit.requestRejected"));
       }
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (error) =>
+      toast.error(
+        error instanceof DepositFlowError
+          ? error.message
+          : t("deposit.unexpectedSubmitError"),
+      ),
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseFloat(amount);
+
+    if (!network) {
+      toast.error(t("deposit.chooseNetworkBeforeSubmit"));
+      return;
+    }
 
     if (isNaN(num) || num < minDeposit) {
       toast.error(`${t("deposit.minNotice")} (${minDeposit}$)`);
@@ -175,8 +252,19 @@ function DepositPage() {
       toast.error(t("deposit.uploadHint"));
       return;
     }
+    if (
+      !["image/jpeg", "image/png", "image/webp"].includes(screenshotFile.type) ||
+      screenshotFile.size > 5 * 1024 * 1024
+    ) {
+      toast.error(
+        screenshotFile.size > 5 * 1024 * 1024
+          ? t("deposit.fileTooLarge")
+          : t("deposit.invalidImage"),
+      );
+      return;
+    }
     if (!currentAddress) {
-      toast.error(t("common.error"));
+      toast.error(t("deposit.addressNotConfigured"));
       return;
     }
 
@@ -238,6 +326,7 @@ function DepositPage() {
                       key={item.key}
                       type="button"
                       onClick={() => setNetwork(item.key)}
+                      aria-pressed={isSelected}
                       className={`relative flex flex-col items-center justify-center p-3.5 rounded-2xl border transition-all cursor-pointer ${
                         isSelected
                           ? "border-cyan-glow bg-surface shadow-glow ring-1 ring-cyan-glow/50"
@@ -282,7 +371,8 @@ function DepositPage() {
                 <button
                   type="button"
                   onClick={copyAddress}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-black shadow-glow active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+                  disabled={!currentAddress}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-black shadow-glow active:scale-95 transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   <span>{copied ? t("deposit.copied") : t("deposit.copyAddress")}</span>
@@ -291,8 +381,9 @@ function DepositPage() {
 
               <button
                 type="button"
-                onClick={() => setShowQrModal(!showQrModal)}
-                className="flex items-center justify-center gap-2 w-full text-center text-xs font-bold text-cyan-glow hover:underline cursor-pointer pt-1"
+                onClick={() => currentAddress && setShowQrModal(!showQrModal)}
+                disabled={!currentAddress}
+                className="flex items-center justify-center gap-2 w-full text-center text-xs font-bold text-cyan-glow hover:underline disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer pt-1"
               >
                 <QrCode className="h-4 w-4" />
                 <span>{t("deposit.scanQr")}</span>
@@ -407,7 +498,9 @@ function DepositPage() {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={depositMutation.isPending || !screenshotFile || !amount || !currentAddress}
+                disabled={
+                  depositMutation.isPending || !network || !screenshotFile || !amount || !currentAddress
+                }
                 className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl text-sm font-black text-primary-foreground brand-gradient shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all cursor-pointer"
               >
                 <Send className="h-4 w-4 rtl:rotate-180" />
@@ -465,7 +558,9 @@ function DepositPage() {
               ) : (
                 <p className="text-xs text-danger">{addressDisplay}</p>
               )}
-              <p className="text-xs font-mono text-muted-foreground font-bold">{network}</p>
+              {network && (
+                <p className="text-xs font-mono text-muted-foreground font-bold">{network}</p>
+              )}
             </div>
           </div>
         </div>

@@ -1,9 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { logger } from "../lib/logger.js";
 import { pool, query, withTransaction } from "./db.js";
 import {
@@ -11,10 +8,16 @@ import {
   createSession,
   getAuthUser,
   hashPassword,
-  requireAdmin,
   requireAuth,
   verifyPassword,
 } from "./auth.js";
+import {
+  createAdminSession,
+  destroyAdminSession,
+  getAdminAccount,
+  requireAdminAccount,
+  revokeOtherAdminSessions,
+} from "./admin-auth.js";
 import {
   createDepositProofReadUrl,
   createDepositProofUpload,
@@ -211,6 +214,9 @@ app.post("/api/auth/login", async (request, response, next) => {
     if (!row || !(await verifyPassword(String(password ?? ""), row.password_hash))) {
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
+    // Legacy administrator customer records are retained for financial history,
+    // but can no longer create customer sessions.
+    if (row.role === "admin") return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
     const token = await createSession(row.id, response);
     return response.json({
@@ -295,6 +301,10 @@ async function userRoute(
 ) {
   try {
     const user = await requireAuth(request);
+    if (user.role === "admin") {
+      response.status(403).json({ message: "ADMIN_LOGIN_ONLY" });
+      return;
+    }
     await ensureUserRows(user.id);
     (request as express.Request & { authUser: typeof user }).authUser = user;
     next();
@@ -829,7 +839,8 @@ app.get("/api/public/about", async (_request, response, next) => {
       ),
       query<{ members_count: string; funds_count: string }>(
         `SELECT
-           (SELECT COUNT(*)::text FROM users) AS members_count,
+           (SELECT COUNT(*)::text FROM users u WHERE NOT EXISTS
+             (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')) AS members_count,
            (SELECT COUNT(*)::text FROM investment_funds WHERE is_active=true) AS funds_count`,
       ),
     ]);
@@ -1228,20 +1239,113 @@ app.post("/api/app/notifications/read", async (request, response, next) => {
   }
 });
 
-app.use("/api/admin", async (request, _response, next) => {
+const adminLoginAttempts = new Map<string, { count: number; expiresAt: number }>();
+
+app.post("/api/admin/auth/login", async (request, response, next) => {
   try {
-    const user = await requireAdmin(request);
-    (request as express.Request & { authUser: typeof user }).authUser = user;
+    const email = String(request.body?.email ?? "").trim().toLowerCase();
+    const password = String(request.body?.password ?? "");
+    if (!email.includes("@") || !password || email.length > 254)
+      return response.status(401).json({ message: "INVALID_CREDENTIALS" });
+    const key = `${request.ip}:${email}`;
+    const now = Date.now();
+    const previous = adminLoginAttempts.get(key);
+    const attempts = previous && previous.expiresAt > now ? previous : { count: 0, expiresAt: now + 15 * 60_000 };
+    if (attempts.count >= 5)
+      return response.status(429).json({ message: "TOO_MANY_ATTEMPTS" });
+    const result = await query<{ id: string; email: string; password_hash: string }>(
+      "SELECT id,email,password_hash FROM admin_accounts WHERE lower(email)=$1 AND is_active=true",
+      [email],
+    );
+    const admin = result.rows[0];
+    if (!admin || !(await verifyPassword(password, admin.password_hash))) {
+      adminLoginAttempts.set(key, { count: attempts.count + 1, expiresAt: attempts.expiresAt });
+      return response.status(401).json({ message: "INVALID_CREDENTIALS" });
+    }
+    adminLoginAttempts.delete(key);
+    await createAdminSession(admin.id, response);
+    return response.json({ ok: true, admin: { id: admin.id, email: admin.email } });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.get("/api/admin/auth/session", async (request, response, next) => {
+  try {
+    response.set("Cache-Control", "no-store");
+    return response.json({ admin: await getAdminAccount(request) });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/admin/auth/logout", async (request, response, next) => {
+  try {
+    await destroyAdminSession(request, response);
+    return response.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.use("/api/admin", async (request, response, next) => {
+  try {
+    response.set("Cache-Control", "no-store");
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      const origin = request.get("origin");
+      const host = request.get("x-forwarded-host") || request.get("host");
+      if (origin && (!host || new URL(origin).host !== host)) {
+        response.status(403).json({ message: "INVALID_ADMIN_ORIGIN" });
+        return;
+      }
+    }
+    const admin = await requireAdminAccount(request);
+    (request as express.Request & { authUser: typeof admin }).authUser = admin;
     next();
   } catch (error) {
     next(error);
   }
 });
 
+app.post("/api/admin/auth/password", async (request, response, next) => {
+  try {
+    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
+    const { currentPassword, newPassword } = request.body ?? {};
+    if (
+      typeof currentPassword !== "string" ||
+      typeof newPassword !== "string" ||
+      newPassword.length < 12 ||
+      newPassword.length > 128
+    ) {
+      return response.status(400).json({ message: "INVALID_ADMIN_PASSWORD" });
+    }
+    const row = await query<{ password_hash: string }>(
+      "SELECT password_hash FROM admin_accounts WHERE id=$1 AND is_active=true",
+      [admin.id],
+    );
+    if (!row.rowCount || !(await verifyPassword(currentPassword, row.rows[0].password_hash))) {
+      return response.status(401).json({ message: "INVALID_CREDENTIALS" });
+    }
+    await query("UPDATE admin_accounts SET password_hash=$1 WHERE id=$2", [
+      await hashPassword(newPassword),
+      admin.id,
+    ]);
+    await revokeOtherAdminSessions(request, admin.id);
+    return response.json({ ok: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get("/api/admin/overview", async (request, response, next) => {
   try {
     const [users, deposits, withdrawals, investments, tasks] = await Promise.all([
-      query("SELECT count(*)::int AS count FROM users"),
+      query(
+        `SELECT count(*)::int AS count, coalesce(sum(w.balance),0) AS balance,
+                coalesce(sum(w.total_deposited),0) AS deposited
+         FROM users u LEFT JOIN wallets w ON w.user_id=u.id
+         WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')`,
+      ),
       query(
         "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM deposits WHERE status='pending'",
       ),
@@ -1255,6 +1359,9 @@ app.get("/api/admin/overview", async (request, response, next) => {
     ]);
     response.json({
       usersCount: number(users.rows[0]?.count),
+      totalUsers: number(users.rows[0]?.count),
+      totalBalance: number(users.rows[0]?.balance),
+      totalDeposited: number(users.rows[0]?.deposited),
       pendingDepositsCount: number(deposits.rows[0]?.count),
       pendingDepositsAmount: number(deposits.rows[0]?.amount),
       pendingWithdrawalsCount: number(withdrawals.rows[0]?.count),
@@ -1262,6 +1369,7 @@ app.get("/api/admin/overview", async (request, response, next) => {
       activeInvestmentsCount: number(investments.rows[0]?.count),
       activeInvestmentsVolume: number(investments.rows[0]?.amount),
       taskCompletionsCount: number(tasks.rows[0]?.count),
+      totalTasksCompleted: number(tasks.rows[0]?.count),
     });
   } catch (error) {
     next(error);
@@ -1299,7 +1407,8 @@ app.get("/api/admin/users", async (request, response, next) => {
       query<{ total: string }>(
         `SELECT count(*)::text AS total
          FROM profiles p
-         WHERE $1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2`,
+         WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=p.id AND r.role='admin')
+           AND ($1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2)`,
         [search, searchPattern],
       ),
       query(
@@ -1308,7 +1417,8 @@ app.get("/api/admin/users", async (request, response, next) => {
                   w.balance,w.total_deposited,w.total_withdrawn,w.invested_balance,w.team_income
            FROM profiles p
            LEFT JOIN wallets w ON w.user_id=p.id
-           WHERE $1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2
+           WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=p.id AND r.role='admin')
+             AND ($1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2)
            ORDER BY p.created_at DESC,p.id DESC
            LIMIT $3 OFFSET $4
          ),
@@ -1361,7 +1471,7 @@ app.post("/api/admin/users/block", async (request, response, next) => {
       request.body?.userId,
     ]);
     await query(
-      "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
+      "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
       [
         admin.id,
         isBlocked ? "BLOCK_USER" : "UNBLOCK_USER",
@@ -1389,7 +1499,7 @@ app.post("/api/admin/users/vip", async (request, response, next) => {
       [targetUserId, `تم تحديث رتبتك إلى VIP ${vipLevel} من قبل إدارة المنصة.`],
     );
     await query(
-      "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,'SET_VIP_LEVEL',$2,$3)",
+      "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,'SET_VIP_LEVEL',$2,$3)",
       [admin.id, targetUserId, JSON.stringify({ vipLevel })],
     );
     response.json({ ok: true });
@@ -1407,7 +1517,7 @@ app.post("/api/admin/users/balance", async (request, response, next) => {
     const result = await withTransaction(async (client) => {
       const balance = await changeBalance(client, targetUserId, amount, "admin_adjustment", reason);
       await client.query(
-        "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,'ADJUST_BALANCE',$2,$3)",
+        "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,'ADJUST_BALANCE',$2,$3)",
         [admin.id, targetUserId, JSON.stringify({ amount, reason })],
       );
       return { ok: true, balance };
@@ -1522,11 +1632,11 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
         }
       }
       await client.query(
-        "UPDATE deposits SET status=$1,reject_reason=$2,reviewed_at=now(),reviewed_by=$3 WHERE id=$4",
+        "UPDATE deposits SET status=$1,reject_reason=$2,reviewed_at=now(),reviewed_by_admin_account_id=$3 WHERE id=$4",
         [status, rejectReason ?? null, admin.id, depositId],
       );
       await client.query(
-        "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
+        "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
         [
           admin.id,
           status === "approved" ? "APPROVE_DEPOSIT" : "REJECT_DEPOSIT",
@@ -1595,7 +1705,7 @@ app.post("/api/admin/withdrawals/review", async (request, response, next) => {
         );
       }
       await client.query(
-        "UPDATE withdrawals SET status=$1,reject_reason=$2,reviewed_at=now(),reviewed_by=$3 WHERE id=$4",
+        "UPDATE withdrawals SET status=$1,reject_reason=$2,reviewed_at=now(),reviewed_by_admin_account_id=$3 WHERE id=$4",
         [
           action === "approve" ? "approved" : "rejected",
           rejectReason ?? null,
@@ -1604,7 +1714,7 @@ app.post("/api/admin/withdrawals/review", async (request, response, next) => {
         ],
       );
       await client.query(
-        "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
+        "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,$2,$3,$4)",
         [
           admin.id,
           action === "approve" ? "APPROVE_WITHDRAWAL" : "REJECT_WITHDRAWAL",
@@ -1975,7 +2085,7 @@ app.post("/api/admin/notifications", async (request, response, next) => {
   try {
     const data = request.body ?? {};
     const result = await query(
-      "INSERT INTO notifications (user_id,title_ar,body_ar,link) SELECT id,$1,$2,$3 FROM users",
+      "INSERT INTO notifications (user_id,title_ar,body_ar,link) SELECT u.id,$1,$2,$3 FROM users u WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')",
       [data.title, data.message, data.actionUrl ?? null],
     );
     response.json({ ok: true, sentCount: result.rowCount ?? 0 });
@@ -1987,7 +2097,12 @@ app.post("/api/admin/notifications", async (request, response, next) => {
 app.get("/api/admin/audit-logs", async (_request, response, next) => {
   try {
     const result = await query(
-      "SELECT a.id,a.action,a.target_user_id,a.details,a.created_at,u.email AS admin_email FROM admin_actions a JOIN users u ON u.id=a.admin_id ORDER BY a.created_at DESC LIMIT 100",
+      `SELECT a.id,a.action,a.target_user_id,a.details,a.created_at,
+              COALESCE(ac.email,u.email) AS admin_email
+       FROM admin_actions a
+       LEFT JOIN users u ON u.id=a.admin_id
+       LEFT JOIN admin_accounts ac ON ac.id=a.admin_account_id
+       ORDER BY a.created_at DESC LIMIT 100`,
     );
     response.json(
       result.rows.map((row) => ({
@@ -2015,204 +2130,6 @@ app.use(
       .json({ message: error instanceof Error ? error.message : "INTERNAL_SERVER_ERROR" });
   },
 );
-
-async function initDatabase() {
-  const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
-  if (!connectionString) {
-    console.warn(
-      "⚠️ No POSTGRES_URL or DATABASE_URL provided. Database features will be unavailable until configured.",
-    );
-    return;
-  }
-  try {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const sqlPath = path.resolve(here, "../migrations/001_init.sql");
-    try {
-      const sql = await fs.readFile(sqlPath, "utf8");
-      await query(sql);
-      console.log("✅ Database schema initialized from 001_init.sql");
-    } catch (migErr) {
-      console.warn("⚠️ Migration notice:", migErr);
-    }
-
-    // Ensure default primary admin user exists and is linked
-    const adminEmail = (process.env.ADMIN_EMAIL || "admin@valoriza.com").trim().toLowerCase();
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    const adminCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
-      adminEmail,
-    ]);
-    let adminId = adminCheck.rows[0]?.id;
-
-    if (!adminId && adminPassword) {
-      const adminHash = await hashPassword(adminPassword);
-      const res = await query<{ id: string }>(
-        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
-        [adminEmail, adminHash],
-      );
-      adminId = res.rows[0].id;
-      await query(
-        `INSERT INTO profiles (id, username, email, referral_code)
-         VALUES ($1, 'admin', $2, 'ADMIN')
-         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
-        [adminId, adminEmail],
-      );
-      await query(
-        "INSERT INTO wallets (user_id, balance) VALUES ($1, 1000) ON CONFLICT (user_id) DO NOTHING",
-        [adminId],
-      );
-      await query(
-        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
-        [adminId],
-      );
-      await query(
-        "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-        [adminId],
-      );
-      logger.info("Primary admin created");
-    } else if (adminId) {
-      await query(
-        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
-        [adminId],
-      );
-      await query(
-        "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-        [adminId],
-      );
-      logger.info("Primary admin verified");
-    } else {
-      logger.warn("Primary admin was not bootstrapped: set ADMIN_PASSWORD to create one");
-    }
-
-    // Ensure default user exists
-    const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();
-    const userPassword = process.env.USER_PASSWORD || "ValorizaUser2025!";
-    const userCheck = await query("SELECT id FROM users WHERE email = $1", [userEmail]);
-    if (!userCheck.rowCount) {
-      const userHash = await hashPassword(userPassword);
-      const res = await query<{ id: string }>(
-        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
-        [userEmail, userHash],
-      );
-      const uId = res.rows[0].id;
-      await query(
-        `INSERT INTO profiles (id, username, email, referral_code)
-         VALUES ($1, 'valoriza_user', $2, 'VALORIZAUSER')
-         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
-        [uId, userEmail],
-      );
-      await query(
-        "INSERT INTO wallets (user_id, balance) VALUES ($1, 100) ON CONFLICT (user_id) DO NOTHING",
-        [uId],
-      );
-      await query(
-        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'user') ON CONFLICT (user_id, role) DO NOTHING",
-        [uId],
-      );
-      console.log(`👤 Default user created: ${userEmail}`);
-    }
-
-    // Seed default investment funds if empty
-    const fundsCount = await query("SELECT count(*)::int as count FROM investment_funds");
-    if ((fundsCount.rows[0]?.count ?? 0) === 0) {
-      const funds = [
-        [
-          "MUMBAI",
-          "صندوق مومباي",
-          "MUMBAI FUND",
-          "استثمار ذكي .. لعوائد أسرع",
-          3,
-          3.08,
-          5,
-          "cyan",
-          1,
-        ],
-        [
-          "NEWMEXICO",
-          "صندوق نيو مكسيكو",
-          "NEW MEXICO FUND",
-          "فرص أكبر .. لمستقبل أكثر استقراراً",
-          10,
-          4.2,
-          5,
-          "blue",
-          2,
-        ],
-        ["GXR", "صندوق GXR", "GXR FUND", "استثمار عالمي .. بعوائد مستقرة", 30, 6.4, 5, "gold", 3],
-        [
-          "NBL",
-          "صندوق NBL",
-          "NBL FUND",
-          "نمو مستدام .. لثروتك المستقبلية",
-          160,
-          10.8,
-          5,
-          "purple",
-          4,
-        ],
-      ];
-      for (const fund of funds) {
-        await query(
-          `INSERT INTO investment_funds (code, name_ar, name_en, tagline_ar, duration_days, profit_percent, min_amount, accent, sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (code) DO NOTHING`,
-          fund,
-        );
-      }
-    }
-
-    // Seed default VIP packages if empty
-    const vipCount = await query("SELECT count(*)::int as count FROM vip_packages");
-    if ((vipCount.rows[0]?.count ?? 0) === 0) {
-      const vip = [
-        [1, "VIP 1", 13, 0.5, 2, 0.25, "green"],
-        [2, "VIP 2", 27, 1.2, 3, 0.4, "blue"],
-        [3, "VIP 3", 61, 2.9, 4, 0.725, "purple"],
-        [4, "VIP 4", 131, 6.4, 5, 1.28, "gold"],
-        [5, "VIP 5", 273, 13.5, 6, 2.25, "pink"],
-        [6, "VIP 6", 403, 20, 7, 2.857, "emerald"],
-        [7, "VIP 7", 540, 26.85, 8, 3.356, "silver"],
-      ];
-      for (const plan of vip) {
-        await query(
-          `INSERT INTO vip_packages (level, name, price, daily_profit, daily_tasks, task_reward, accent)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (level) DO NOTHING`,
-          plan,
-        );
-      }
-    }
-
-    // Seed default platform settings if empty
-    const settingsCount = await query("SELECT count(*)::int as count FROM platform_settings");
-    if ((settingsCount.rows[0]?.count ?? 0) === 0) {
-      const settings: [string, string, string, boolean][] = [
-        ["min_deposit", "10", "الحد الأدنى للإيداع بالدولار", true],
-        ["min_withdrawal", "6", "الحد الأدنى للسحب بالدولار", true],
-        ["withdrawal_fee_percent", "10", "نسبة رسوم السحب", true],
-        ["withdrawal_start_hour", "09:00", "بداية وقت السحب", true],
-        ["withdrawal_end_hour", "16:00", "نهاية وقت السحب", true],
-        ["withdrawals_enabled", "true", "تفعيل السحب", true],
-        ["min_investment", "5", "الحد الأدنى للاستثمار", true],
-        ["daily_login_reward", "0.11", "مكافأة تسجيل الدخول اليومية", true],
-        ["referral_rate_l1", "8", "عمولة المستوى الأول", true],
-        ["referral_rate_l2", "4", "عمولة المستوى الثاني", true],
-        ["referral_rate_l3", "1", "عمولة المستوى الثالث", true],
-        ["daily_spins", "3", "فرص عجلة الحظ عند تفعيل VIP", true],
-        ["platform_timezone", "UTC", "المنطقة الزمنية للمنصة", true],
-        ["deposit_address_TRC20", "THT9uwaJnzjFXxjcq8mDfioEb4xNPjnGP6", "عنوان إيداع USDT TRC20", true],
-        ["deposit_address_ERC20", "0x2b84FD5e05E11148Bc600Df7060a506f3D0E682b", "عنوان إيداع USDT ERC20", true],
-        ["deposit_address_BEP20", "0x2b84FD5e05E11148Bc600Df7060a506f3D0E682b", "عنوان إيداع USDT BEP20", true],
-      ];
-      for (const setting of settings) {
-        await query(
-          `INSERT INTO platform_settings (key, value, description_ar, is_public)
-           VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,
-          setting,
-        );
-      }
-    }
-  } catch (err) {
-    console.error("❌ initDatabase error:", err);
-  }
-}
 
 // Schema is applied to development explicitly, never during startup.
 // No default financial values or accounts are inserted from the reference design.

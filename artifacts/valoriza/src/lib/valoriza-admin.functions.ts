@@ -64,6 +64,6 @@ export const saveAdminSettings = adminPost<Record<string, unknown>>("/api/admin/
 export const changeAdminPassword = adminPost<{
   currentPassword: string;
   newPassword: string;
-}>("/api/auth/password");
+}>("/api/admin/auth/password");
 export const broadcastNotification = adminPost<Record<string, unknown>>("/api/admin/notifications");
 export const getAdminAuditLogs = adminGet("/api/admin/audit-logs");

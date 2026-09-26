@@ -72,7 +72,8 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
        WHERE u.id = $1 AND s.token_hash = $2 AND s.expires_at > now()`,
       [payload.sub, hashToken(token)],
     );
-    return result.rows[0] ?? null;
+    const user = result.rows[0] ?? null;
+    return user?.role === "admin" ? null : user;
   } catch {
     return null;
   }
