@@ -1745,6 +1745,32 @@ app.get("/api/admin/funds", async (_request, response, next) => {
   }
 });
 
+app.post("/api/admin/funds/profit-rate", async (request, response, next) => {
+  try {
+    const { id, profitPercent } = request.body ?? {};
+    const rate = Number(profitPercent);
+    if (
+      typeof id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ||
+      (typeof profitPercent !== "number" && typeof profitPercent !== "string") ||
+      String(profitPercent).trim() === "" ||
+      !Number.isFinite(rate) ||
+      rate < 0 ||
+      rate > 9999.9999
+    ) {
+      return response.status(400).json({ message: "INVALID_FUND_PROFIT_RATE" });
+    }
+    const result = await query(
+      "UPDATE investment_funds SET profit_percent=$1 WHERE id=$2 RETURNING *",
+      [rate, id],
+    );
+    if (!result.rowCount) return response.status(404).json({ message: "FUND_NOT_FOUND" });
+    return response.json({ ok: true, fund: result.rows[0] });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.post("/api/admin/funds/save", async (request, response, next) => {
   try {
     const data = request.body ?? {};

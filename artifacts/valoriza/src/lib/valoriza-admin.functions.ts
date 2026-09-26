@@ -40,6 +40,9 @@ export const reviewWithdrawal = adminPost<{
 }>("/api/admin/withdrawals/review");
 export const getAdminFunds = adminGet("/api/admin/funds");
 export const saveInvestmentFund = adminPost<Record<string, unknown>>("/api/admin/funds/save");
+export const updateFundProfitRate = adminPost<{ id: string; profitPercent: number }>(
+  "/api/admin/funds/profit-rate",
+);
 export const getAdminVipPackages = adminGet("/api/admin/vip-packages");
 export type VipPackageSaveInput = {
   id?: string;

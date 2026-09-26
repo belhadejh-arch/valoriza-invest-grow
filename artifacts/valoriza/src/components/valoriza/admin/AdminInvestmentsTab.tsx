@@ -13,7 +13,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getAdminFunds, saveInvestmentFund } from "@/lib/valoriza-admin.functions";
+import { getAdminFunds, saveInvestmentFund, updateFundProfitRate } from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
@@ -23,6 +23,8 @@ export function AdminInvestmentsTab() {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingFund, setEditingFund] = useState<any | null>(null);
+  const [rateFund, setRateFund] = useState<any | null>(null);
+  const [newProfitRate, setNewProfitRate] = useState("");
 
   // Form State
   const [code, setCode] = useState("");
@@ -52,6 +54,19 @@ export function AdminInvestmentsTab() {
       queryClient.invalidateQueries({ queryKey: ["home"] });
       setModalOpen(false);
       resetForm();
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
+  const rateMutation = useMutation({
+    mutationFn: updateFundProfitRate,
+    onSuccess: () => {
+      toast.success(t("admin.profitRateUpdated"));
+      void queryClient.invalidateQueries({ queryKey: ["admin-funds"] });
+      void queryClient.invalidateQueries({ queryKey: ["investment"] });
+      void queryClient.invalidateQueries({ queryKey: ["home"] });
+      setRateFund(null);
+      setNewProfitRate("");
     },
     onError: () => toast.error(t("common.error")),
   });
@@ -137,11 +152,12 @@ export function AdminInvestmentsTab() {
                 <button
                   type="button"
                   onClick={() => handleOpenEdit(fund)}
-                  title={t("admin.profitRate")}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-surface border border-cyan-glow/40 px-2 py-1.5 text-[10px] font-bold text-cyan-glow hover:border-cyan-glow transition-colors"
+                  title={t("admin.editFund")}
+                  aria-label={t("admin.editFund")}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-surface border border-border px-2 py-1.5 text-[10px] font-bold text-muted-foreground hover:border-cyan-glow hover:text-cyan-glow transition-colors"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
-                  <span>{t("admin.profitRate")}</span>
+                  <span>{t("admin.editFund")}</span>
                 </button>
               </div>
 
@@ -174,8 +190,69 @@ export function AdminInvestmentsTab() {
                   </span>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setRateFund(fund);
+                  setNewProfitRate(String(fund.profit_percent));
+                }}
+                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20"
+              >
+                <Percent className="h-4 w-4" />
+                {t("admin.editProfitRate")}
+              </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {rateFund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-emerald-500/40 bg-navy-deep p-5 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-extrabold text-foreground">
+                {t("admin.editProfitRate")}: {content({ ar: rateFund.name_ar, en: rateFund.name_en, fr: rateFund.name_fr, es: rateFund.name_es })}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setRateFund(null)}
+                disabled={rateMutation.isPending}
+                aria-label={t("common.close")}
+                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <label htmlFor="fund-profit-rate" className="mt-5 block text-xs font-bold text-foreground">
+              {t("admin.profitRate")}
+            </label>
+            <input
+              id="fund-profit-rate"
+              type="number"
+              min="0"
+              max="9999.9999"
+              step="0.0001"
+              required
+              autoFocus
+              value={newProfitRate}
+              onChange={(event) => setNewProfitRate(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-emerald-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={
+                rateMutation.isPending ||
+                !newProfitRate.trim() ||
+                !Number.isFinite(Number(newProfitRate)) ||
+                Number(newProfitRate) < 0 ||
+                Number(newProfitRate) > 9999.9999
+              }
+              onClick={() => rateMutation.mutate({ id: rateFund.id, profitPercent: Number(newProfitRate) })}
+              className="mt-4 w-full rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground disabled:opacity-50"
+            >
+              {rateMutation.isPending ? t("admin.saving") : t("admin.saveChanges")}
+            </button>
+          </div>
         </div>
       )}
 

@@ -159,10 +159,11 @@ export function AdminVipPackagesTab() {
             type="button"
             onClick={handleOpenCreate}
             data-testid="button-add-vip-level"
+            aria-label={t("admin.addVipPackage")}
             className="flex items-center gap-1.5 rounded-xl brand-gradient px-4 py-2.5 text-xs font-black text-primary-foreground shadow-glow"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>{t("admin.addVipLevel")}</span>
+            <span>{t("admin.addVipPackage")}</span>
           </button>
           <button
             type="button"
@@ -277,7 +278,7 @@ export function AdminVipPackagesTab() {
               <h3 className="text-xs font-extrabold text-foreground">
                 {editingPkg
                   ? `${t("admin.editPackage")}: ${content(editingPkg.name)}`
-                  : t("admin.addVipLevel")}
+                  : t("admin.addVipPackage")}
               </h3>
               <button
                 type="button"
