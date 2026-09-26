@@ -5,3 +5,5 @@
 - [Database switch compatibility](database-switch-compatibility.md) — a newly connected database may contain real accounts but lack schema expected by newer app code.
 - [Administrator separation history](admin-separation-history.md) — preserve legacy financial rows while barring old admin identities from customer and admin access.
 - [Deposit proof upload timing](deposit-proof-timeouts.md) — align browser deadlines with signer retries and proof verification across both deposit entry points.
+- [Referral milestone policy](referral-milestone-policy.md) — qualified direct VIP activations count cumulatively, including admin grants; the VIP reward never invents a tier.
+- [Parameterized development SQL](parameterized-development-sql.md) — the SQL callback rejects multiple statements in one parameterized call.

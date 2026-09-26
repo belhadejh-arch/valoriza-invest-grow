@@ -4,47 +4,91 @@ import {
   Video,
   Plus,
   Edit2,
-  CheckCircle2,
-  XCircle,
   X,
   RefreshCw,
-  Play,
   Clock,
-  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminTasks, saveAdminTask } from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
+type AdminTask = {
+  id: string;
+  task_number: number;
+  title: string;
+  description: string;
+  youtube_id: string;
+  duration_seconds: number;
+  sort_order: number;
+  is_active: boolean;
+};
+
+type TaskSaveInput = {
+  id?: string;
+  taskNumber: number;
+  title: string;
+  description: string;
+  youtubeId: string;
+  durationSeconds: number;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+const getYouTubeId = (input: string) => {
+  const value = input.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
+
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    let id: string | null = null;
+    if (host === "youtu.be") {
+      id = url.pathname.split("/").filter(Boolean)[0] ?? null;
+    } else if (
+      host === "youtube.com" ||
+      host === "m.youtube.com" ||
+      host === "youtube-nocookie.com"
+    ) {
+      id =
+        url.searchParams.get("v") ??
+        url.pathname.match(/^\/(?:embed|shorts|live)\/([^/?]+)/)?.[1] ??
+        null;
+    }
+    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+};
+
 export function AdminTasksTab() {
   const { t } = useI18n();
   const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<any | null>(null);
-
+  const [editingTask, setEditingTask] = useState<AdminTask | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState("");
+  const [youtubeInput, setYoutubeInput] = useState("");
   const [durationSeconds, setDurationSeconds] = useState(10);
-  const [rewardAmount, setRewardAmount] = useState(0.4);
-  const [minVipLevel, setMinVipLevel] = useState(1);
   const [taskNumber, setTaskNumber] = useState(1);
+  const [sortOrder, setSortOrder] = useState(1);
   const [isActive, setIsActive] = useState(true);
+  const [validationError, setValidationError] = useState("");
 
   const {
     data: tasks = [],
     isLoading,
+    isError,
+    error,
     refetch,
-  } = useQuery({
+  } = useQuery<AdminTask[]>({
     queryKey: ["admin-tasks"],
     queryFn: () => getAdminTasks(),
   });
 
   const saveMutation = useMutation({
-    mutationFn: saveAdminTask,
+    mutationFn: (input: TaskSaveInput) => saveAdminTask(input),
     onSuccess: () => {
       toast.success(t("admin.taskSaved"));
       queryClient.invalidateQueries({ queryKey: ["admin-tasks"] });
@@ -52,37 +96,39 @@ export function AdminTasksTab() {
       setModalOpen(false);
       resetForm();
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (saveError: Error) => {
+      toast.error(saveError.message || t("common.error"));
+    },
   });
 
   const resetForm = () => {
     setEditingTask(null);
     setTitle("");
     setDescription("");
-    setVideoUrl(
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    );
-    setThumbnailUrl(
-      "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&auto=format&fit=crop&q=60",
-    );
+    setYoutubeInput("");
     setDurationSeconds(10);
-    setRewardAmount(0.4);
-    setMinVipLevel(1);
-    setTaskNumber(tasks.length + 1);
+    const nextNumber =
+      tasks.reduce((max, task) => Math.max(max, Number(task.task_number) || 0), 0) + 1;
+    const nextOrder =
+      tasks.reduce((max, task) => Math.max(max, Number(task.sort_order) || 0), 0) + 1;
+    setTaskNumber(nextNumber);
+    setSortOrder(nextOrder);
     setIsActive(true);
+    setValidationError("");
+    saveMutation.reset();
   };
 
-  const handleOpenEdit = (task: any) => {
+  const handleOpenEdit = (task: AdminTask) => {
     setEditingTask(task);
-    setTitle(task.title);
-    setDescription(task.description);
-    setVideoUrl(task.video_url);
-    setThumbnailUrl(task.thumbnail_url);
-    setDurationSeconds(task.duration_seconds);
-    setRewardAmount(Number(task.reward_amount));
-    setMinVipLevel(task.min_vip_level);
-    setTaskNumber(task.task_number);
-    setIsActive(task.is_active);
+    setTitle(task.title ?? "");
+    setDescription(task.description ?? "");
+    setYoutubeInput(task.youtube_id ?? "");
+    setDurationSeconds(Number(task.duration_seconds) || 10);
+    setTaskNumber(Number(task.task_number) || 1);
+    setSortOrder(Number(task.sort_order) || 0);
+    setIsActive(Boolean(task.is_active));
+    setValidationError("");
+    saveMutation.reset();
     setModalOpen(true);
   };
 
@@ -90,6 +136,50 @@ export function AdminTasksTab() {
     resetForm();
     setModalOpen(true);
   };
+
+  const submitTask = () => {
+    const youtubeId = getYouTubeId(youtubeInput);
+    if (!title.trim()) {
+      setValidationError("Enter a task title / أدخل عنوان المهمة");
+      return;
+    }
+    if (!description.trim()) {
+      setValidationError("Enter a task description / أدخل وصف المهمة");
+      return;
+    }
+    if (!youtubeId) {
+      setValidationError("Enter a valid YouTube URL or 11-character ID / أدخل رابط يوتيوب أو معرّفًا صحيحًا من 11 حرفًا");
+      return;
+    }
+    if (!Number.isInteger(taskNumber) || taskNumber < 1) {
+      setValidationError("Task number must be a positive whole number / رقم المهمة يجب أن يكون عددًا صحيحًا موجبًا");
+      return;
+    }
+    if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) {
+      setValidationError("Duration must be 1–3600 seconds / يجب أن تكون المدة بين 1 و3600 ثانية");
+      return;
+    }
+    if (!Number.isInteger(sortOrder) || sortOrder < 0) {
+      setValidationError("Sort order must be zero or greater / ترتيب العرض يجب أن يكون صفرًا أو أكبر");
+      return;
+    }
+
+    setValidationError("");
+    const input: TaskSaveInput = {
+      ...(editingTask ? { id: editingTask.id } : {}),
+      taskNumber,
+      title: title.trim(),
+      description: description.trim(),
+      youtubeId,
+      durationSeconds,
+      sortOrder,
+      isActive,
+    };
+    saveMutation.mutate(input);
+  };
+
+  const listError =
+    error instanceof Error ? error.message : "Could not load tasks / تعذر تحميل المهام";
 
   return (
     <div className="space-y-4">
@@ -112,79 +202,98 @@ export function AdminTasksTab() {
 
       {isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
-          <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
+          <RefreshCw className="mx-auto mb-2 h-7 w-7 animate-spin text-cyan-glow" />
           {t("admin.loadingTasks")}
         </div>
+      ) : isError ? (
+        <div className="rounded-2xl border border-destructive/40 bg-surface/70 p-6 text-center">
+          <p className="text-xs text-destructive">{listError}</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-3 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-foreground"
+          >
+            {t("common.retry")}
+          </button>
+        </div>
+      ) : tasks.length === 0 ? (
+        <div className="rounded-2xl border border-border/70 bg-surface/40 py-12 text-center">
+          <Video className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+          <p className="text-xs font-bold text-foreground">No tasks yet / لا توجد مهام بعد</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Add a task to get started / أضف مهمة للبدء
+          </p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {tasks.map((task: any) => (
-            <div
-              key={task.id}
-              className={`rounded-2xl border overflow-hidden transition-all ${
-                task.is_active
-                  ? "border-border/80 bg-surface/80 shadow-md"
-                  : "border-border/40 bg-surface/30 opacity-70"
-              }`}
-            >
-              <div className="relative h-32 w-full bg-navy-deep">
-                <img
-                  src={task.thumbnail_url}
-                  alt={content(task.title)}
-                  className="h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
-
-                <span className="absolute top-2 right-2 rounded-full bg-black/70 px-2 py-0.5 text-[9px] font-bold text-white border border-white/20">
-                  {t("admin.taskNumber")} {task.task_number}
-                </span>
-
-                <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-vip/80 px-2 py-0.5 text-[9px] font-bold text-white">
-                  <Crown className="h-2.5 w-2.5 text-gold" />
-                  VIP {task.min_vip_level}
-                </span>
-
-                <div className="absolute bottom-2 inset-x-2 flex items-center justify-between text-[10px] text-white">
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3 text-cyan-glow" />
-                    {task.duration_seconds} {t("admin.seconds")}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+          {tasks.map((task) => {
+            const thumbnailId = getYouTubeId(task.youtube_id ?? "");
+            return (
+              <div
+                key={task.id}
+                className={`overflow-hidden rounded-2xl border transition-all ${
+                  task.is_active
+                    ? "border-border/80 bg-surface/80 shadow-md"
+                    : "border-border/40 bg-surface/30 opacity-70"
+                }`}
+              >
+                <div className="relative h-32 w-full bg-navy-deep">
+                  {thumbnailId ? (
+                    <img
+                      src={`https://img.youtube.com/vi/${thumbnailId}/hqdefault.jpg`}
+                      alt={content(task.title)}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                      <Video className="h-8 w-8" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40" />
+                  <span className="absolute right-2 top-2 rounded-full border border-white/20 bg-black/70 px-2 py-0.5 text-[9px] font-bold text-white">
+                    {t("admin.taskNumber")} {task.task_number}
                   </span>
-                  <span className="font-black text-emerald-400">
-                    +${Number(task.reward_amount).toFixed(2)}
-                  </span>
+                  <div className="absolute inset-x-2 bottom-2 flex items-center justify-between text-[10px] text-white">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3 text-cyan-glow" />
+                      {task.duration_seconds} {t("admin.seconds")}
+                    </span>
+                    <span className="font-bold">
+                      {task.is_active ? t("admin.enabled") : t("admin.disabled")}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-3">
+                  <h3 className="truncate text-xs font-black text-foreground">
+                    {content(task.title)}
+                  </h3>
+                  <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-muted-foreground">
+                    {content(task.description)}
+                  </p>
+                  <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2.5">
+                    <span className="text-[10px] text-muted-foreground">
+                      Sort: {task.sort_order}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(task)}
+                      className="flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-[10px] font-bold text-foreground hover:border-cyan-glow hover:text-cyan-glow"
+                    >
+                      <Edit2 className="h-3 w-3" />
+                      {t("admin.edit")}
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              <div className="p-3">
-                <h3 className="text-xs font-black text-foreground truncate">{content(task.title)}</h3>
-                <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2 leading-relaxed">
-                  {content(task.description)}
-                </p>
-
-                <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-muted-foreground">
-                    {task.is_active ? t("admin.enabled") : t("admin.disabled")}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(task)}
-                    className="flex items-center gap-1 rounded-lg bg-surface border border-border px-2.5 py-1 text-[10px] font-bold text-foreground hover:text-cyan-glow hover:border-cyan-glow"
-                  >
-                    <Edit2 className="h-3 w-3" />
-                    {t("admin.edit")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Edit / Add Task Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-md rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-border/60">
+        <div className="fixed inset-0 z-50 flex animate-in items-center justify-center bg-black/80 p-4 backdrop-blur-sm fade-in">
+          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
               <h3 className="text-xs font-extrabold text-foreground">
                 {editingTask
                   ? `${t("admin.editTask")}: ${content(editingTask.title)}`
@@ -192,8 +301,12 @@ export function AdminTasksTab() {
               </h3>
               <button
                 type="button"
-                onClick={() => setModalOpen(false)}
+                onClick={() => {
+                  setModalOpen(false);
+                  resetForm();
+                }}
                 className="text-muted-foreground hover:text-foreground"
+                aria-label="Close"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -201,95 +314,100 @@ export function AdminTasksTab() {
 
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.taskTitleArabic")}</label>
+                <label className="text-[10px] font-bold text-muted-foreground">
+                  {t("admin.taskTitleArabic")}
+                </label>
                 <input
                   type="text"
                   value={title}
                   placeholder={t("admin.taskTitleArabicPlaceholder")}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(event) => setTitle(event.target.value)}
                   className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">{t("admin.taskDescriptionArabic")}</label>
-                <input
-                  type="text"
+                <label className="text-[10px] font-bold text-muted-foreground">
+                  {t("admin.taskDescriptionArabic")}
+                </label>
+                <textarea
                   value={description}
                   placeholder={t("admin.taskDescriptionArabicPlaceholder")}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+                  onChange={(event) => setDescription(event.target.value)}
+                  rows={2}
+                  className="mt-1 w-full resize-y rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">
-                  {t("admin.videoUrlMp4")}
+                <label className="text-[10px] font-bold text-muted-foreground">
+                  YouTube URL or 11-character video ID / رابط يوتيوب أو معرّف الفيديو (11 حرفًا)
                 </label>
                 <input
                   type="text"
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
+                  value={youtubeInput}
+                  onChange={(event) => setYoutubeInput(event.target.value)}
+                  placeholder="https://youtu.be/xxxxxxxxxxx"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 font-mono text-[11px] text-foreground focus:border-cyan-glow focus:outline-none"
                 />
-              </div>
-
-              <div>
-                <label className="text-[10px] text-muted-foreground font-bold">
-                  {t("admin.thumbnailUrl")}
-                </label>
-                <input
-                  type="text"
-                  value={thumbnailUrl}
-                  onChange={(e) => setThumbnailUrl(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
-                />
+                {getYouTubeId(youtubeInput) && (
+                  <img
+                    src={`https://img.youtube.com/vi/${getYouTubeId(youtubeInput)}/hqdefault.jpg`}
+                    alt="YouTube thumbnail preview"
+                    className="mt-2 h-24 w-full rounded-lg object-cover"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">{t("admin.taskNumber")}</label>
+                  <label className="text-[10px] font-bold text-muted-foreground">
+                    {t("admin.taskNumber")}
+                  </label>
                   <input
                     type="number"
                     min="1"
+                    step="1"
                     value={taskNumber}
-                    onChange={(e) => setTaskNumber(Number(e.target.value))}
+                    onChange={(event) => setTaskNumber(Number(event.target.value))}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">
+                  <label className="text-[10px] font-bold text-muted-foreground">
                     {t("admin.durationSeconds")}
                   </label>
                   <input
                     type="number"
-                    min="5"
+                    min="1"
+                    max="3600"
+                    step="1"
                     value={durationSeconds}
-                    onChange={(e) => setDurationSeconds(Number(e.target.value))}
+                    onChange={(event) => setDurationSeconds(Number(event.target.value))}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">
-                    {t("admin.minimumVipLevel")}
+                  <label className="text-[10px] font-bold text-muted-foreground">
+                    Sort order / ترتيب العرض
                   </label>
                   <input
                     type="number"
                     min="0"
-                    max="7"
-                    value={minVipLevel}
-                    onChange={(e) => setMinVipLevel(Number(e.target.value))}
+                    step="1"
+                    value={sortOrder}
+                    onChange={(event) => setSortOrder(Number(event.target.value))}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="task-is-active"
                   checked={isActive}
-                  onChange={(e) => setIsActive(e.target.checked)}
+                  onChange={(event) => setIsActive(event.target.checked)}
                   className="h-4 w-4 rounded border-border text-cyan-glow focus:ring-0"
                 />
                 <label htmlFor="task-is-active" className="text-xs font-bold text-foreground">
@@ -297,24 +415,26 @@ export function AdminTasksTab() {
                 </label>
               </div>
 
+              <p className="rounded-lg bg-surface/60 p-2 text-[10px] leading-relaxed text-muted-foreground">
+                Task reward and daily limit are set by each VIP plan; they are not configured on
+                individual tasks. / مكافأة المهمة والحد اليومي يحددهما مستوى VIP، ولا يتم ضبطهما
+                لكل مهمة.
+              </p>
+
+              {(validationError || saveMutation.isError) && (
+                <p role="alert" className="text-[10px] text-destructive">
+                  {validationError ||
+                    (saveMutation.error instanceof Error
+                      ? saveMutation.error.message
+                      : t("common.error"))}
+                </p>
+              )}
+
               <button
                 type="button"
-                disabled={!title || !videoUrl || saveMutation.isPending}
-                onClick={() =>
-                  saveMutation.mutate({
-                    id: editingTask?.id,
-                    title,
-                    description,
-                    videoUrl,
-                    thumbnailUrl,
-                    durationSeconds,
-                    rewardAmount,
-                    minVipLevel,
-                    taskNumber,
-                    isActive,
-                  })
-                }
-                className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
+                disabled={saveMutation.isPending}
+                onClick={submitTask}
+                className="mt-3 w-full rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
                 {saveMutation.isPending ? t("admin.saving") : t("admin.saveTask")}
               </button>

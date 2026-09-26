@@ -18,6 +18,7 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import {
   getTasksData,
+  startTask,
   completeTask,
   type TaskItem,
   type TasksPageData,
@@ -29,12 +30,15 @@ export const Route = createFileRoute("/_authenticated/tasks")({
   component: TasksPage,
 });
 
-function getYouTubeEmbedUrl(url: string): string {
-  const match = url?.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/,
-  );
-  const id = match ? match[1] : "kYJvM9l_83w";
+function getYouTubeEmbedUrl(id: string): string | undefined {
+  if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return undefined;
   return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1`;
+}
+
+function taskMoney(value: number): string {
+  let amount = Number(value).toFixed(4);
+  while (amount.endsWith("0") && amount.split(".")[1].length > 2) amount = amount.slice(0, -1);
+  return `$${amount}`;
 }
 
 function TasksPage() {
@@ -43,31 +47,72 @@ function TasksPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"tasks" | "daily">("tasks");
 
-  // Video Watching Modal State
   const [activeWatchTask, setActiveWatchTask] = useState<TaskItem | null>(null);
-  const [secondsRemaining, setSecondsRemaining] = useState(10);
-  const [watchedSeconds, setWatchedSeconds] = useState(0);
+  const [watchSessionId, setWatchSessionId] = useState<string | null>(null);
+  const [watchDuration, setWatchDuration] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [videoLoaded, setVideoLoaded] = useState(false);
 
-  const { data, isLoading, isError } = useQuery<TasksPageData>({
+  const { data, isLoading, isError, refetch } = useQuery<TasksPageData>({
     queryKey: ["tasks-data"],
     queryFn: () => getTasksData(),
+    refetchInterval: 60_000,
+  });
+
+  const startMutation = useMutation({
+    mutationFn: (task: TaskItem) => startTask(task.id),
+    onSuccess: (result, task) => {
+      if (!result.ok) {
+        toast.error(result.reason === "ALREADY_COMPLETED_TODAY" ? t("tasks.completedToday") :
+          result.reason === "DAILY_LIMIT_REACHED" ? t("tasks.limitReached") :
+          result.reason === "TASK_NOT_FOUND" || result.reason === "INVALID_TASK_DURATION"
+            ? (isRTL ? "المهمة غير متاحة حاليًا. تواصل مع الإدارة." : "This task is unavailable. Contact support.") :
+          isRTL ? "تحتاج إلى اشتراك VIP أو فترة تجريبية فعّالة." : "An active VIP plan or trial is required.");
+        void queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
+        return;
+      }
+      setWatchSessionId(result.sessionId);
+      setWatchDuration(result.durationSeconds);
+      setSecondsRemaining(result.durationSeconds);
+      setVideoLoaded(false);
+      setActiveWatchTask(task);
+    },
+    onError: () => toast.error(t("common.error")),
   });
 
   const completeMutation = useMutation({
     mutationFn: completeTask,
-    onSuccess: (result: any) => {
+    onSuccess: (result) => {
       if (result.ok) {
         toast.success(t("tasks.completeSuccess"));
         queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
+        queryClient.invalidateQueries({ queryKey: ["rewards"] });
+        queryClient.invalidateQueries({ queryKey: ["home"] });
         queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
         queryClient.invalidateQueries({ queryKey: ["investment-data"] });
         queryClient.invalidateQueries({ queryKey: ["account-data"] });
         setActiveWatchTask(null);
+        setWatchSessionId(null);
       } else {
         if (result.reason === "DAILY_LIMIT_REACHED") {
           toast.error(t("tasks.limitReached"));
         } else if (result.reason === "ALREADY_COMPLETED_TODAY") {
           toast.error(t("tasks.completedToday"));
+        } else if (result.reason === "WATCH_NOT_FINISHED") {
+          toast.error(isRTL ? "لم تكتمل مدة مشاهدة الفيديو بعد." : "The watch time is not complete yet.");
+        } else if (result.reason === "WATCH_SESSION_EXPIRED") {
+          toast.error(isRTL ? "انتهت جلسة المشاهدة. ابدأ المهمة من جديد." : "Watch session expired. Start again.");
+          setActiveWatchTask(null);
+          setWatchSessionId(null);
+        } else if (result.reason === "VIP_OR_TRIAL_REQUIRED" ||
+                   result.reason === "TASK_NOT_FOUND" ||
+                   result.reason === "WATCH_SESSION_REQUIRED") {
+          toast.error(result.reason === "VIP_OR_TRIAL_REQUIRED"
+            ? (isRTL ? "تحتاج إلى اشتراك VIP أو فترة تجريبية فعّالة." : "An active VIP plan or trial is required.")
+            : (isRTL ? "المهمة أو جلسة المشاهدة لم تعد متاحة. ابدأ مجددًا." : "Task or watch session is no longer available. Start again."));
+          setActiveWatchTask(null);
+          setWatchSessionId(null);
+          void queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
         } else {
           toast.error(t("common.error"));
         }
@@ -76,6 +121,28 @@ function TasksPage() {
     onError: () => toast.error(t("common.error")),
   });
 
+  useEffect(() => {
+    if (!activeWatchTask || !watchSessionId || !videoLoaded || secondsRemaining <= 0) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setSecondsRemaining((remaining) => Math.max(0, remaining - 1));
+      }
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [activeWatchTask, watchSessionId, videoLoaded, secondsRemaining]);
+
+  useEffect(() => {
+    if (!activeWatchTask) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !completeMutation.isPending) {
+        setActiveWatchTask(null);
+        setWatchSessionId(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeWatchTask, completeMutation.isPending]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background pb-28 md:pb-12 text-foreground" dir={isRTL ? "rtl" : "ltr"}>
@@ -83,6 +150,7 @@ function TasksPage() {
         <div className="flex justify-center items-center h-64">
           <p>{t("common.loading")}</p>
         </div>
+        <BottomNav />
       </div>
     );
   }
@@ -91,9 +159,11 @@ function TasksPage() {
     return (
       <div className="min-h-screen bg-background pb-28 md:pb-12 text-foreground" dir={isRTL ? "rtl" : "ltr"}>
         <AppHeader />
-        <div className="flex justify-center items-center h-64">
+        <div className="flex flex-col gap-3 justify-center items-center h-64">
           <p className="text-danger">{t("common.error")}</p>
+          <button type="button" onClick={() => void refetch()} className="rounded-xl brand-gradient px-5 py-2 text-primary-foreground">{t("common.retry")}</button>
         </div>
+        <BottomNav />
       </div>
     );
   }
@@ -103,53 +173,34 @@ function TasksPage() {
       toast.info(t("tasks.completedToday"));
       return;
     }
-    if ((data?.remainingTasks ?? 0) <= 0) {
+    if (data.remainingTasks <= 0) {
       toast.error(t("tasks.limitReached"));
       return;
     }
-
-    const duration = task.durationSeconds || 10;
-    setActiveWatchTask(task);
-    setSecondsRemaining(duration);
-    setWatchedSeconds(0);
-  };
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    if (activeWatchTask && secondsRemaining > 0) {
-      interval = setInterval(() => {
-        setSecondsRemaining((prev) => {
-          if (prev <= 1) {
-            clearInterval(interval!);
-            return 0;
-          }
-          return prev - 1;
-        });
-        setWatchedSeconds((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [activeWatchTask, secondsRemaining]);
-
-  const handleClaimReward = async () => {
-    if (!activeWatchTask) return;
-    if (secondsRemaining > 0) {
+    if (!getYouTubeEmbedUrl(task.youtubeId)) {
+      toast.error(isRTL ? "رابط فيديو المهمة غير صالح. تواصل مع الإدارة." : "This task's video is invalid. Contact support.");
       return;
     }
-    await completeMutation.mutateAsync({
+    startMutation.mutate(task);
+  };
+
+  const handleClaimReward = () => {
+    if (!activeWatchTask || !watchSessionId || secondsRemaining > 0) return;
+    completeMutation.mutate({
       taskId: activeWatchTask.id,
-      watchedSeconds: Math.max(watchedSeconds, 10),
+      sessionId: watchSessionId,
+      watchedSeconds: watchDuration,
     });
   };
 
-  const tasksList = data?.tasks ?? [];
-  const vipLevel = data?.vipLevel ?? 2;
-  const commission = data?.videoCommission ?? 0.4;
-  const remaining = data?.remainingTasks ?? 3;
-  const dailyLimit = data?.dailyLimit ?? 3;
-  const durationSec = data?.videoDuration ?? 10;
+  const tasksList = activeTab === "daily"
+    ? data.tasks.filter((task) => task.status === "AVAILABLE")
+    : data.tasks;
+  const vipLevel = data.vipLevel;
+  const commission = data.videoCommission;
+  const remaining = data.remainingTasks;
+  const dailyLimit = data.dailyLimit;
+  const durationSec = data.videoDuration;
 
   return (
     <div
@@ -206,10 +257,12 @@ function TasksPage() {
                   <Crown className="h-3.5 w-3.5 text-gold" />
                   {data?.vipName ? content(data.vipName) : `VIP ${vipLevel}`}
                 </span>
-                <span className="flex items-center gap-1.5 text-xs font-bold text-primary-foreground/90">
-                  <Sparkles className="h-3.5 w-3.5 text-gold" />
-                  <span>{t("tasks.instantGuaranteed")}</span>
-                </span>
+                {dailyLimit > 0 && commission > 0 && (
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-primary-foreground/90">
+                    <Sparkles className="h-3.5 w-3.5 text-gold" />
+                    <span>{t("tasks.instantGuaranteed")}</span>
+                  </span>
+                )}
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight">{t("tasks.title")}</h1>
@@ -224,13 +277,15 @@ function TasksPage() {
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
                   {t("home.vipStatus")}
                 </p>
-                <p className="mt-0.5 text-sm font-black text-gold">VIP {vipLevel}</p>
+                <p className="mt-0.5 text-sm font-black text-gold">
+                  {vipLevel > 0 ? `VIP ${vipLevel}` : data.isTrial ? data.vipName : "—"}
+                </p>
               </div>
               <div className="p-2 rounded-xl bg-black/20">
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
                   {t("tasks.commissionPerVideo")}
                 </p>
-                <p className="mt-0.5 text-sm font-black text-cyan-glow">${commission.toFixed(2)}</p>
+                <p className="mt-0.5 text-sm font-black text-cyan-glow">{taskMoney(commission)}</p>
               </div>
               <div className="p-2 rounded-xl bg-black/20">
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
@@ -245,7 +300,7 @@ function TasksPage() {
                   {t("invest.duration")}
                 </p>
                 <p className="mt-0.5 text-sm font-black text-primary-foreground">
-                  {durationSec} {t("tasks.secondsShort")}
+                  {durationSec > 0 ? `${durationSec} ${t("tasks.secondsShort")}` : "—"}
                 </p>
               </div>
             </div>
@@ -280,7 +335,7 @@ function TasksPage() {
                     <button
                       type="button"
                       onClick={() => handleStartTask(task)}
-                      disabled={task.isCompletedToday || remaining <= 0}
+                      disabled={task.isCompletedToday || remaining <= 0 || startMutation.isPending}
                       aria-label={t("tasks.watchTask").replace("{title}", content(task.title))}
                       className={`absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full transition-all duration-300 active:scale-95 ${
                         task.isCompletedToday
@@ -313,7 +368,7 @@ function TasksPage() {
                         {task.durationSeconds} {t("tasks.secondsUnit")}
                       </span>
                       <span className="flex items-center gap-1 rounded-lg bg-emerald-500/90 backdrop-blur-md px-2.5 py-1 text-xs font-black text-white shadow">
-                        +${commission.toFixed(2)}
+                        +{taskMoney(task.reward)}
                       </span>
                     </div>
                   </div>
@@ -331,7 +386,7 @@ function TasksPage() {
                   <div className="pt-3 border-t border-border/50 flex items-center justify-between">
                     <div className="flex items-center gap-1 text-xs font-bold text-muted-foreground">
                       <span>{t("tasks.commissionPerVideo")}:</span>
-                      <span className="text-emerald-400 font-black">+${commission.toFixed(2)}</span>
+                      <span className="text-emerald-400 font-black">+{taskMoney(task.reward)}</span>
                     </div>
 
                     {task.isCompletedToday ? (
@@ -341,12 +396,15 @@ function TasksPage() {
                       </span>
                     ) : remaining <= 0 ? (
                       <span className="rounded-xl bg-surface border border-border px-3 py-1.5 text-xs font-bold text-muted-foreground">
-                        {t("tasks.exhaustedToday")}
+                        {dailyLimit === 0
+                          ? (isRTL ? "يتطلب VIP أو تجربة فعّالة" : "VIP or trial required")
+                          : t("tasks.exhaustedToday")}
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleStartTask(task)}
+                        disabled={startMutation.isPending}
                         className="flex items-center gap-1.5 rounded-xl brand-gradient px-4 py-1.5 text-xs font-black text-primary-foreground shadow-glow hover:opacity-95 active:scale-95 transition-all cursor-pointer"
                       >
                         <Play className="h-3 w-3 fill-current" />
@@ -358,6 +416,23 @@ function TasksPage() {
               </div>
             ))}
           </div>
+          {tasksList.length === 0 && (
+            <div className="rounded-3xl surface-card glow-border p-8 text-center text-sm text-muted-foreground">
+              <Video className="mx-auto mb-3 h-9 w-9 text-cyan-glow" />
+              <p className="font-bold text-foreground">
+                {data.tasks.length === 0
+                  ? (isRTL ? "لا توجد مهام منشورة حاليًا. ستظهر هنا بعد إضافتها من الإدارة." : "No tasks are published yet. They will appear when an administrator adds them.")
+                  : dailyLimit === 0
+                    ? (isRTL ? "تحتاج إلى اشتراك VIP أو فترة تجريبية فعّالة لتنفيذ المهام." : "Activate a VIP plan or trial to complete tasks.")
+                    : (isRTL ? "أكملت مهام اليوم المتاحة. عد غدًا لمهام جديدة." : "You have completed today's available tasks. Check back tomorrow.")}
+              </p>
+              {data.tasks.length > 0 && dailyLimit === 0 && (
+                <Link to="/investment" className="mt-4 inline-flex rounded-xl brand-gradient px-5 py-2 text-xs font-black text-primary-foreground">
+                  {isRTL ? "استعراض باقات VIP" : "Explore VIP plans"}
+                </Link>
+              )}
+            </div>
+          )}
 
         {/* Helpful Rules Section */}
         <div className="rounded-3xl surface-card glow-border p-5 text-start text-xs space-y-2">
@@ -393,14 +468,16 @@ function TasksPage() {
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
                     {t("tasks.taskNumber")} {activeWatchTask.taskNumber} ·{" "}
-                  {activeWatchTask.durationSeconds} {t("tasks.secondsShort")}
+                  {watchDuration} {t("tasks.secondsShort")}
                   </p>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => setActiveWatchTask(null)}
+                onClick={() => { setActiveWatchTask(null); setWatchSessionId(null); }}
+                disabled={completeMutation.isPending}
+                aria-label={t("common.close")}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X className="h-4 w-4" />
@@ -410,18 +487,19 @@ function TasksPage() {
             {/* Video Player Box with YouTube iframe */}
             <div className="relative mt-3.5 aspect-video w-full overflow-hidden rounded-2xl bg-black border border-border">
               <iframe
-                src={getYouTubeEmbedUrl(activeWatchTask.videoUrl)}
+                src={getYouTubeEmbedUrl(activeWatchTask.youtubeId)}
                 title={content(activeWatchTask.title)}
                 className="h-full w-full object-cover border-0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
+                onLoad={() => setVideoLoaded(true)}
               />
 
               {/* Live Overlay Timer */}
               <div className="absolute top-2.5 right-2.5 rtl:right-auto rtl:left-2.5 z-10 flex items-center gap-1.5 rounded-full bg-black/80 backdrop-blur-md px-3 py-1 border border-cyan-glow/40 shadow-lg">
                 <Clock className="h-3.5 w-3.5 text-cyan-glow animate-spin" />
                 <span className="text-xs font-black text-white">
-                  {secondsRemaining > 0 ? `${secondsRemaining} ${t("tasks.secondsShort")}` : t("tasks.completed")}
+                  {!videoLoaded ? t("common.loading") : secondsRemaining > 0 ? `${secondsRemaining} ${t("tasks.secondsShort")}` : t("tasks.completed")}
                 </span>
               </div>
             </div>
@@ -433,13 +511,13 @@ function TasksPage() {
                 <span className={secondsRemaining === 0 ? "text-emerald-400" : "text-cyan-glow"}>
                   {secondsRemaining === 0
                     ? `100% ${t("tasks.readyToClaim")}`
-                    : `${Math.round(((10 - secondsRemaining) / 10) * 100)}%`}
+                    : `${Math.round(((watchDuration - secondsRemaining) / watchDuration) * 100)}%`}
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-surface border border-border">
                 <div
                   className="h-full bg-cyan-glow transition-all duration-1000 shadow-[0_0_10px_oklch(0.82_0.14_205)]"
-                  style={{ width: `${((10 - secondsRemaining) / 10) * 100}%` }}
+                  style={{ width: `${((watchDuration - secondsRemaining) / watchDuration) * 100}%` }}
                 />
               </div>
             </div>
@@ -450,14 +528,14 @@ function TasksPage() {
                 <p className="text-[10px] text-muted-foreground font-semibold">
                   {t("tasks.earnedCommission")}
                 </p>
-                <p className="text-base font-black text-emerald-400">+${commission.toFixed(2)}</p>
+                <p className="text-base font-black text-emerald-400">+{taskMoney(activeWatchTask.reward)}</p>
               </div>
               <div className="text-end">
                 <p className="text-[10px] text-muted-foreground font-semibold">
                   {t("tasks.balanceAfter")}
                 </p>
                 <p className="text-xs font-extrabold text-gold">
-                  ${((data?.userBalance ?? 0) + commission).toFixed(2)}
+                  {taskMoney(data.userBalance + activeWatchTask.reward)}
                 </p>
               </div>
             </div>
@@ -468,7 +546,7 @@ function TasksPage() {
                 type="button"
                 id="task-claim-reward-btn"
                 onClick={handleClaimReward}
-                disabled={secondsRemaining > 0 || completeMutation.isPending}
+                disabled={!videoLoaded || secondsRemaining > 0 || completeMutation.isPending}
                 className={`w-full flex items-center justify-center gap-2 rounded-2xl py-3 text-xs font-black transition-all cursor-pointer ${
                   secondsRemaining === 0
                     ? "brand-gradient text-primary-foreground shadow-glow hover:opacity-95 active:scale-95 animate-pulse"
@@ -489,7 +567,7 @@ function TasksPage() {
                   <>
                     <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                     <span>
-                      {t("tasks.confirmClaimBtn")} (+${commission.toFixed(2)})
+                      {t("tasks.confirmClaimBtn")} (+{taskMoney(activeWatchTask.reward)})
                     </span>
                   </>
                 )}

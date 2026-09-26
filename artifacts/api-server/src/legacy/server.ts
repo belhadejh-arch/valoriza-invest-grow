@@ -3,6 +3,8 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import { logger } from "../lib/logger.js";
 import { pool, query, withTransaction } from "./db.js";
+import { REFERRAL_MILESTONES, evaluateReferralMilestones, getReferralMilestones } from "./referral-milestones.js";
+import { taskEntitlement, type TaskProfile } from "./task-entitlements.js";
 import {
   clearSessionCookie,
   createSession,
@@ -121,6 +123,67 @@ async function changeBalance(
     [userId, type, amount, before, after, referenceId ?? null, description],
   );
   return after;
+}
+
+// Both VIP purchases and rewards reconciliation may lock a member's profile
+// and wallet. Retrying a rolled-back deadlock is safe because awards, credits
+// and the purchase all commit in the same transaction.
+async function withMilestoneTransaction<T>(
+  callback: (client: import("pg").PoolClient) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await withTransaction(callback);
+    } catch (error) {
+      if ((error as { code?: string }).code !== "40P01" || attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+}
+
+// On deployment, settle pre-existing eligible accounts independently of
+// whether they ever open the Rewards page. The award uniqueness constraint
+// makes this safe to resume after a restart or a failed candidate.
+export async function reconcileHistoricalReferralMilestones() {
+  const thresholds = REFERRAL_MILESTONES.map(({ threshold }) => `(${threshold})`).join(",");
+  const candidates = await query<{ referrer_id: string }>(
+    `WITH eligible AS (
+       SELECT r.referrer_id, count(*)::int AS qualified
+       FROM referrals r
+       JOIN profiles p ON p.id=r.referrer_id AND NOT p.is_blocked
+       WHERE r.level=1
+         AND NOT EXISTS (
+           SELECT 1 FROM user_roles role
+           WHERE role.user_id=r.referrer_id AND role.role='admin'
+         )
+         AND (
+           EXISTS (SELECT 1 FROM user_vip v WHERE v.user_id=r.referred_id)
+           OR EXISTS (SELECT 1 FROM vip_admin_activations a WHERE a.user_id=r.referred_id)
+         )
+       GROUP BY r.referrer_id
+     )
+     SELECT e.referrer_id FROM eligible e
+     WHERE EXISTS (
+       SELECT 1 FROM (VALUES ${thresholds}) AS m(threshold)
+       WHERE e.qualified>=m.threshold
+         AND NOT EXISTS (
+           SELECT 1 FROM referral_milestone_awards award
+           WHERE award.user_id=e.referrer_id AND award.threshold=m.threshold
+         )
+     )`,
+  );
+  let failed = 0;
+  for (const candidate of candidates.rows) {
+    try {
+      await withMilestoneTransaction((client) =>
+        evaluateReferralMilestones(client, candidate.referrer_id, changeBalance),
+      );
+    } catch (error) {
+      failed += 1;
+      logger.error({ err: error }, "Could not reconcile referral milestone");
+    }
+  }
+  logger.info({ candidates: candidates.rowCount, failed }, "Referral milestones reconciled");
 }
 
 app.post("/api/auth/register", async (request, response, next) => {
@@ -716,7 +779,7 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
     const level = Number(request.body?.level);
     if (!Number.isInteger(level) || level < 1)
       return response.status(400).json({ ok: false, reason: "INVALID_VIP_LEVEL" });
-    const result = await withTransaction(async (client) => {
+    const result = await withMilestoneTransaction(async (client) => {
       const plan = await client.query<{
         id: string;
         name: string;
@@ -727,6 +790,7 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
       ]);
       if (!plan.rowCount) return { ok: false, reason: "PACKAGE_NOT_FOUND" };
       const expires = new Date(Date.now() + plan.rows[0].duration_days * 86400000);
+      await client.query("SELECT id FROM profiles WHERE id=$1 FOR UPDATE", [user.id]);
       await changeBalance(
         client,
         user.id,
@@ -754,6 +818,13 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
          ON CONFLICT (user_id) DO UPDATE SET chances=user_wheel_chances.chances+EXCLUDED.chances,updated_at=now()`,
         [user.id, grantedChances],
       );
+      const directReferrer = await client.query<{ referrer_id: string }>(
+        "SELECT referrer_id FROM referrals WHERE referred_id=$1 AND level=1",
+        [user.id],
+      );
+      if (directReferrer.rows[0]) {
+        await evaluateReferralMilestones(client, directReferrer.rows[0].referrer_id, changeBalance);
+      }
       const wallet = await client.query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]);
       return { ok: true, vipLevel: level, newBalance: number(wallet.rows[0]?.balance), grantedChances };
     });
@@ -1025,125 +1096,185 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
   }
 });
 
+const TASK_PROFILE_SQL = `SELECT p.vip_level,p.vip_expires_at,p.trial_active,p.trial_expires_at,
+  vip.task_reward,vip.daily_tasks FROM profiles p
+  LEFT JOIN vip_packages vip ON vip.level=p.vip_level WHERE p.id=$1`;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 app.get("/api/app/tasks", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const [tasks, completions, profile, wallet, plans] = await Promise.all([
-      query("SELECT * FROM tasks WHERE is_active=true ORDER BY sort_order"),
-      query(
+    const [tasks, completions, profile, wallet] = await Promise.all([
+      query<{
+        id: string; task_number: number; title: string; description: string;
+        youtube_id: string; duration_seconds: number;
+      }>("SELECT id,task_number,title,description,youtube_id,duration_seconds FROM tasks WHERE is_active=true ORDER BY sort_order,task_number"),
+      query<{ task_id: string }>(
         "SELECT task_id FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
         [user.id],
       ),
-      query("SELECT vip_level,trial_active,trial_expires_at FROM profiles WHERE id=$1", [user.id]),
-      query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]),
-      query("SELECT * FROM vip_packages WHERE level=(SELECT vip_level FROM profiles WHERE id=$1)", [
-        user.id,
-      ]),
+      query<TaskProfile>(TASK_PROFILE_SQL, [user.id]),
+      query<{ balance: string }>("SELECT balance FROM wallets WHERE user_id=$1", [user.id]),
     ]);
     const completed = new Set(completions.rows.map((row) => row.task_id));
-    const plan = plans.rows[0];
-    const vipLevel = number(profile.rows[0]?.vip_level);
-    const reward = vipLevel ? number(plan?.task_reward) : profile.rows[0]?.trial_active ? 0.5 : 0;
-    const limit = vipLevel ? number(plan?.daily_tasks) : profile.rows[0]?.trial_active ? 3 : 0;
-    response.json({
+    const entitlement = taskEntitlement(profile.rows[0]);
+    const { vipLevel, isTrial, reward, limit } = entitlement;
+    return response.json({
       vipLevel,
-      vipName: vipLevel
-        ? `VIP ${vipLevel}`
-        : profile.rows[0]?.trial_active
-          ? "الفترة التجريبية"
-          : "VIP",
-      isTrial: Boolean(profile.rows[0]?.trial_active),
-      trialExpiresAt: profile.rows[0]?.trial_expires_at,
+      vipName: vipLevel ? `VIP ${vipLevel}` : isTrial ? "الفترة التجريبية" : "VIP",
+      isTrial,
+      trialExpiresAt: profile.rows[0]?.trial_expires_at ?? null,
       videoCommission: reward,
       dailyLimit: limit,
       completedCount: completed.size,
-      remainingTasks: Math.max(0, limit - completed.size),
-      videoDuration: 10,
+      remainingTasks: Math.max(0, Math.min(
+        limit - completed.size,
+        tasks.rows.filter((task) => !completed.has(task.id)).length,
+      )),
+      videoDuration: tasks.rows.length ? Math.min(...tasks.rows.map((task) => task.duration_seconds)) : 0,
       userBalance: number(wallet.rows[0]?.balance),
-      allDailyTasksCompleted: completed.size >= limit,
+      allDailyTasksCompleted: limit > 0 && completed.size >= limit,
       tasks: tasks.rows.map((task) => ({
         id: task.id,
         taskNumber: task.task_number,
         title: task.title,
         description: task.description,
         youtubeId: task.youtube_id,
-        videoUrl: `https://www.youtube.com/embed/${task.youtube_id}?enablejsapi=1&playsinline=1&rel=0&modestbranding=1`,
+        videoUrl: `https://www.youtube.com/watch?v=${task.youtube_id}`,
         thumbnailUrl: `https://img.youtube.com/vi/${task.youtube_id}/hqdefault.jpg`,
         durationSeconds: task.duration_seconds,
-        vipRequirement: vipLevel ? `VIP ${vipLevel}` : "الفترة التجريبية",
+        vipRequirement: vipLevel ? `VIP ${vipLevel}` : isTrial ? "الفترة التجريبية" : "VIP",
         reward,
         isCompletedToday: completed.has(task.id),
-        status: completed.has(task.id)
-          ? "REWARDED"
-          : completed.size >= limit
-            ? "LOCKED"
-            : "AVAILABLE",
+        status: completed.has(task.id) ? "REWARDED" : completed.size >= limit ? "LOCKED" : "AVAILABLE",
       })),
     });
   } catch (error) {
-    next(error);
+    return next(error);
+  }
+});
+
+app.post("/api/app/tasks/start", async (request, response, next) => {
+  try {
+    const user = (request as express.Request & { authUser: { id: string } }).authUser;
+    const taskId = request.body?.taskId;
+    if (typeof taskId !== "string" || !UUID_PATTERN.test(taskId))
+      return response.status(400).json({ ok: false, reason: "INVALID_TASK_ID" });
+    const [task, profile, count, completed] = await Promise.all([
+      query<{ id: string; duration_seconds: number }>(
+        "SELECT id,duration_seconds FROM tasks WHERE id=$1 AND is_active=true", [taskId],
+      ),
+      query<TaskProfile>(TASK_PROFILE_SQL, [user.id]),
+      query<{ total: number }>(
+        "SELECT count(*)::int AS total FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
+        [user.id],
+      ),
+      query("SELECT 1 FROM task_completions WHERE user_id=$1 AND task_id=$2 AND completion_date=current_date", [user.id, taskId]),
+    ]);
+    if (!task.rowCount) return response.json({ ok: false, reason: "TASK_NOT_FOUND" });
+    if (!Number.isInteger(task.rows[0].duration_seconds) ||
+        task.rows[0].duration_seconds < 1 || task.rows[0].duration_seconds > 3600)
+      return response.json({ ok: false, reason: "INVALID_TASK_DURATION" });
+    const { limit } = taskEntitlement(profile.rows[0]);
+    if (limit <= 0) return response.json({ ok: false, reason: "VIP_OR_TRIAL_REQUIRED" });
+    if (completed.rowCount) return response.json({ ok: false, reason: "ALREADY_COMPLETED_TODAY" });
+    if (count.rows[0].total >= limit) return response.json({ ok: false, reason: "DAILY_LIMIT_REACHED" });
+    const session = await query<{ id: string; started_at: Date }>(
+      `INSERT INTO task_watch_sessions (user_id,task_id,duration_seconds)
+       VALUES ($1,$2,$3) RETURNING id,started_at`,
+      [user.id, taskId, task.rows[0].duration_seconds],
+    );
+    return response.json({
+      ok: true,
+      sessionId: session.rows[0].id,
+      startedAt: session.rows[0].started_at,
+      durationSeconds: task.rows[0].duration_seconds,
+    });
+  } catch (error) {
+    return next(error);
   }
 });
 
 app.post("/api/app/tasks/complete", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { taskId, watchedSeconds } = request.body ?? {};
+    const { taskId, sessionId, watchedSeconds } = request.body ?? {};
+    if (typeof taskId !== "string" || !UUID_PATTERN.test(taskId) ||
+        typeof sessionId !== "string" || !UUID_PATTERN.test(sessionId) ||
+        !Number.isInteger(watchedSeconds) || watchedSeconds < 0 || watchedSeconds > 3600)
+      return response.status(400).json({ ok: false, reason: "WATCH_SESSION_REQUIRED" });
     const result = await withTransaction(async (client) => {
-      const task = await client.query("SELECT id FROM tasks WHERE id=$1 AND is_active=true", [
-        taskId,
-      ]);
+      // Serializes every claim by this member, including claims for two
+      // different tasks made concurrently at the daily limit.
+      const profile = await client.query<TaskProfile>(`${TASK_PROFILE_SQL} FOR UPDATE OF p`, [user.id]);
+      const { reward, limit } = taskEntitlement(profile.rows[0]);
+      if (limit <= 0) return { ok: false, reason: "VIP_OR_TRIAL_REQUIRED" };
+      const task = await client.query<{ duration_seconds: number }>(
+        "SELECT duration_seconds FROM tasks WHERE id=$1 AND is_active=true", [taskId],
+      );
       if (!task.rowCount) return { ok: false, reason: "TASK_NOT_FOUND" };
-      const profile = await client.query<{ vip_level: number; trial_active: boolean }>(
-        "SELECT vip_level,trial_active FROM profiles WHERE id=$1",
+      const session = await client.query<{
+        started_at: Date; duration_seconds: number; claimed_at: Date | null;
+      }>(
+        `SELECT started_at,duration_seconds,claimed_at FROM task_watch_sessions
+         WHERE id=$1 AND user_id=$2 AND task_id=$3 FOR UPDATE`,
+        [sessionId, user.id, taskId],
+      );
+      if (!session.rowCount) return { ok: false, reason: "WATCH_SESSION_REQUIRED" };
+      if (session.rows[0].claimed_at) return { ok: false, reason: "ALREADY_COMPLETED_TODAY" };
+      const requiredSeconds = Math.max(session.rows[0].duration_seconds, task.rows[0].duration_seconds);
+      const elapsed = Date.now() - new Date(session.rows[0].started_at).getTime();
+      if (elapsed > 3600000) return { ok: false, reason: "WATCH_SESSION_EXPIRED" };
+      if (watchedSeconds < requiredSeconds || elapsed < requiredSeconds * 1000)
+        return { ok: false, reason: "WATCH_NOT_FINISHED" };
+      const existing = await client.query(
+        "SELECT 1 FROM task_completions WHERE user_id=$1 AND task_id=$2 AND completion_date=current_date",
+        [user.id, taskId],
+      );
+      if (existing.rowCount) return { ok: false, reason: "ALREADY_COMPLETED_TODAY" };
+      const count = await client.query<{ total: number }>(
+        "SELECT count(*)::int AS total FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
         [user.id],
       );
-      const plan = await client.query<{ task_reward: string; daily_tasks: number }>(
-        "SELECT task_reward,daily_tasks FROM vip_packages WHERE level=$1",
-        [profile.rows[0]?.vip_level ?? 0],
-      );
-      const reward = number(plan.rows[0]?.task_reward) || (profile.rows[0]?.trial_active ? 0.5 : 0);
-      const limit = number(plan.rows[0]?.daily_tasks) || (profile.rows[0]?.trial_active ? 3 : 0);
-      const count = await client.query(
-        "SELECT count(*)::int AS count FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
-        [user.id],
-      );
-      if (number(count.rows[0]?.count) >= limit)
-        return { ok: false, reason: "DAILY_LIMIT_REACHED" };
+      if (count.rows[0].total >= limit) return { ok: false, reason: "DAILY_LIMIT_REACHED" };
       const inserted = await client.query<{ id: string }>(
-        "INSERT INTO task_completions (user_id,task_id,completion_date,started_at,completed_at,reward,watched_seconds) VALUES ($1,$2,current_date,now(),now(),$3,$4) ON CONFLICT DO NOTHING RETURNING id",
-        [user.id, taskId, reward, Number(watchedSeconds) || 0],
+        `INSERT INTO task_completions
+         (user_id,task_id,completion_date,started_at,completed_at,reward,watched_seconds)
+         VALUES ($1,$2,current_date,$3,now(),$4,$5)
+         ON CONFLICT DO NOTHING RETURNING id`,
+        [user.id, taskId, session.rows[0].started_at, reward, watchedSeconds],
       );
       if (!inserted.rowCount) return { ok: false, reason: "ALREADY_COMPLETED_TODAY" };
-      await changeBalance(
-        client,
-        user.id,
-        reward,
-        "task_reward",
-        "مكافأة المهمة",
-        inserted.rows[0].id,
-      );
+      await changeBalance(client, user.id, reward, "task_reward", "مكافأة المهمة", inserted.rows[0].id);
       await client.query(
-        "INSERT INTO rewards (user_id,source,amount,description_ar,reference_id) VALUES ($1,'task',$2,'مكافأة مشاهدة المهمة',$3)",
+        `INSERT INTO rewards (user_id,source,amount,description_ar,reference_id)
+         VALUES ($1,'task_reward',$2,'مكافأة مشاهدة المهمة',$3)`,
         [user.id, reward, inserted.rows[0].id],
       );
+      await client.query("UPDATE task_watch_sessions SET claimed_at=now() WHERE id=$1", [sessionId]);
       return { ok: true, reward };
     });
-    response.json(result);
+    return response.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 app.get("/api/app/rewards", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const result = await query(
-      "SELECT id,source,amount,description_ar,created_at FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50",
-      [user.id],
+    // Also reconciles previously activated direct invitees without awarding
+    // any threshold twice. New VIP purchases settle the award immediately.
+    const qualifiedMembers = await withMilestoneTransaction((client) =>
+      evaluateReferralMilestones(client, user.id, changeBalance),
     );
-    const wallet = await query("SELECT balance,total_earned FROM wallets WHERE user_id=$1", [
-      user.id,
+    const [result, wallet, milestones] = await Promise.all([
+      query(
+        "SELECT id,source,amount,description_ar,created_at FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50",
+        [user.id],
+      ),
+      query("SELECT balance,total_earned FROM wallets WHERE user_id=$1", [user.id]),
+      getReferralMilestones(user.id, qualifiedMembers),
     ]);
     response.json({
       rewards: result.rows.map((row) => ({
@@ -1155,6 +1286,8 @@ app.get("/api/app/rewards", async (request, response, next) => {
       })),
       balance: number(wallet.rows[0]?.balance),
       totalEarned: number(wallet.rows[0]?.total_earned),
+      qualifiedMembers,
+      milestones,
     });
   } catch (error) {
     next(error);
@@ -1501,21 +1634,40 @@ app.post("/api/admin/users/vip", async (request, response, next) => {
     const admin = (request as express.Request & { authUser: { id: string } }).authUser;
     const targetUserId = request.body?.targetUserId;
     const vipLevel = Number(request.body?.vipLevel);
-    await query("UPDATE profiles SET vip_level=$1, updated_at=now() WHERE id=$2", [
-      vipLevel,
-      targetUserId,
-    ]);
-    await query(
-      "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,'ترقية مستوى VIP',$2)",
-      [targetUserId, `تم تحديث رتبتك إلى VIP ${vipLevel} من قبل إدارة المنصة.`],
-    );
-    await query(
-      "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,'SET_VIP_LEVEL',$2,$3)",
-      [admin.id, targetUserId, JSON.stringify({ vipLevel })],
-    );
-    response.json({ ok: true });
+    if (typeof targetUserId !== "string" || !/^[0-9a-f-]{36}$/i.test(targetUserId) ||
+        !Number.isInteger(vipLevel) || vipLevel < 0)
+      return response.status(400).json({ ok: false, reason: "INVALID_VIP_LEVEL" });
+    await withMilestoneTransaction(async (client) => {
+      const updated = await client.query(
+        "UPDATE profiles SET vip_level=$1,updated_at=now() WHERE id=$2 RETURNING id",
+        [vipLevel, targetUserId],
+      );
+      if (!updated.rowCount) throw Object.assign(new Error("USER_NOT_FOUND"), { status: 404 });
+      if (vipLevel > 0) {
+        await client.query(
+          "INSERT INTO vip_admin_activations (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+          [targetUserId],
+        );
+        const parent = await client.query<{ referrer_id: string }>(
+          "SELECT referrer_id FROM referrals WHERE referred_id=$1 AND level=1",
+          [targetUserId],
+        );
+        if (parent.rows[0]) {
+          await evaluateReferralMilestones(client, parent.rows[0].referrer_id, changeBalance);
+        }
+      }
+      await client.query(
+        "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,'ترقية مستوى VIP',$2)",
+        [targetUserId, `تم تحديث رتبتك إلى VIP ${vipLevel} من قبل إدارة المنصة.`],
+      );
+      await client.query(
+        "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,'SET_VIP_LEVEL',$2,$3)",
+        [admin.id, targetUserId, JSON.stringify({ vipLevel })],
+      );
+    });
+    return response.json({ ok: true });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -1965,18 +2117,28 @@ app.get("/api/admin/tasks", async (_request, response, next) => {
 app.post("/api/admin/tasks/save", async (request, response, next) => {
   try {
     const data = request.body ?? {};
-    const taskNumber = data.taskNumber ?? data.task_number;
-    const youtubeId = data.youtubeId ?? data.youtube_id;
-    const durationSeconds = data.durationSeconds ?? data.duration_seconds ?? 10;
-    const sortOrder = data.sortOrder ?? data.sort_order ?? 0;
+    const taskNumber = Number(data.taskNumber ?? data.task_number);
+    const youtubeId = String(data.youtubeId ?? data.youtube_id ?? "").trim();
+    const durationSeconds = Number(data.durationSeconds ?? data.duration_seconds ?? 10);
+    const sortOrder = Number(data.sortOrder ?? data.sort_order ?? taskNumber);
     const isActive = data.isActive ?? data.is_active ?? true;
+    const title = typeof data.title === "string" ? data.title.trim() : "";
+    const description = typeof data.description === "string" ? data.description.trim() : "";
+    if (!Number.isInteger(taskNumber) || taskNumber < 1 ||
+        !/^[A-Za-z0-9_-]{11}$/.test(youtubeId) ||
+        !Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600 ||
+        !Number.isInteger(sortOrder) || sortOrder < 0 ||
+        typeof isActive !== "boolean" || !title || !description ||
+        (data.id != null && (typeof data.id !== "string" || !UUID_PATTERN.test(data.id))))
+      return response.status(400).json({ ok: false, reason: "INVALID_TASK_DATA" });
     if (data.id) {
-      await query(
-        "UPDATE tasks SET task_number=$1,title=$2,description=$3,youtube_id=$4,duration_seconds=$5,sort_order=$6,is_active=$7 WHERE id=$8",
+      const result = await query(
+        `UPDATE tasks SET task_number=$1,title=$2,description=$3,youtube_id=$4,
+         duration_seconds=$5,sort_order=$6,is_active=$7 WHERE id=$8 RETURNING id`,
         [
           taskNumber,
-          data.title,
-          data.description,
+          title,
+          description,
           youtubeId,
           durationSeconds,
           sortOrder,
@@ -1984,27 +2146,32 @@ app.post("/api/admin/tasks/save", async (request, response, next) => {
           data.id,
         ],
       );
+      if (!result.rowCount) return response.status(404).json({ ok: false, reason: "TASK_NOT_FOUND" });
+      return response.json({ ok: true, id: data.id });
     } else {
-      await query(
-        "INSERT INTO tasks (task_number,title,description,youtube_id,duration_seconds,sort_order) VALUES ($1,$2,$3,$4,$5,$6)",
-        [taskNumber, data.title, data.description, youtubeId, durationSeconds, sortOrder],
+      const result = await query<{ id: string }>(
+        `INSERT INTO tasks (task_number,title,description,youtube_id,duration_seconds,sort_order,is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [taskNumber, title, description, youtubeId, durationSeconds, sortOrder, isActive],
       );
+      return response.json({ ok: true, id: result.rows[0].id });
     }
-    response.json({ ok: true });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 app.post("/api/admin/tasks/status", async (request, response, next) => {
   try {
-    await query("UPDATE tasks SET is_active=$1 WHERE id=$2", [
-      request.body?.isActive ?? request.body?.is_active,
-      request.body?.taskId,
-    ]);
-    response.json({ ok: true });
+    const isActive = request.body?.isActive ?? request.body?.is_active;
+    const taskId = request.body?.taskId;
+    if (typeof taskId !== "string" || !UUID_PATTERN.test(taskId) || typeof isActive !== "boolean")
+      return response.status(400).json({ ok: false, reason: "INVALID_TASK_DATA" });
+    const result = await query("UPDATE tasks SET is_active=$1 WHERE id=$2 RETURNING id", [isActive, taskId]);
+    if (!result.rowCount) return response.status(404).json({ ok: false, reason: "TASK_NOT_FOUND" });
+    return response.json({ ok: true });
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 

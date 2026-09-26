@@ -32,8 +32,22 @@ export type TasksPageData = {
 
 export const getTasksData = () => backendRequest<TasksPageData>("/api/app/tasks");
 
-export const completeTask = (data: { taskId: string; watchedSeconds: number; startedAt?: string }) =>
-  backendRequest("/api/app/tasks/complete", {
+export type TaskStartResult =
+  | { ok: true; sessionId: string; startedAt: string; durationSeconds: number }
+  | { ok: false; reason: string };
+
+export type TaskCompleteResult =
+  | { ok: true; reward: number }
+  | { ok: false; reason: string };
+
+export const startTask = (taskId: string) =>
+  backendRequest<TaskStartResult>("/api/app/tasks/start", {
+    method: "POST",
+    body: JSON.stringify({ taskId }),
+  });
+
+export const completeTask = (data: { taskId: string; sessionId: string; watchedSeconds: number }) =>
+  backendRequest<TaskCompleteResult>("/api/app/tasks/complete", {
     method: "POST",
     body: JSON.stringify(data),
   });
