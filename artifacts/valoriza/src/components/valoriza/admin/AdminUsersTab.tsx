@@ -150,6 +150,7 @@ export function AdminUsersTab() {
             <thead className="border-b border-border/80 bg-surface/80 text-[11px] font-bold text-muted-foreground">
               <tr>
                 <th className="p-3">{t("admin.user")}</th>
+                <th className="p-3">{t("admin.registrationDate")}</th>
                 <th className="p-3">{t("admin.referralCode")}</th>
                 <th className="p-3">{t("admin.vipRank")}</th>
                 <th className="p-3">{t("admin.availableBalance")}</th>
@@ -170,6 +171,9 @@ export function AdminUsersTab() {
                     <p className="text-[10px] text-muted-foreground">
                       {content(user.email || "", { allowUserIdentifier: true })}
                     </p>
+                  </td>
+                  <td className="whitespace-nowrap p-3 text-muted-foreground">
+                    {new Date(user.createdAt).toLocaleDateString(isRTL ? "ar" : "en-US")}
                   </td>
                   <td className="p-3 font-mono font-bold text-cyan-glow">
                     {content(user.referralCode, { allowLanguageNeutral: true })}

@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   RefreshCw,
 } from "lucide-react";
-import { getAdminOverview } from "@/lib/valoriza-admin.functions";
+import { getAdminOverview, getAdminUsers } from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 
 interface AdminOverviewTabProps {
@@ -19,10 +19,20 @@ interface AdminOverviewTabProps {
 }
 
 export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
-  const { t } = useI18n();
+  const { t, isRTL } = useI18n();
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+  const {
+    data: registeredUsers,
+    isLoading: isLoadingUsers,
+    isError: usersError,
+  } = useQuery({
+    queryKey: ["admin-users", 1, ""],
+    queryFn: () => getAdminUsers({ page: 1, search: "" }),
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
@@ -148,6 +158,43 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
           </div>
         </div>
       )}
+
+      <section className="rounded-2xl border border-cyan-glow/30 bg-surface/60 p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 text-sm font-extrabold text-foreground">
+            <Users className="h-4 w-4 text-cyan-glow" />
+            {t("admin.recentRegistrations")}
+          </h2>
+          <button
+            type="button"
+            onClick={() => onSelectTab("users")}
+            className="rounded-lg border border-cyan-glow/40 px-3 py-1.5 text-xs font-bold text-cyan-glow hover:bg-cyan-glow/10"
+          >
+            {t("admin.viewAllUsers")}
+          </button>
+        </div>
+        {isLoadingUsers ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">{t("admin.loadingUsers")}</p>
+        ) : usersError ? (
+          <p role="alert" className="py-4 text-center text-xs text-danger">{t("common.error")}</p>
+        ) : !registeredUsers?.items.length ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">{t("admin.noRegisteredUsers")}</p>
+        ) : (
+          <ul className="divide-y divide-border/50">
+            {registeredUsers.items.slice(0, 5).map((user) => (
+              <li key={user.id} className="flex items-center justify-between gap-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-foreground">{user.username || user.email}</p>
+                  <p className="truncate text-muted-foreground">{user.email}</p>
+                </div>
+                <time className="shrink-0 text-[11px] text-muted-foreground" dateTime={user.createdAt}>
+                  {new Date(user.createdAt).toLocaleDateString(isRTL ? "ar" : "en-US")}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       {/* Grid of Key Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

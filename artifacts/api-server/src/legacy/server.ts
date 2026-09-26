@@ -1411,20 +1411,26 @@ app.get("/api/admin/users", async (request, response, next) => {
     const [totalResult, pageResult] = await Promise.all([
       query<{ total: string }>(
         `SELECT count(*)::text AS total
-         FROM profiles p
-         WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=p.id AND r.role='admin')
-           AND ($1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2)`,
+         FROM users u
+         LEFT JOIN profiles p ON p.id=u.id
+         WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')
+           AND ($1::text = '' OR p.username ILIKE $2 OR u.email ILIKE $2 OR p.referral_code ILIKE $2)`,
         [search, searchPattern],
       ),
       query(
         `WITH current_page AS MATERIALIZED (
-           SELECT p.id,p.username,p.email,p.phone,p.referral_code,p.vip_level,p.trial_active,p.is_blocked,p.created_at,
+            SELECT u.id,p.username,u.email,p.phone,p.referral_code,
+                   COALESCE(p.vip_level,0) AS vip_level,
+                   COALESCE(p.trial_active,false) AS trial_active,
+                   COALESCE(p.is_blocked,false) AS is_blocked,
+                   u.created_at,
                   w.balance,w.total_deposited,w.total_withdrawn,w.invested_balance,w.team_income
-           FROM profiles p
-           LEFT JOIN wallets w ON w.user_id=p.id
-           WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=p.id AND r.role='admin')
-             AND ($1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2)
-           ORDER BY p.created_at DESC,p.id DESC
+            FROM users u
+            LEFT JOIN profiles p ON p.id=u.id
+            LEFT JOIN wallets w ON w.user_id=u.id
+            WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')
+              AND ($1::text = '' OR p.username ILIKE $2 OR u.email ILIKE $2 OR p.referral_code ILIKE $2)
+            ORDER BY u.created_at DESC,u.id DESC
            LIMIT $3 OFFSET $4
          ),
          page_referrals AS (
