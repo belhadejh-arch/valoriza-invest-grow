@@ -24,6 +24,11 @@ import {
   requestWithdrawal,
 } from "@/lib/valoriza-pages.functions";
 import { backendRequest } from "@/lib/backend-client";
+import {
+  DepositProofUploadError,
+  requestDepositProofUpload,
+  uploadDepositProofFile,
+} from "@/lib/deposit-proof-upload";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
@@ -81,41 +86,27 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
     }
 
     setSubmitting(true);
+    let submittingDeposit = false;
     try {
-      const upload = await backendRequest<{
-        uploadURL?: string;
-        uploadUrl?: string;
-        signedUrl?: string;
-        objectPath?: string;
-      }>("/api/app/deposit-proof/upload-url", {
-        method: "POST",
-        body: JSON.stringify({
-          name: proof.name,
-          size: proof.size,
-          contentType: proof.type,
-        }),
-      }, 35_000);
-      const uploadURL = upload.uploadURL ?? upload.uploadUrl ?? upload.signedUrl;
-      if (!uploadURL || !upload.objectPath) {
-        throw new Error("Deposit proof upload URL response is incomplete");
-      }
-      const uploaded = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": proof.type },
-        body: proof,
-      });
-      if (!uploaded.ok) throw new Error(`Deposit proof upload failed: ${uploaded.status}`);
+      const upload = await requestDepositProofUpload(proof);
+      await uploadDepositProofFile(upload.uploadURL, proof);
+      submittingDeposit = true;
       const result = await backendRequest<{ ok?: boolean; reason?: string }>("/api/app/deposit", {
         method: "POST",
-        body: JSON.stringify({ network, amount: num, objectPath: upload.objectPath }),
-      }, 80_000);
-      if (!result.ok) {
-        if (result.reason === "BELOW_MIN_DEPOSIT") toast.error(t("public.deposit.minimumError"));
-        else if (result.reason === "SCREENSHOT_REQUIRED") toast.error(t("deposit.uploadHint"));
+        body: JSON.stringify({
+          network,
+          amount: num,
+          proofId: upload.proofId,
+          objectPath: upload.objectPath,
+        }),
+      }, 120_000);
+      if (result?.ok !== true) {
+        if (result?.reason === "BELOW_MIN_DEPOSIT") toast.error(t("public.deposit.minimumError"));
+        else if (result?.reason === "SCREENSHOT_REQUIRED") toast.error(t("deposit.uploadHint"));
         else toast.error(t("public.deposit.error"));
         return;
       }
-      toast.success(`${t("public.deposit.success")} (${t("records.pending")})`);
+      toast.success(`${t("deposit.requestReceived")} (${t("records.pending")})`);
       setAmount("");
       setProof(null);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -124,7 +115,35 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
       onClose();
     } catch (error) {
       console.error("Deposit submission failed", error);
-      toast.error(t("public.deposit.error"));
+      if (error instanceof DepositProofUploadError) {
+        if (error.stage === "details") {
+          toast.error(t("deposit.incompleteUploadDetails"));
+        } else if (error.stage === "signing") {
+          toast.error(
+            error.status
+              ? t("deposit.uploadLinkServerError", undefined, { status: error.status })
+              : t("deposit.uploadLinkConnectionError"),
+          );
+        } else {
+          toast.error(
+            error.status
+              ? t("deposit.imageUploadServerError", undefined, { status: error.status })
+              : t("deposit.imageUploadConnectionError"),
+          );
+        }
+      } else if (submittingDeposit) {
+        const status =
+          error instanceof Error
+            ? error.message.match(/API request failed: (\d{3})/)?.[1]
+            : null;
+        toast.error(
+          status
+            ? t("deposit.depositServerError", undefined, { status })
+            : t("deposit.depositConnectionError"),
+        );
+      } else {
+        toast.error(t("public.deposit.error"));
+      }
     } finally {
       setSubmitting(false);
     }

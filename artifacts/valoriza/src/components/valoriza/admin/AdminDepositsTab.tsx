@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft,
@@ -25,17 +25,31 @@ export function AdminDepositsTab() {
   const [selectedDepositId, setSelectedDepositId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
   const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
+  const knownPendingIds = useRef<Set<string> | null>(null);
 
   const {
     data: deposits = [],
     isLoading,
+    isError,
     refetch,
   } = useQuery({
     queryKey: ["admin-deposits"],
     queryFn: () => getAdminDeposits(),
-    refetchInterval: 15000,
+    refetchInterval: 3000,
     refetchIntervalInBackground: false,
   });
+
+  useEffect(() => {
+    if (isLoading || isError) return;
+    const pendingIds = new Set<string>(
+      deposits.filter((deposit: { status: string }) => deposit.status === "pending")
+        .map((deposit: { id: string }) => deposit.id),
+    );
+    if (knownPendingIds.current && [...pendingIds].some((id) => !knownPendingIds.current?.has(id))) {
+      toast.info(lang === "ar" ? "وصل طلب إيداع جديد للمراجعة." : "A new deposit is awaiting review.");
+    }
+    knownPendingIds.current = pendingIds;
+  }, [deposits, isLoading, isError, lang]);
 
   const reviewMutation = useMutation({
     mutationFn: reviewDeposit,
@@ -114,6 +128,13 @@ export function AdminDepositsTab() {
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           {t("admin.loadingDeposits")}
+        </div>
+      ) : isError ? (
+        <div className="surface-card rounded-2xl p-8 text-center text-xs text-danger">
+          <p>{t("common.error")}</p>
+          <button type="button" onClick={() => void refetch()} className="mt-3 rounded-xl border border-border px-4 py-2 text-foreground">
+            {t("common.retry")}
+          </button>
         </div>
       ) : filteredDeposits.length === 0 ? (
         <div className="surface-card rounded-2xl p-8 text-center text-xs text-muted-foreground">

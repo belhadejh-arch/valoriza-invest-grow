@@ -24,6 +24,11 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
 import { backendRequest } from "@/lib/backend-client";
+import {
+  DepositProofUploadError,
+  requestDepositProofUpload,
+  uploadDepositProofFile,
+} from "@/lib/deposit-proof-upload";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
@@ -119,60 +124,26 @@ function DepositPage() {
 
   const depositMutation = useMutation({
     mutationFn: async (vals: { network: NetworkType; amount: number; file: File }) => {
-      let upload: {
-        proofId?: string;
-        uploadURL?: string;
-        objectPath?: string;
-      };
-      try {
-        upload = await backendRequest("/api/app/deposit-proof/upload-url", {
-          method: "POST",
-          body: JSON.stringify({
-            name: vals.file.name,
-            size: vals.file.size,
-            contentType: vals.file.type,
-          }),
-        }, 35_000);
-      } catch (error) {
-        const status =
-          error instanceof Error
-            ? error.message.match(/API request failed: (\d{3})/)?.[1]
-            : null;
+      const upload = await requestDepositProofUpload(vals.file).catch((error: unknown) => {
+        if (!(error instanceof DepositProofUploadError)) throw error;
+        if (error.stage === "details") {
+          throw new DepositFlowError(t("deposit.incompleteUploadDetails"));
+        }
         throw new DepositFlowError(
-          status
-            ? t("deposit.uploadLinkServerError", undefined, { status })
+          error.status
+            ? t("deposit.uploadLinkServerError", undefined, { status: error.status })
             : t("deposit.uploadLinkConnectionError"),
         );
-      }
+      });
 
-      if (
-        typeof upload.proofId !== "string" ||
-        !upload.proofId ||
-        typeof upload.uploadURL !== "string" ||
-        !upload.uploadURL ||
-        typeof upload.objectPath !== "string" ||
-        !upload.objectPath
-      ) {
-        throw new DepositFlowError(
-          t("deposit.incompleteUploadDetails"),
-        );
-      }
-
-      let uploadResponse: Response;
       try {
-        uploadResponse = await fetch(upload.uploadURL, {
-          method: "PUT",
-          headers: { "Content-Type": vals.file.type },
-          body: vals.file,
-        });
-      } catch {
+        await uploadDepositProofFile(upload.uploadURL, vals.file);
+      } catch (error) {
+        const status = error instanceof DepositProofUploadError ? error.status : undefined;
         throw new DepositFlowError(
-          t("deposit.imageUploadConnectionError"),
-        );
-      }
-      if (!uploadResponse.ok) {
-        throw new DepositFlowError(
-          t("deposit.imageUploadServerError", undefined, { status: uploadResponse.status }),
+          status
+            ? t("deposit.imageUploadServerError", undefined, { status })
+            : t("deposit.imageUploadConnectionError"),
         );
       }
 
@@ -185,7 +156,7 @@ function DepositPage() {
             proofId: upload.proofId,
             objectPath: upload.objectPath,
           }),
-        }, 80_000);
+        }, 120_000);
       } catch (error) {
         const status =
           error instanceof Error
@@ -199,7 +170,7 @@ function DepositPage() {
       }
     },
     onSuccess: (res: any) => {
-      if (res.ok) {
+      if (res?.ok === true) {
         toast.success(`${t("deposit.requestReceived")} (${t("records.pending")})`);
         setAmount("");
         if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
@@ -212,11 +183,11 @@ function DepositPage() {
         setTimeout(() => {
           navigate({ to: "/account" });
         }, 1200);
-      } else if (res.reason === "SCREENSHOT_REQUIRED") {
+      } else if (res?.reason === "SCREENSHOT_REQUIRED") {
         toast.error(t("deposit.uploadHint"));
-      } else if (res.reason === "BELOW_MIN_DEPOSIT") {
+      } else if (res?.reason === "BELOW_MIN_DEPOSIT") {
         toast.error(`${t("deposit.minNotice")} (${minDeposit}$)`);
-      } else if (res.reason) {
+      } else if (res?.reason) {
         toast.error(t("deposit.requestRejectedReason", undefined, { reason: res.reason }));
       } else {
         toast.error(t("deposit.requestRejected"));

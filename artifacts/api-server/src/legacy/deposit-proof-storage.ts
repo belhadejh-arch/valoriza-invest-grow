@@ -14,7 +14,7 @@ async function signObjectUrl(
   ttlSeconds: number,
 ) {
   const bucket = bucketName();
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       const response = await fetch(`${sidecarEndpoint}/object-storage/signed-object-url`, {
         method: "POST",
@@ -29,22 +29,22 @@ async function signObjectUrl(
       });
       if (response.ok) {
         const payload = (await response.json()) as { signed_url?: string };
-        if (!payload.signed_url) throw new Error("OBJECT_STORAGE_SIGNING_FAILED");
+        if (!payload.signed_url) throw new Error("OBJECT_STORAGE_INVALID_SIGN_RESPONSE");
         return payload.signed_url;
       }
-      const retryable = [429, 500, 502, 503, 504].includes(response.status);
-      if (!retryable || attempt === 2) {
+      if (![429, 500, 502, 503, 504].includes(response.status))
+        throw new Error(`OBJECT_STORAGE_SIGNING_REJECTED_${response.status}`);
+      if (attempt === 3)
         throw new Error(`OBJECT_STORAGE_SIGNING_FAILED_${response.status}`);
-      }
     } catch (error) {
-      if (
-        attempt === 2 ||
-        (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_SIGNING_FAILED"))
-      ) {
+      if (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_SIGNING_REJECTED"))
         throw error;
-      }
+      if (attempt === 3)
+        throw error instanceof Error && error.message.startsWith("OBJECT_STORAGE_")
+          ? error
+          : new Error("OBJECT_STORAGE_SIGNING_FAILED");
     }
-    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+    await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
   }
   throw new Error("OBJECT_STORAGE_SIGNING_FAILED");
 }

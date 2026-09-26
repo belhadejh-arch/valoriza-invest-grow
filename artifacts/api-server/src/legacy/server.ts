@@ -419,6 +419,12 @@ app.post("/api/app/deposit-proof/upload-url", async (request, response, next) =>
       headers: { "Content-Type": contentType },
     });
   } catch (error) {
+    if (error instanceof Error &&
+        (error.message.startsWith("OBJECT_STORAGE_SIGNING_FAILED") ||
+         error.message === "OBJECT_STORAGE_INVALID_SIGN_RESPONSE")) {
+      logger.warn({ err: error }, "Deposit proof upload signing temporarily unavailable");
+      return response.status(503).json({ ok: false, reason: "PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE" });
+    }
     return next(error);
   }
 });
@@ -870,7 +876,6 @@ app.post("/api/app/deposit", async (request, response, next) => {
       `SELECT id,object_key,content_type,file_size FROM deposit_proofs
        WHERE user_id=$1 AND ($2::uuid IS NULL OR id=$2)
          AND ($3::text IS NULL OR object_key=$3)
-         AND NOT EXISTS (SELECT 1 FROM deposits d WHERE d.proof_id=deposit_proofs.id)
        ORDER BY created_at DESC LIMIT 1`,
       [user.id, proofId ?? null, objectPath ?? null],
     );
@@ -880,6 +885,12 @@ app.post("/api/app/deposit", async (request, response, next) => {
       (proofId && objectPath && proof.rows[0].object_key !== objectPath)
     )
       return response.status(400).json({ ok: false, reason: "SCREENSHOT_REQUIRED" });
+    // A retry after a lost browser response should show the already received
+    // pending request, not ask the customer to upload the receipt again.
+    const received = await query<{ id: string }>(
+      "SELECT id FROM deposits WHERE user_id=$1 AND proof_id=$2", [user.id, proof.rows[0].id],
+    );
+    if (received.rowCount) return response.json({ ok: true, depositId: received.rows[0].id, alreadySubmitted: true });
     if (
       !(await verifyDepositProofObject(
         proof.rows[0].object_key,
@@ -889,6 +900,14 @@ app.post("/api/app/deposit", async (request, response, next) => {
     )
       return response.status(400).json({ ok: false, reason: "INVALID_OR_MISSING_PROOF_FILE" });
     const result = await withTransaction(async (client) => {
+      // Lock this receipt before inserting so simultaneous submissions with
+      // the same uploaded proof cannot create a duplicate or a spurious 500.
+      await client.query("SELECT id FROM deposit_proofs WHERE id=$1 FOR UPDATE", [proof.rows[0].id]);
+      const duplicate = await client.query<{ id: string }>(
+        "SELECT id FROM deposits WHERE user_id=$1 AND proof_id=$2", [user.id, proof.rows[0].id],
+      );
+      if (duplicate.rowCount)
+        return { ok: true, depositId: duplicate.rows[0].id, alreadySubmitted: true };
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO deposits (user_id,amount,network,deposit_address,screenshot_url,tx_hash,proof_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
@@ -906,6 +925,12 @@ app.post("/api/app/deposit", async (request, response, next) => {
     });
     return response.json(result);
   } catch (error) {
+    if (error instanceof Error &&
+        (error.message.startsWith("OBJECT_STORAGE_SIGNING_FAILED") ||
+         error.message === "OBJECT_STORAGE_INVALID_SIGN_RESPONSE")) {
+      logger.warn({ err: error }, "Deposit proof verification signing temporarily unavailable");
+      return response.status(503).json({ ok: false, reason: "PROOF_VERIFICATION_TEMPORARILY_UNAVAILABLE" });
+    }
     return next(error);
   }
 });
@@ -1694,8 +1719,18 @@ app.post("/api/admin/users/balance", async (request, response, next) => {
 app.get("/api/admin/deposits", async (_request, response, next) => {
   try {
     const result = await query(
-      `SELECT d.*,p.username,p.email FROM deposits d JOIN profiles p ON p.id=d.user_id
-       ORDER BY d.created_at DESC LIMIT 150`,
+      `WITH visible AS (
+         SELECT id FROM deposits WHERE status='pending'
+         UNION
+         SELECT id FROM (
+           SELECT id FROM deposits WHERE status<>'pending' ORDER BY created_at DESC LIMIT 150
+         ) recent
+       )
+       SELECT d.*,COALESCE(p.username,u.email) AS username,COALESCE(p.email,u.email) AS email
+       FROM visible v JOIN deposits d ON d.id=v.id
+       JOIN users u ON u.id=d.user_id
+       LEFT JOIN profiles p ON p.id=d.user_id
+       ORDER BY CASE WHEN d.status='pending' THEN 0 ELSE 1 END,d.created_at DESC`,
     );
     response.json(
       result.rows.map((row) => ({
