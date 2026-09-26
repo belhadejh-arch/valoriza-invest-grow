@@ -70,7 +70,12 @@ function AuthPage() {
     if (rawMsg.includes("INVALID_REGISTRATION")) {
       return t("public.auth.invalidRegistration");
     }
+    if (rawMsg.includes("SERVER_UNAVAILABLE") || rawMsg.includes("REQUEST_FAILED")) {
+      return t("public.auth.serverError");
+    }
     if (
+      rawMsg.includes("NETWORK_ERROR") ||
+      rawMsg.includes("NETWORK_TIMEOUT") ||
       rawMsg.includes("fetch") ||
       rawMsg.includes("Failed to fetch") ||
       rawMsg.includes("Network")

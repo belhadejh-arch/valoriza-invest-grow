@@ -2,3 +2,4 @@
 - [Arabic-only authored content](arabic-authored-content.md) — do not show source Arabic in other locales when no authored translation exists.
 - [Empty financial configuration in development](financial-config-testing.md) — test real financial flows with disposable admin-configured offerings, not reference-image values.
 - [Legacy account repair on authenticated requests](legacy-account-repair.md) — reduce its cost without dropping recovery until existing live users are safely backfilled.
+- [Database switch compatibility](database-switch-compatibility.md) — a newly connected database may contain real accounts but lack schema expected by newer app code.

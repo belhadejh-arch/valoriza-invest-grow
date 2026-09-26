@@ -189,8 +189,18 @@ app.post("/api/auth/register", async (request, response, next) => {
 app.post("/api/auth/login", async (request, response, next) => {
   try {
     const { email, password } = request.body ?? {};
-    const result = await query<{ id: string; password_hash: string; is_blocked: boolean }>(
-      `SELECT u.id, u.password_hash, p.is_blocked FROM users u JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
+    const result = await query<{
+      id: string;
+      password_hash: string;
+      is_blocked: boolean;
+      username: string;
+      email: string;
+      role: string;
+    }>(
+      `SELECT u.id, u.password_hash, p.is_blocked, p.username, p.email,
+              COALESCE((SELECT role FROM user_roles WHERE user_id = u.id
+                        ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
+       FROM users u JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
       [
         String(email ?? "")
           .trim()
@@ -203,20 +213,14 @@ app.post("/api/auth/login", async (request, response, next) => {
     }
     if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
     const token = await createSession(row.id, response);
-    const userProfile = await query<{ username: string; email: string; role: string }>(
-      `SELECT p.username, p.email,
-              COALESCE((SELECT role FROM user_roles WHERE user_id = p.id ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
-       FROM profiles p WHERE p.id = $1`,
-      [row.id],
-    );
     return response.json({
       ok: true,
       token,
       user: {
         id: row.id,
-        email: userProfile.rows[0]?.email || String(email).trim().toLowerCase(),
-        username: userProfile.rows[0]?.username || "user",
-        role: userProfile.rows[0]?.role || "user",
+        email: row.email,
+        username: row.username,
+        role: row.role,
       },
     });
   } catch (error) {

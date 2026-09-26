@@ -44,13 +44,17 @@ async function request<T>(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      credentials: "include",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...init,
+        headers,
+        credentials: "include",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const data = await response.json().catch(() => ({}));
 
@@ -69,14 +73,17 @@ async function request<T>(
             ? "ACCOUNT_BLOCKED"
             : response.status === 409
               ? "ACCOUNT_EXISTS"
-              : "REQUEST_FAILED";
+              : response.status >= 500
+                ? "SERVER_UNAVAILABLE"
+                : "REQUEST_FAILED";
       return { data: null, error: new Error(message) };
     }
 
     return { data: data as T, error: null };
-  } catch {
-    // Return friendly error object rather than crashing with unhandled rejection
-    return { data: null, error: new Error("NETWORK_ERROR") };
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError" ? "NETWORK_TIMEOUT" : "NETWORK_ERROR";
+    return { data: null, error: new Error(message) };
   }
 }
 
