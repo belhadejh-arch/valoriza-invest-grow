@@ -18,7 +18,7 @@ import { Logo } from "@/components/valoriza/Logo";
 import { LanguageSwitcher } from "@/components/valoriza/LanguageSwitcher";
 import { ThemeToggle } from "@/components/valoriza/ThemeToggle";
 import { useI18n } from "@/lib/i18n";
-import heroCity from "@/assets/hero-city.jpg";
+import heroCity from "@/assets/hero-city.webp";
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>) => {
@@ -173,6 +173,7 @@ function AuthPage() {
                 alt={t("public.auth.heroAlt")}
                 width={1280}
                 height={720}
+                decoding="async"
                 className="h-64 lg:h-72 w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/60 to-transparent" />

@@ -29,8 +29,8 @@ import { DepositModal, WithdrawalModal, SavingsFundModal } from "@/components/va
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
-import heroCityImg from "@/assets/hero-city.jpg";
-import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
+import heroCityImg from "@/assets/hero-city.webp";
+import madridHQImg from "@/assets/images/madrid-hq.webp";
 
 export const Route = createFileRoute("/_authenticated/home")({
   component: HomePage,
@@ -83,7 +83,6 @@ function HomePage() {
     queryKey: ["home"],
     queryFn: () => fetchHome(),
     refetchInterval: 60_000,
-    refetchIntervalInBackground: true,
   });
 
   const claimMutation = useMutation({
@@ -169,6 +168,9 @@ function HomePage() {
           <img
             src={heroCityImg}
             alt={t("home.heroAlt")}
+            width={1280}
+            height={720}
+            decoding="async"
             className="absolute inset-0 h-full w-full object-cover brightness-[0.38] contrast-125 transition-all duration-700"
           />
 
@@ -419,6 +421,10 @@ function HomePage() {
                 <img
                   src={madridHQImg}
                   alt={t("home.hqAlt")}
+                  width={1000}
+                  height={747}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/50 to-transparent" />

@@ -23,6 +23,7 @@ export function AdminWithdrawalsTab() {
     queryKey: ["admin-withdrawals"],
     queryFn: () => getAdminWithdrawals(),
     refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
 
   const reviewMutation = useMutation({

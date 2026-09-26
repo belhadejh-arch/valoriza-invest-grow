@@ -23,7 +23,8 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
-    refetchInterval: 15000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   if (isLoading) {

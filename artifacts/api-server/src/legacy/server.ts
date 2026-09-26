@@ -65,11 +65,18 @@ async function getSettings(publicOnly = false) {
 }
 
 async function ensureUserRows(userId: string) {
-  await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
-    userId,
-  ]);
   await query(
-    "INSERT INTO user_wheel_chances (user_id,chances) VALUES ($1,0) ON CONFLICT (user_id) DO NOTHING",
+    `WITH ensure_wallet AS (
+       INSERT INTO wallets (user_id) VALUES ($1)
+       ON CONFLICT (user_id) DO NOTHING
+       RETURNING user_id
+     ),
+     ensure_wheel_chances AS (
+       INSERT INTO user_wheel_chances (user_id,chances) VALUES ($1,0)
+       ON CONFLICT (user_id) DO NOTHING
+       RETURNING user_id
+     )
+     SELECT 1`,
     [userId],
   );
 }
@@ -1229,7 +1236,6 @@ app.use("/api/admin", async (request, _response, next) => {
 
 app.get("/api/admin/overview", async (request, response, next) => {
   try {
-    await requireAdmin(request);
     const [users, deposits, withdrawals, investments, tasks] = await Promise.all([
       query("SELECT count(*)::int AS count FROM users"),
       query(
@@ -1258,16 +1264,65 @@ app.get("/api/admin/overview", async (request, response, next) => {
   }
 });
 
-app.get("/api/admin/users", async (_request, response, next) => {
+app.get("/api/admin/users", async (request, response, next) => {
   try {
-    const result = await query(
-      `SELECT p.id,p.username,p.email,p.phone,p.referral_code,p.vip_level,p.trial_active,p.is_blocked,p.created_at,
-        w.balance,w.total_deposited,w.total_withdrawn,w.invested_balance,w.team_income,
-        (SELECT count(*)::int FROM referrals r WHERE r.referrer_id=p.id) AS team_count
-       FROM profiles p LEFT JOIN wallets w ON w.user_id=p.id ORDER BY p.created_at DESC`,
-    );
-    response.json(
-      result.rows.map((row) => ({
+    const rawPage = request.query.page;
+    const rawSearch = request.query.search;
+    if (
+      (rawPage !== undefined &&
+        (typeof rawPage !== "string" || !/^[1-9]\d*$/.test(rawPage))) ||
+      (rawSearch !== undefined && typeof rawSearch !== "string")
+    ) {
+      response.status(400).json({ message: "INVALID_USERS_QUERY" });
+      return;
+    }
+    const page = rawPage === undefined ? 1 : Number(rawPage);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100_000) {
+      response.status(400).json({ message: "INVALID_USERS_PAGE" });
+      return;
+    }
+
+    const search = (typeof rawSearch === "string" ? rawSearch : "").trim();
+    if (search.length > 100) {
+      response.status(400).json({ message: "SEARCH_TOO_LONG" });
+      return;
+    }
+    const escapedSearch = search.replace(/[\\%_]/g, "\\$&");
+    const searchPattern = `%${escapedSearch}%`;
+    const pageSize = 50;
+    const offset = (page - 1) * pageSize;
+    const [totalResult, pageResult] = await Promise.all([
+      query<{ total: string }>(
+        `SELECT count(*)::text AS total
+         FROM profiles p
+         WHERE $1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2`,
+        [search, searchPattern],
+      ),
+      query(
+        `WITH current_page AS MATERIALIZED (
+           SELECT p.id,p.username,p.email,p.phone,p.referral_code,p.vip_level,p.trial_active,p.is_blocked,p.created_at,
+                  w.balance,w.total_deposited,w.total_withdrawn,w.invested_balance,w.team_income
+           FROM profiles p
+           LEFT JOIN wallets w ON w.user_id=p.id
+           WHERE $1::text = '' OR p.username ILIKE $2 OR p.email ILIKE $2 OR p.referral_code ILIKE $2
+           ORDER BY p.created_at DESC,p.id DESC
+           LIMIT $3 OFFSET $4
+         ),
+         page_referrals AS (
+           SELECT r.referrer_id,count(*) AS team_count
+           FROM referrals r
+           WHERE r.referrer_id IN (SELECT id FROM current_page)
+           GROUP BY r.referrer_id
+         )
+         SELECT p.*,COALESCE(r.team_count, 0)::int AS team_count
+         FROM current_page p
+         LEFT JOIN page_referrals r ON r.referrer_id=p.id
+         ORDER BY p.created_at DESC,p.id DESC`,
+        [search, searchPattern, pageSize, offset],
+      ),
+    ]);
+    response.json({
+      items: pageResult.rows.map((row) => ({
         id: row.id,
         username: row.username,
         email: row.email,
@@ -1284,7 +1339,10 @@ app.get("/api/admin/users", async (_request, response, next) => {
         teamIncome: number(row.team_income),
         teamCount: number(row.team_count),
       })),
-    );
+      total: Number(totalResult.rows[0]?.total ?? 0),
+      page,
+      pageSize,
+    });
   } catch (error) {
     next(error);
   }

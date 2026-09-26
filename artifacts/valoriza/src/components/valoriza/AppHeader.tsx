@@ -60,7 +60,8 @@ export function AppHeader({
   const { data: notifData } = useQuery({
     queryKey: ["user-notifications-count"],
     queryFn: () => getUserNotifications(),
-    refetchInterval: 20000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 
   const unreadCount = notifData?.unreadCount ?? 0;

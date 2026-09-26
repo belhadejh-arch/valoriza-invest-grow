@@ -73,7 +73,8 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
     queryKey: ["user-notifications"],
     queryFn: () => getUserNotifications(),
     enabled: open,
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   });
 
   const markMutation = useMutation({

@@ -11,6 +11,20 @@ type AuthListener = (event: "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED", session
 
 const listeners = new Set<AuthListener>();
 
+const AUTH_USER_CACHE_TTL_MS = 15_000;
+
+type AuthUserResult = { data: { user: AuthUser } | null; error: Error | null };
+
+let verifiedAuthUser:
+  | { token: string; user: AuthUser; verifiedAt: number }
+  | null = null;
+const authUserChecks = new Map<string, Promise<AuthUserResult>>();
+
+function invalidateVerifiedAuthUser() {
+  verifiedAuthUser = null;
+  authUserChecks.clear();
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -76,14 +90,46 @@ const auth = {
   },
 
   async getUser() {
-    const result = await request<{ session: { user: AuthUser } }>("/api/auth/session");
-    if (!result.error && result.data?.session?.user) {
+    const token = getStoredToken();
+    if (!token) {
+      const result = await request<{ session: { user: AuthUser } }>("/api/auth/session");
+      if (result.error || !result.data?.session?.user) {
+        invalidateVerifiedAuthUser();
+        return { data: null, error: result.error || new Error("USER_NOT_FOUND") };
+      }
       return { data: { user: result.data.session.user }, error: null };
     }
-    return { data: null, error: result.error || new Error("USER_NOT_FOUND") };
+
+    if (
+      verifiedAuthUser?.token === token &&
+      Date.now() - verifiedAuthUser.verifiedAt < AUTH_USER_CACHE_TTL_MS
+    ) {
+      return { data: { user: verifiedAuthUser.user }, error: null };
+    }
+
+    const inFlight = authUserChecks.get(token);
+    if (inFlight) return inFlight;
+
+    const check = request<{ session: { user: AuthUser } }>("/api/auth/session").then((result) => {
+      const user = result.data?.session?.user;
+      if (!result.error && user) {
+        if (getStoredToken() === token) {
+          verifiedAuthUser = { token, user, verifiedAt: Date.now() };
+        }
+        return { data: { user }, error: null };
+      }
+      invalidateVerifiedAuthUser();
+      return { data: null, error: result.error || new Error("USER_NOT_FOUND") };
+    });
+    authUserChecks.set(token, check);
+    void check.finally(() => {
+      if (authUserChecks.get(token) === check) authUserChecks.delete(token);
+    });
+    return check;
   },
 
   async signInWithPassword(input: { email: string; password?: string }) {
+    invalidateVerifiedAuthUser();
     const cleanEmail = (input.email || "").trim().toLowerCase();
     const password = input.password || "";
 
@@ -103,6 +149,7 @@ const auth = {
       if (remoteResult.data.token) {
         setStoredToken(remoteResult.data.token);
       }
+      invalidateVerifiedAuthUser();
       listeners.forEach((listener) => listener("SIGNED_IN", remoteResult.data));
       return { data: { session: remoteResult.data, user: remoteResult.data.user }, error: null };
     }
@@ -118,6 +165,7 @@ const auth = {
     password: string;
     options?: { data?: Record<string, string> };
   }) {
+    invalidateVerifiedAuthUser();
     const cleanEmail = (input.email || "").trim().toLowerCase();
     const password = input.password || "";
     const metadata = input.options?.data ?? {};
@@ -147,6 +195,7 @@ const auth = {
       if (remoteResult.data.token) {
         setStoredToken(remoteResult.data.token);
       }
+      invalidateVerifiedAuthUser();
       listeners.forEach((listener) => listener("SIGNED_IN", remoteResult.data));
       return { data: { session: remoteResult.data, user: remoteResult.data.user }, error: null };
     }
@@ -168,6 +217,7 @@ const auth = {
   async signOut() {
     await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" }).catch(() => ({}));
     setStoredToken(null);
+    invalidateVerifiedAuthUser();
     listeners.forEach((listener) => listener("SIGNED_OUT", null));
     return { data: { ok: true }, error: null };
   },
@@ -178,6 +228,7 @@ const auth = {
       body: JSON.stringify(input),
     });
     if (!result.error && result.data?.user) {
+      invalidateVerifiedAuthUser();
       listeners.forEach((listener) => listener("USER_UPDATED", result.data));
     }
     return result;

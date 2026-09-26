@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
@@ -28,11 +28,19 @@ import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
 export function AdminUsersTab() {
-  const { t } = useI18n();
+  const { t, isRTL } = useI18n();
   const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const pageSize = 50;
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearch(searchTerm.trim()), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchTerm]);
 
   // Modals state
   const [adjustBalanceOpen, setAdjustBalanceOpen] = useState(false);
@@ -44,16 +52,24 @@ export function AdminUsersTab() {
   const [targetVipLevel, setTargetVipLevel] = useState(1);
 
   const {
-    data: users = [],
+    data: usersResponse,
     isLoading,
+    isError,
     refetch,
   } = useQuery({
-    queryKey: ["admin-users"],
-    queryFn: () => getAdminUsers(),
-    refetchInterval: 30_000,
+    queryKey: ["admin-users", page, debouncedSearch],
+    queryFn: () => getAdminUsers({ page, search: debouncedSearch }),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
-    staleTime: 0,
   });
+  const users = usersResponse?.items ?? [];
+  const total = usersResponse?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  useEffect(() => {
+    if (usersResponse && page > pageCount) setPage(pageCount);
+  }, [page, pageCount, usersResponse]);
 
   const blockMutation = useMutation({
     mutationFn: toggleUserBlock,
@@ -88,16 +104,6 @@ export function AdminUsersTab() {
     onError: () => toast.error(t("common.error")),
   });
 
-  const filteredUsers = users.filter((u: any) => {
-    const q = searchTerm.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      u.username?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
-      u.referralCode?.toLowerCase().includes(q)
-    );
-  });
-
   return (
     <div className="space-y-4">
       {/* Search Header */}
@@ -108,7 +114,10 @@ export function AdminUsersTab() {
             type="text"
             placeholder={t("admin.searchUsersPlaceholder")}
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
             className="w-full rounded-xl border border-border bg-surface pr-9 pl-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
           />
         </div>
@@ -118,7 +127,7 @@ export function AdminUsersTab() {
           className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-bold text-muted-foreground hover:text-foreground active:scale-95"
         >
           <RefreshCw className="h-3.5 w-3.5" />
-          <span>{t("admin.refresh")} ({filteredUsers.length})</span>
+          <span>{t("admin.refresh")} ({total})</span>
         </button>
       </div>
 
@@ -127,7 +136,11 @@ export function AdminUsersTab() {
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           {t("admin.loadingUsers")}
         </div>
-      ) : filteredUsers.length === 0 ? (
+      ) : isError ? (
+        <div role="alert" className="surface-card rounded-2xl p-8 text-center text-xs text-danger">
+          {t("common.error")}
+        </div>
+      ) : users.length === 0 ? (
         <div className="surface-card rounded-2xl p-8 text-center text-xs text-muted-foreground">
           {t("admin.noMatchingUsers")}
         </div>
@@ -148,7 +161,7 @@ export function AdminUsersTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
-              {filteredUsers.map((user: any) => (
+              {users.map((user: any) => (
                 <tr key={user.id} className="hover:bg-surface/80 transition-colors">
                   <td className="p-3">
                     <p className="font-extrabold text-foreground">
@@ -244,6 +257,35 @@ export function AdminUsersTab() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {usersResponse && (
+        <nav
+          aria-label={isRTL ? "التنقل بين صفحات المستخدمين" : "User list pages"}
+          className="flex items-center justify-center gap-3 text-xs text-muted-foreground"
+        >
+          <button
+            type="button"
+            aria-label={isRTL ? "الصفحة السابقة" : "Previous page"}
+            disabled={page <= 1}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            className="rounded-lg border border-border px-3 py-1.5 text-base disabled:opacity-40"
+          >
+            {isRTL ? "›" : "‹"}
+          </button>
+          <span aria-live="polite">
+            {page} / {pageCount} · {total}
+          </span>
+          <button
+            type="button"
+            aria-label={isRTL ? "الصفحة التالية" : "Next page"}
+            disabled={page >= pageCount}
+            onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+            className="rounded-lg border border-border px-3 py-1.5 text-base disabled:opacity-40"
+          >
+            {isRTL ? "‹" : "›"}
+          </button>
+        </nav>
       )}
 
       {/* Adjust Balance Modal */}

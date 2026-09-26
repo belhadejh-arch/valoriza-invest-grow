@@ -5,7 +5,16 @@ const adminPost = <T = any, R = any>(path: string) => (data: T) =>
   backendRequest<R>(path, { method: "POST", body: JSON.stringify(data) });
 
 export const getAdminOverview = adminGet("/api/admin/overview");
-export const getAdminUsers = adminGet<any[]>("/api/admin/users");
+export type AdminUsersResponse = {
+  items: any[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+export const getAdminUsers = ({ page, search }: { page: number; search: string }) =>
+  backendRequest<AdminUsersResponse>(
+    `/api/admin/users?page=${page}&search=${encodeURIComponent(search)}`,
+  );
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",
 );

@@ -1,3 +1,4 @@
 - [Vite build runtime env](vite-build-runtime-env.md) — CI evaluates all Vite configs without Replit's preview-only PORT and BASE_PATH.
 - [Arabic-only authored content](arabic-authored-content.md) — do not show source Arabic in other locales when no authored translation exists.
 - [Empty financial configuration in development](financial-config-testing.md) — test real financial flows with disposable admin-configured offerings, not reference-image values.
+- [Legacy account repair on authenticated requests](legacy-account-repair.md) — reduce its cost without dropping recovery until existing live users are safely backfilled.

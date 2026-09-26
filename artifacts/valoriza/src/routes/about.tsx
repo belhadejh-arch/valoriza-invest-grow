@@ -23,7 +23,7 @@ import { LoadingState, ErrorState } from "@/components/valoriza/StatusStates";
 import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
-import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
+import madridHQImg from "@/assets/images/madrid-hq.webp";
 
 export const Route = createFileRoute("/about")({
   component: AboutPage,
@@ -129,6 +129,10 @@ function AboutPage() {
                 <img
                   src={madridHQImg}
                   alt={headquarters}
+                  width={1000}
+                  height={747}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
               )}

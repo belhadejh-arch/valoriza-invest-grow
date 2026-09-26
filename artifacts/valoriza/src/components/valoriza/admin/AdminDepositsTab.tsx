@@ -34,6 +34,7 @@ export function AdminDepositsTab() {
     queryKey: ["admin-deposits"],
     queryFn: () => getAdminDeposits(),
     refetchInterval: 15000,
+    refetchIntervalInBackground: false,
   });
 
   const reviewMutation = useMutation({

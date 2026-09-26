@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   LayoutDashboard,
@@ -16,18 +16,63 @@ import {
   ShieldCheck,
   HelpCircle,
 } from "lucide-react";
-import { AdminOverviewTab } from "@/components/valoriza/admin/AdminOverviewTab";
-import { AdminUsersTab } from "@/components/valoriza/admin/AdminUsersTab";
-import { AdminDepositsTab } from "@/components/valoriza/admin/AdminDepositsTab";
-import { AdminWithdrawalsTab } from "@/components/valoriza/admin/AdminWithdrawalsTab";
-import { AdminInvestmentsTab } from "@/components/valoriza/admin/AdminInvestmentsTab";
-import { AdminVipPackagesTab } from "@/components/valoriza/admin/AdminVipPackagesTab";
-import { AdminTasksTab } from "@/components/valoriza/admin/AdminTasksTab";
-import { AdminWheelTab } from "@/components/valoriza/admin/AdminWheelTab";
-import { AdminSettingsTab } from "@/components/valoriza/admin/AdminSettingsTab";
-import { AdminBroadcastTab } from "@/components/valoriza/admin/AdminBroadcastTab";
-import { AdminAuditLogsTab } from "@/components/valoriza/admin/AdminAuditLogsTab";
 import { useI18n } from "@/lib/i18n";
+
+const AdminOverviewTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminOverviewTab").then((module) => ({
+    default: module.AdminOverviewTab,
+  })),
+);
+const AdminUsersTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminUsersTab").then((module) => ({
+    default: module.AdminUsersTab,
+  })),
+);
+const AdminDepositsTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminDepositsTab").then((module) => ({
+    default: module.AdminDepositsTab,
+  })),
+);
+const AdminWithdrawalsTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminWithdrawalsTab").then((module) => ({
+    default: module.AdminWithdrawalsTab,
+  })),
+);
+const AdminInvestmentsTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminInvestmentsTab").then((module) => ({
+    default: module.AdminInvestmentsTab,
+  })),
+);
+const AdminVipPackagesTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminVipPackagesTab").then((module) => ({
+    default: module.AdminVipPackagesTab,
+  })),
+);
+const AdminTasksTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminTasksTab").then((module) => ({
+    default: module.AdminTasksTab,
+  })),
+);
+const AdminWheelTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminWheelTab").then((module) => ({
+    default: module.AdminWheelTab,
+  })),
+);
+const AdminSettingsTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminSettingsTab").then((module) => ({
+    default: module.AdminSettingsTab,
+  })),
+);
+const AdminBroadcastTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminBroadcastTab").then((module) => ({
+    default: module.AdminBroadcastTab,
+  })),
+);
+const AdminAuditLogsTab = lazy(() =>
+  import("@/components/valoriza/admin/AdminAuditLogsTab").then((module) => ({
+    default: module.AdminAuditLogsTab,
+  })),
+);
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminDashboardPage,
@@ -113,17 +158,25 @@ function AdminDashboardPage() {
 
       {/* Main Tab Content */}
       <main className="mx-auto max-w-6xl px-4 pt-5">
-        {activeTab === "overview" && <AdminOverviewTab onSelectTab={setActiveTab} />}
-        {activeTab === "deposits" && <AdminDepositsTab />}
-        {activeTab === "withdrawals" && <AdminWithdrawalsTab />}
-        {activeTab === "users" && <AdminUsersTab />}
-        {activeTab === "investments" && <AdminInvestmentsTab />}
-        {activeTab === "vip" && <AdminVipPackagesTab />}
-        {activeTab === "tasks" && <AdminTasksTab />}
-        {activeTab === "wheel" && <AdminWheelTab />}
-        {activeTab === "broadcast" && <AdminBroadcastTab />}
-        {activeTab === "settings" && <AdminSettingsTab />}
-        {activeTab === "audit" && <AdminAuditLogsTab />}
+        <Suspense
+          fallback={
+            <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground">
+              {t("common.loading")}
+            </div>
+          }
+        >
+          {activeTab === "overview" && <AdminOverviewTab onSelectTab={setActiveTab} />}
+          {activeTab === "deposits" && <AdminDepositsTab />}
+          {activeTab === "withdrawals" && <AdminWithdrawalsTab />}
+          {activeTab === "users" && <AdminUsersTab />}
+          {activeTab === "investments" && <AdminInvestmentsTab />}
+          {activeTab === "vip" && <AdminVipPackagesTab />}
+          {activeTab === "tasks" && <AdminTasksTab />}
+          {activeTab === "wheel" && <AdminWheelTab />}
+          {activeTab === "broadcast" && <AdminBroadcastTab />}
+          {activeTab === "settings" && <AdminSettingsTab />}
+          {activeTab === "audit" && <AdminAuditLogsTab />}
+        </Suspense>
       </main>
     </div>
   );
