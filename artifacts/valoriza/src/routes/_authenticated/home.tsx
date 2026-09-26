@@ -52,7 +52,7 @@ const HERO_SLIDES = [
     subtitleKey: "home.slideProfit",
     captionKey: "home.slidePlans",
     ctaKey: "home.exploreFunds",
-    ctaTo: "/investment",
+    ctaTo: null,
   },
   {
     titleKey: "home.slideTeam",
@@ -194,14 +194,26 @@ function HomePage() {
 
             {/* CTA Button and Navigation Arrows */}
             <div className="mt-4 flex items-center justify-between">
-              <Link
-                id="hero-cta-btn"
-                to={currentSlide.ctaTo}
-                className="inline-flex items-center gap-2 rounded-2xl gold-gradient px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
-              >
-                <span>{t(currentSlide.ctaKey)}</span>
-                <span className="text-sm font-black">›</span>
-              </Link>
+              {currentSlide.ctaTo ? (
+                <Link
+                  id="hero-cta-btn"
+                  to={currentSlide.ctaTo}
+                  className="inline-flex items-center gap-2 rounded-2xl gold-gradient px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <span>{t(currentSlide.ctaKey)}</span>
+                  <span className="text-sm font-black">›</span>
+                </Link>
+              ) : (
+                <button
+                  id="hero-cta-btn"
+                  type="button"
+                  onClick={() => setSavingsOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-2xl gold-gradient px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <span>{t(currentSlide.ctaKey)}</span>
+                  <span className="text-sm font-black">›</span>
+                </button>
+              )}
 
               {/* Slider Arrows */}
               <div className="flex items-center gap-1.5">
