@@ -132,7 +132,7 @@ function DepositPage() {
             size: vals.file.size,
             contentType: vals.file.type,
           }),
-        });
+        }, 35_000);
       } catch (error) {
         const status =
           error instanceof Error
@@ -185,7 +185,7 @@ function DepositPage() {
             proofId: upload.proofId,
             objectPath: upload.objectPath,
           }),
-        });
+        }, 80_000);
       } catch (error) {
         const status =
           error instanceof Error

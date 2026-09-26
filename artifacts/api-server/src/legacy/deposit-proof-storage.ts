@@ -13,21 +13,40 @@ async function signObjectUrl(
   method: "PUT" | "GET" | "HEAD",
   ttlSeconds: number,
 ) {
-  const response = await fetch(`${sidecarEndpoint}/object-storage/signed-object-url`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      bucket_name: bucketName(),
-      object_name: objectName,
-      method,
-      expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!response.ok) throw new Error(`OBJECT_STORAGE_SIGNING_FAILED_${response.status}`);
-  const payload = (await response.json()) as { signed_url?: string };
-  if (!payload.signed_url) throw new Error("OBJECT_STORAGE_SIGNING_FAILED");
-  return payload.signed_url;
+  const bucket = bucketName();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await fetch(`${sidecarEndpoint}/object-storage/signed-object-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bucket_name: bucket,
+          object_name: objectName,
+          method,
+          expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
+        }),
+        signal: AbortSignal.timeout(6_000),
+      });
+      if (response.ok) {
+        const payload = (await response.json()) as { signed_url?: string };
+        if (!payload.signed_url) throw new Error("OBJECT_STORAGE_SIGNING_FAILED");
+        return payload.signed_url;
+      }
+      const retryable = [429, 500, 502, 503, 504].includes(response.status);
+      if (!retryable || attempt === 2) {
+        throw new Error(`OBJECT_STORAGE_SIGNING_FAILED_${response.status}`);
+      }
+    } catch (error) {
+      if (
+        attempt === 2 ||
+        (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_SIGNING_FAILED"))
+      ) {
+        throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  throw new Error("OBJECT_STORAGE_SIGNING_FAILED");
 }
 
 export async function createDepositProofUpload(userId: string) {

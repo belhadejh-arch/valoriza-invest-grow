@@ -94,7 +94,7 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
           size: proof.size,
           contentType: proof.type,
         }),
-      });
+      }, 35_000);
       const uploadURL = upload.uploadURL ?? upload.uploadUrl ?? upload.signedUrl;
       if (!uploadURL || !upload.objectPath) {
         throw new Error("Deposit proof upload URL response is incomplete");
@@ -108,7 +108,7 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
       const result = await backendRequest<{ ok?: boolean; reason?: string }>("/api/app/deposit", {
         method: "POST",
         body: JSON.stringify({ network, amount: num, objectPath: upload.objectPath }),
-      });
+      }, 80_000);
       if (!result.ok) {
         if (result.reason === "BELOW_MIN_DEPOSIT") toast.error(t("public.deposit.minimumError"));
         else if (result.reason === "SCREENSHOT_REQUIRED") toast.error(t("deposit.uploadHint"));

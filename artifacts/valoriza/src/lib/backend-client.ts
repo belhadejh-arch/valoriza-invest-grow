@@ -27,7 +27,11 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
-export async function backendRequest<T = any>(path: string, init: RequestInit = {}): Promise<T> {
+export async function backendRequest<T = any>(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = 10_000,
+): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");
@@ -42,15 +46,18 @@ export async function backendRequest<T = any>(path: string, init: RequestInit = 
 
   const controller = new AbortController();
   // Ensure we don't prematurely abort longer requests like saves
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-  const response = await fetch(url, {
-    ...init,
-    headers,
-    credentials: "include",
-    signal: controller.signal,
-  });
-  clearTimeout(timeoutId);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers,
+      credentials: "include",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (response.ok) {
     const payload = (await response.json().catch(() => ({}))) as T;

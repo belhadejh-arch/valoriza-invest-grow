@@ -4,3 +4,4 @@
 - [Legacy account repair on authenticated requests](legacy-account-repair.md) — reduce its cost without dropping recovery until existing live users are safely backfilled.
 - [Database switch compatibility](database-switch-compatibility.md) — a newly connected database may contain real accounts but lack schema expected by newer app code.
 - [Administrator separation history](admin-separation-history.md) — preserve legacy financial rows while barring old admin identities from customer and admin access.
+- [Deposit proof upload timing](deposit-proof-timeouts.md) — align browser deadlines with signer retries and proof verification across both deposit entry points.
