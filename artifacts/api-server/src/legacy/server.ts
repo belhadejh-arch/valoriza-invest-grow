@@ -25,6 +25,8 @@ import {
 } from "./deposit-proof-storage.js";
 
 const app = express();
+// Percentages, not fractional rates: 8 means 8% of an approved deposit.
+const REFERRAL_PERCENTAGES = [0, 8, 4, 1] as const;
 app.use(express.json({ limit: "8mb" }));
 app.use(cookieParser());
 
@@ -60,11 +62,18 @@ function settingsMap(rows: { key: string; value: string }[]) {
   return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
-async function getSettings(publicOnly = false) {
+async function getSettings(publicOnly = false): Promise<Record<string, string>> {
   const result = await query<{ key: string; value: string }>(
     `SELECT key, value FROM platform_settings ${publicOnly ? "WHERE is_public = true" : ""}`,
   );
-  return settingsMap(result.rows);
+  // Keep the settings screen consistent with the fixed rates used for payouts,
+  // even if an older database still has fractional-percent values.
+  return {
+    ...settingsMap(result.rows),
+    referral_rate_l1: String(REFERRAL_PERCENTAGES[1]),
+    referral_rate_l2: String(REFERRAL_PERCENTAGES[2]),
+    referral_rate_l3: String(REFERRAL_PERCENTAGES[3]),
+  };
 }
 
 async function ensureUserRows(userId: string) {
@@ -1155,7 +1164,7 @@ app.get("/api/app/rewards", async (request, response, next) => {
 app.get("/api/app/team", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const [profile, referrals, income, settings] = await Promise.all([
+    const [profile, referrals, income] = await Promise.all([
       query<{ referral_code: string }>("SELECT referral_code FROM profiles WHERE id=$1", [user.id]),
       query<{ id: string; email: string; level: number; vip_level: number }>(
         `SELECT p.id,p.email,p.vip_level,r.level FROM referrals r
@@ -1167,16 +1176,12 @@ app.get("/api/app/team", async (request, response, next) => {
         "SELECT level,COALESCE(SUM(amount),0) AS total FROM referral_commissions WHERE referrer_id=$1 GROUP BY level",
         [user.id],
       ),
-      query<{ key: string; value: string }>(
-        "SELECT key,value FROM platform_settings WHERE key IN ('referral_rate_l1','referral_rate_l2','referral_rate_l3')",
-      ),
     ]);
-    const rates = settingsMap(settings.rows);
     const levels = [1, 2, 3].map((level) => ({
       level,
       members: referrals.rows.filter((member) => member.level === level).length,
       earnings: number(income.rows.find((row) => row.level === level)?.total),
-      rewardRate: number(rates[`referral_rate_l${level}`]),
+      rewardRate: REFERRAL_PERCENTAGES[level] ?? 0,
     }));
     const total = levels.reduce((sum, level) => sum + level.earnings, 0);
     const code = profile.rows[0]?.referral_code ?? "";
@@ -1609,13 +1614,9 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
           "SELECT referrer_id,level FROM referrals WHERE referred_id=$1 AND level BETWEEN 1 AND 3",
           [deposit.rows[0].user_id],
         );
-        const rates = await client.query<{ key: string; value: string }>(
-          "SELECT key,value FROM platform_settings WHERE key IN ('referral_rate_l1','referral_rate_l2','referral_rate_l3')",
-        );
-        const rateByKey = settingsMap(rates.rows);
         for (const referral of referralRows.rows) {
-          const rate = Number(rateByKey[`referral_rate_l${referral.level}`] ?? 0);
-          if (!Number.isFinite(rate) || rate <= 0 || rate > 100) continue;
+          const rate = REFERRAL_PERCENTAGES[referral.level] ?? 0;
+          if (rate <= 0) continue;
           const amount = Math.round((number(deposit.rows[0].amount) * rate * 10000) / 100) / 10000;
           if (amount <= 0) continue;
           await client.query(
@@ -2037,9 +2038,9 @@ app.post("/api/admin/settings/save", async (request, response, next) => {
     if (!settings || typeof settings !== "object" || Array.isArray(settings))
       return response.status(400).json({ message: "INVALID_SETTINGS" });
     const fixedReferralRates: Record<string, number> = {
-      referral_rate_l1: 8,
-      referral_rate_l2: 4,
-      referral_rate_l3: 1,
+      referral_rate_l1: REFERRAL_PERCENTAGES[1],
+      referral_rate_l2: REFERRAL_PERCENTAGES[2],
+      referral_rate_l3: REFERRAL_PERCENTAGES[3],
     };
     const fixedDepositAddresses: Record<string, string> = {
       deposit_address_TRC20: "THT9uwaJnzjFXxjcq8mDfioEb4xNPjnGP6",
