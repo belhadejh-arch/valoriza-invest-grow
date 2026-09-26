@@ -43,6 +43,7 @@ export const saveInvestmentFund = adminPost<Record<string, unknown>>("/api/admin
 export const getAdminVipPackages = adminGet("/api/admin/vip-packages");
 export type VipPackageSaveInput = {
   id?: string;
+  level?: number;
   name: string;
   price: number;
   dailyProfit: number;

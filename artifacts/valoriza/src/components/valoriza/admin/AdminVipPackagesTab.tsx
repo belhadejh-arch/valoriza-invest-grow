@@ -19,6 +19,13 @@ import {
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
+function formatUsd(value: number | string) {
+  return Number(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
 export function AdminVipPackagesTab() {
   const { t } = useI18n();
   const content = useLocalizedContent();
@@ -27,11 +34,12 @@ export function AdminVipPackagesTab() {
   const [editingPkg, setEditingPkg] = useState<any | null>(null);
   const [deletingPkg, setDeletingPkg] = useState<any | null>(null);
 
+  const [level, setLevel] = useState("");
   const [name, setName] = useState("");
-  const [price, setPrice] = useState(20);
-  const [dailyProfit, setDailyProfit] = useState(0.5);
-  const [dailyTasks, setDailyTasks] = useState(2);
-  const [taskReward, setTaskReward] = useState(0.25);
+  const [price, setPrice] = useState("");
+  const [dailyProfit, setDailyProfit] = useState("");
+  const [dailyTasks, setDailyTasks] = useState("");
+  const [taskReward, setTaskReward] = useState("");
   const [isActive, setIsActive] = useState(true);
 
   const {
@@ -46,14 +54,19 @@ export function AdminVipPackagesTab() {
   const saveMutation = useMutation({
     mutationFn: saveVipPackage,
     onSuccess: () => {
-      toast.success(t("admin.vipPackageUpdated"));
+      toast.success(t(editingPkg ? "admin.vipPackageUpdated" : "admin.vipLevelCreated"));
       queryClient.invalidateQueries({ queryKey: ["admin-vip-packages"] });
       queryClient.invalidateQueries({ queryKey: ["investment"] });
       queryClient.invalidateQueries({ queryKey: ["home"] });
       queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
       setModalOpen(false);
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (error) =>
+      toast.error(
+        error instanceof Error && /API request failed:\s*409/.test(error.message)
+          ? t("admin.vipLevelAlreadyExists")
+          : t("common.error"),
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -71,29 +84,70 @@ export function AdminVipPackagesTab() {
 
   const handleOpenCreate = () => {
     setEditingPkg(null);
+    setLevel(String(Math.max(0, ...packages.map((pkg: any) => Number(pkg.level) || 0)) + 1));
     setName("");
-    setPrice(20);
-    setDailyProfit(0.5);
-    setDailyTasks(2);
-    setTaskReward(0.25);
+    setPrice("");
+    setDailyProfit("");
+    setDailyTasks("");
+    setTaskReward("");
     setIsActive(true);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (pkg: any) => {
     setEditingPkg(pkg);
+    setLevel(String(pkg.level));
     setName(pkg.name);
-    setPrice(Number(pkg.price));
-    setDailyProfit(Number(pkg.daily_profit));
-    setDailyTasks(pkg.daily_tasks);
-    setTaskReward(Number(pkg.task_reward));
+    setPrice(String(pkg.price));
+    setDailyProfit(String(pkg.daily_profit));
+    setDailyTasks(String(pkg.daily_tasks));
+    setTaskReward(String(pkg.task_reward));
     setIsActive(pkg.is_active);
     setModalOpen(true);
   };
 
+  const handleSave = () => {
+    const parsedLevel = Number(level);
+    const parsedPrice = Number(price);
+    const parsedDailyProfit = Number(dailyProfit);
+    const parsedDailyTasks = Number(dailyTasks);
+    const parsedTaskReward = Number(taskReward);
+    if (
+      !name.trim() ||
+      !level.trim() ||
+      !price.trim() ||
+      !dailyProfit.trim() ||
+      !dailyTasks.trim() ||
+      !taskReward.trim() ||
+      !Number.isInteger(parsedLevel) ||
+      parsedLevel < 1 ||
+      parsedLevel > 32767 ||
+      !Number.isFinite(parsedPrice) ||
+      parsedPrice < 0 ||
+      !Number.isFinite(parsedDailyProfit) ||
+      parsedDailyProfit < 0 ||
+      !Number.isInteger(parsedDailyTasks) ||
+      parsedDailyTasks < 0 ||
+      !Number.isFinite(parsedTaskReward) ||
+      parsedTaskReward < 0
+    ) {
+      toast.error(t("admin.vipLevelInvalid"));
+      return;
+    }
+    saveMutation.mutate({
+      ...(editingPkg ? { id: editingPkg.id } : { level: parsedLevel }),
+      name: name.trim(),
+      price: parsedPrice,
+      dailyProfit: parsedDailyProfit,
+      dailyTasks: parsedDailyTasks,
+      taskReward: parsedTaskReward,
+      isActive,
+    });
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xs font-extrabold text-foreground">{t("admin.manageVipPackages")}</h2>
           <p className="text-[10px] text-muted-foreground">
@@ -104,10 +158,11 @@ export function AdminVipPackagesTab() {
           <button
             type="button"
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 rounded-xl brand-gradient px-3 py-1.5 text-xs font-black text-primary-foreground shadow-glow"
+            data-testid="button-add-vip-level"
+            className="flex items-center gap-1.5 rounded-xl brand-gradient px-4 py-2.5 text-xs font-black text-primary-foreground shadow-glow"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span>{t("admin.addVipPackage")}</span>
+            <span>{t("admin.addVipLevel")}</span>
           </button>
           <button
             type="button"
@@ -124,6 +179,10 @@ export function AdminVipPackagesTab() {
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           {t("admin.loadingVipPackages")}
+        </div>
+      ) : packages.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-surface/60 px-5 py-10 text-center text-sm text-muted-foreground">
+          {t("admin.noVipLevels")}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -142,9 +201,10 @@ export function AdminVipPackagesTab() {
                     <Crown className="h-5 w-5 text-gold" />
                   </div>
                   <div>
+                    <span className="text-[10px] font-black text-vip-soft">VIP {pkg.level}</span>
                     <h3 className="text-xs font-black text-foreground">{content(pkg.name)}</h3>
                     <span className="text-[10px] font-bold text-gold">
-                      {t("admin.activationPrice")}: ${Number(pkg.price).toFixed(2)}
+                      {t("admin.activationPrice")}: ${formatUsd(pkg.price)}
                     </span>
                   </div>
                 </div>
@@ -175,7 +235,7 @@ export function AdminVipPackagesTab() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">{t("admin.dailyProfit")}:</span>
                   <span className="font-extrabold text-emerald-400">
-                    +${Number(pkg.daily_profit).toFixed(2)}
+                    +${formatUsd(pkg.daily_profit)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -185,7 +245,7 @@ export function AdminVipPackagesTab() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">{t("admin.perVideoCommission")}:</span>
                   <span className="font-bold text-cyan-glow">
-                    ${Number(pkg.task_reward).toFixed(2)}
+                    ${formatUsd(pkg.task_reward)}
                   </span>
                 </div>
               </div>
@@ -217,7 +277,7 @@ export function AdminVipPackagesTab() {
               <h3 className="text-xs font-extrabold text-foreground">
                 {editingPkg
                   ? `${t("admin.editPackage")}: ${content(editingPkg.name)}`
-                  : t("admin.addVipPackage")}
+                  : t("admin.addVipLevel")}
               </h3>
               <button
                 type="button"
@@ -230,6 +290,23 @@ export function AdminVipPackagesTab() {
             </div>
 
             <div className="mt-3 space-y-3">
+              <div>
+                <label htmlFor="vip-level-number" className="text-[10px] text-muted-foreground font-bold">
+                  {t("admin.vipLevelNumber")}
+                </label>
+                <input
+                  id="vip-level-number"
+                  data-testid="input-vip-level-number"
+                  type="number"
+                  min="1"
+                  max="32767"
+                  step="1"
+                  value={level}
+                  readOnly={!!editingPkg}
+                  onChange={(e) => setLevel(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none read-only:opacity-60"
+                />
+              </div>
               <div>
                 <label className="text-[10px] text-muted-foreground font-bold">{t("admin.packageNameArabicSource")}</label>
                 <input
@@ -245,9 +322,10 @@ export function AdminVipPackagesTab() {
                   <label className="text-[10px] text-muted-foreground font-bold">{t("admin.priceUsd")}</label>
                   <input
                     type="number"
-                    step="1"
+                    min="0"
+                    step="0.01"
                     value={price}
-                    onChange={(e) => setPrice(Number(e.target.value))}
+                  onChange={(e) => setPrice(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
@@ -257,9 +335,10 @@ export function AdminVipPackagesTab() {
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    min="0"
+                    step="0.0001"
                     value={dailyProfit}
-                    onChange={(e) => setDailyProfit(Number(e.target.value))}
+                  onChange={(e) => setDailyProfit(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
@@ -272,9 +351,9 @@ export function AdminVipPackagesTab() {
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     value={dailyTasks}
-                    onChange={(e) => setDailyTasks(Number(e.target.value))}
+                    onChange={(e) => setDailyTasks(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
@@ -284,9 +363,10 @@ export function AdminVipPackagesTab() {
                   </label>
                   <input
                     type="number"
-                    step="0.01"
+                    min="0"
+                    step="0.0001"
                     value={taskReward}
-                    onChange={(e) => setTaskReward(Number(e.target.value))}
+                    onChange={(e) => setTaskReward(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
@@ -308,17 +388,8 @@ export function AdminVipPackagesTab() {
               <button
                 type="button"
                 disabled={saveMutation.isPending}
-                onClick={() =>
-                  saveMutation.mutate({
-                    ...(editingPkg ? { id: editingPkg.id } : {}),
-                    name,
-                    price,
-                    dailyProfit,
-                    dailyTasks,
-                    taskReward,
-                    isActive,
-                  })
-                }
+                data-testid="button-save-vip-level"
+                onClick={handleSave}
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
                 {saveMutation.isPending ? t("admin.saving") : t("admin.saveChanges")}
