@@ -48,7 +48,8 @@ export function AdminInvestmentsTab() {
     onSuccess: () => {
       toast.success(t("admin.fundSaved"));
       queryClient.invalidateQueries({ queryKey: ["admin-funds"] });
-      queryClient.invalidateQueries({ queryKey: ["investment-data"] });
+      queryClient.invalidateQueries({ queryKey: ["investment"] });
+      queryClient.invalidateQueries({ queryKey: ["home"] });
       setModalOpen(false);
       resetForm();
     },
@@ -136,9 +137,11 @@ export function AdminInvestmentsTab() {
                 <button
                   type="button"
                   onClick={() => handleOpenEdit(fund)}
-                  className="rounded-lg bg-surface border border-border p-1.5 text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow transition-colors"
+                  title={t("admin.profitRate")}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-surface border border-cyan-glow/40 px-2 py-1.5 text-[10px] font-bold text-cyan-glow hover:border-cyan-glow transition-colors"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
+                  <span>{t("admin.profitRate")}</span>
                 </button>
               </div>
 

@@ -1,16 +1,20 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Settings,
   Save,
   DollarSign,
   Wallet,
   Headphones,
   ShieldCheck,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getAdminSettings, saveAdminSettings } from "@/lib/valoriza-admin.functions";
+import {
+  changeAdminPassword,
+  getAdminSettings,
+  saveAdminSettings,
+} from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
@@ -18,11 +22,14 @@ export function AdminSettingsTab() {
   const { t } = useI18n();
   const content = useLocalizedContent();
   const queryClient = useQueryClient();
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   const {
     data: initialSettings,
     isLoading,
-    refetch,
   } = useQuery({
     queryKey: ["admin-settings"],
     queryFn: () => getAdminSettings(),
@@ -51,6 +58,32 @@ export function AdminSettingsTab() {
     },
     onError: () => toast.error(t("common.error")),
   });
+
+  const passwordMutation = useMutation({
+    mutationFn: changeAdminPassword,
+    onSuccess: () => {
+      toast.success(t("account.passwordChangedSuccess"));
+      setPasswordModalOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      queryClient.invalidateQueries({ queryKey: ["account-data"] });
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
+  const handlePasswordSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (newPassword.length < 8) {
+      toast.error(t("admin.passwordMinLength"));
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error(t("account.passwordMismatch"));
+      return;
+    }
+    passwordMutation.mutate({ currentPassword, newPassword });
+  };
 
   const handleChange = (key: string, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -82,7 +115,8 @@ export function AdminSettingsTab() {
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-5">
+    <div className="space-y-5">
+      <form onSubmit={handleSave} className="space-y-5">
       {/* Financial Limits Section */}
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
@@ -204,8 +238,8 @@ export function AdminSettingsTab() {
             </label>
             <input
               type="text"
-              value={content(form["deposit_address_trc20"] || "", { allowLanguageNeutral: true })}
-              onChange={(e) => handleChange("deposit_address_trc20", e.target.value)}
+              value={content(form["deposit_address_TRC20"] || "", { allowLanguageNeutral: true })}
+              onChange={(e) => handleChange("deposit_address_TRC20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
           </div>
@@ -216,8 +250,8 @@ export function AdminSettingsTab() {
             </label>
             <input
               type="text"
-              value={content(form["deposit_address_bep20"] || "", { allowLanguageNeutral: true })}
-              onChange={(e) => handleChange("deposit_address_bep20", e.target.value)}
+              value={content(form["deposit_address_BEP20"] || "", { allowLanguageNeutral: true })}
+              onChange={(e) => handleChange("deposit_address_BEP20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
           </div>
@@ -228,8 +262,8 @@ export function AdminSettingsTab() {
             </label>
             <input
               type="text"
-              value={content(form["deposit_address_erc20"] || "", { allowLanguageNeutral: true })}
-              onChange={(e) => handleChange("deposit_address_erc20", e.target.value)}
+              value={content(form["deposit_address_ERC20"] || "", { allowLanguageNeutral: true })}
+              onChange={(e) => handleChange("deposit_address_ERC20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
           </div>
@@ -283,24 +317,98 @@ export function AdminSettingsTab() {
 
       {/* Submit Button */}
       <div className="pt-2">
-        <button
-          type="submit"
-          disabled={saveMutation.isPending}
-          className="flex items-center justify-center gap-2 rounded-2xl brand-gradient px-6 py-3 text-xs font-black text-primary-foreground shadow-glow hover:opacity-95 active:scale-95 disabled:opacity-50"
-        >
-          {saveMutation.isPending ? (
-            <>
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>{t("admin.savingSettings")}</span>
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              <span>{t("admin.saveAllSettings")}</span>
-            </>
-          )}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            disabled={saveMutation.isPending}
+            className="flex items-center justify-center gap-2 rounded-2xl brand-gradient px-6 py-3 text-xs font-black text-primary-foreground shadow-glow hover:opacity-95 active:scale-95 disabled:opacity-50"
+          >
+            {saveMutation.isPending ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                <span>{t("admin.savingSettings")}</span>
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                <span>{t("admin.saveAllSettings")}</span>
+              </>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPasswordModalOpen(true)}
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface px-5 py-3 text-xs font-bold text-foreground hover:border-cyan-glow"
+          >
+            <ShieldCheck className="h-4 w-4 text-cyan-glow" />
+            <span>{t("account.changePass")}</span>
+          </button>
+        </div>
       </div>
-    </form>
+      </form>
+
+      {passwordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={handlePasswordSubmit}
+            className="w-full max-w-sm space-y-4 rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <h3 className="text-sm font-extrabold text-foreground">{t("account.changePass")}</h3>
+              <button
+                type="button"
+                onClick={() => setPasswordModalOpen(false)}
+                aria-label={t("common.close")}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground">{t("auth.password")}</label>
+              <input
+                required
+                autoComplete="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground">{t("account.newPassword")}</label>
+              <input
+                required
+                minLength={8}
+                autoComplete="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground">{t("account.confirmPassword")}</label>
+              <input
+                required
+                minLength={8}
+                autoComplete="new-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!currentPassword || !newPassword || !confirmPassword || passwordMutation.isPending}
+              className="w-full rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
+            >
+              {passwordMutation.isPending ? t("account.saving") : t("account.savePassword")}
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
   );
 }

@@ -68,7 +68,7 @@ function HomePage() {
   const fetchHome = getHomeData;
   const claim = claimDailyLoginReward;
   const spin = spinLuckyWheel;
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, lang } = useI18n();
   const content = useLocalizedContent();
 
   const [slideIndex, setSlideIndex] = useState(0);
@@ -82,6 +82,8 @@ function HomePage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["home"],
     queryFn: () => fetchHome(),
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: true,
   });
 
   const claimMutation = useMutation({
@@ -132,12 +134,18 @@ function HomePage() {
   const companyInfo = settings.about_company
     ? content(settings.about_company)
     : t("home.companyDescription");
-  const membersCount = settings.members_count || "75,000";
+  const membersCount = settings.members_count;
+  const hasMembersCount =
+    membersCount !== null &&
+    membersCount !== undefined &&
+    String(membersCount).trim().length > 0 &&
+    Number.isFinite(Number(String(membersCount).replace(/,/g, "")));
 
   return (
     <div
       id="home-page-container"
       className="min-h-screen bg-background text-foreground pb-24 md:pb-12 transition-colors"
+      dir={isRTL ? "rtl" : "ltr"}
     >
       {/* 1. App Header with Hamburger & Profile & Desktop Navigation */}
       <AppHeader
@@ -444,7 +452,8 @@ function HomePage() {
             </div>
 
             {/* Card 2: عدد أعضاء منصتنا */}
-            <div className="surface-card p-3.5 sm:p-4 border-border/80 flex items-center justify-between gap-3 text-start">
+            {hasMembersCount && (
+              <div className="surface-card p-3.5 sm:p-4 border-border/80 flex items-center justify-between gap-3 text-start">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow shadow-[0_0_12px_oklch(0.82_0.14_205/0.25)]">
                   <Users className="h-6 w-6" />
@@ -454,7 +463,7 @@ function HomePage() {
                     {t("team.title")}
                   </span>
                   <span className="block text-xl sm:text-2xl font-black text-foreground tracking-wide">
-                    +{membersCount}
+                    +{Number(String(membersCount).replace(/,/g, "")).toLocaleString(lang)}
                   </span>
                   <span className="block text-[10px] text-cyan-glow font-medium">
                     {t("home.activeInvestors")}
@@ -468,7 +477,8 @@ function HomePage() {
               >
                 {t("nav.team")} ›
               </Link>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -481,6 +491,12 @@ function HomePage() {
           ERC20: settings.deposit_address_ERC20,
           BEP20: settings.deposit_address_BEP20,
           TRC20: settings.deposit_address_TRC20,
+        }}
+        minDeposit={Number(settings.min_deposit ?? 10)}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ["home"] });
+          qc.invalidateQueries({ queryKey: ["financial-records"] });
+          qc.invalidateQueries({ queryKey: ["account"] });
         }}
       />
 

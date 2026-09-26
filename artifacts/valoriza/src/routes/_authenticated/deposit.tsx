@@ -22,7 +22,8 @@ import {
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
-import { createDepositRequest, getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
+import { getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
+import { backendRequest } from "@/lib/backend-client";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/deposit")({
@@ -39,30 +40,21 @@ function DepositPage() {
 
   const [network, setNetwork] = useState<NetworkType>("USDT-ERC20");
   const [amount, setAmount] = useState<string>("");
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
 
   const fetchSettings = getCompanySettingsAndSupport;
-  const submitDeposit = createDepositRequest;
 
-  const { data: configData } = useQuery({
+  const { data: configData, isLoading: isConfigLoading } = useQuery({
     queryKey: ["platform-settings"],
     queryFn: () => fetchSettings(),
   });
 
-  const depositAddresses: Record<NetworkType, string> = {
-    "USDT-ERC20":
-      configData?.settings?.["deposit_address_ERC20"] ||
-      "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
-    "USDT-BEP20":
-      configData?.settings?.["deposit_address_BEP20"] ||
-      "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
-    "USDT-TRC20":
-      configData?.settings?.["deposit_address_TRC20"] || "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
-  };
-
-  const currentAddress = depositAddresses[network];
+  const currentAddress =
+    configData?.settings?.[`deposit_address_${network.replace("USDT-", "")}`] ?? "";
+  const addressDisplay = currentAddress || (isConfigLoading ? t("common.loading") : t("common.error"));
   const minDeposit = Number(configData?.settings?.["min_deposit"] ?? "10");
 
   const copyAddress = async () => {
@@ -80,7 +72,7 @@ function DepositPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
       toast.error(t("deposit.invalidImage"));
       return;
     }
@@ -90,15 +82,15 @@ function DepositPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setScreenshotPreview(reader.result as string);
-      toast.success(t("deposit.uploadSuccess"));
-    };
-    reader.readAsDataURL(file);
+    if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
+    setScreenshotFile(file);
+    setScreenshotPreview(URL.createObjectURL(file));
+    toast.success(t("deposit.uploadSuccess"));
   };
 
   const handleRemoveScreenshot = () => {
+    if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
+    setScreenshotFile(null);
     setScreenshotPreview(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -106,12 +98,47 @@ function DepositPage() {
   };
 
   const depositMutation = useMutation({
-    mutationFn: (vals: { network: NetworkType; amount: number; screenshotUrl: string }) =>
-      submitDeposit(vals),
+    mutationFn: async (vals: { network: NetworkType; amount: number; file: File }) => {
+      const upload = await backendRequest<{
+        uploadURL?: string;
+        uploadUrl?: string;
+        signedUrl?: string;
+        objectPath?: string;
+      }>("/api/app/deposit-proof/upload-url", {
+        method: "POST",
+        body: JSON.stringify({
+          name: vals.file.name,
+          size: vals.file.size,
+          contentType: vals.file.type,
+        }),
+      });
+      const uploadURL = upload.uploadURL ?? upload.uploadUrl ?? upload.signedUrl;
+      if (!uploadURL || !upload.objectPath) {
+        throw new Error("Deposit proof upload URL response is incomplete");
+      }
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": vals.file.type },
+        body: vals.file,
+      });
+      if (!uploadResponse.ok) {
+        throw new Error(`Deposit proof upload failed: ${uploadResponse.status}`);
+      }
+      return backendRequest("/api/app/deposit", {
+        method: "POST",
+        body: JSON.stringify({
+          network: vals.network,
+          amount: vals.amount,
+          objectPath: upload.objectPath,
+        }),
+      });
+    },
     onSuccess: (res: any) => {
       if (res.ok) {
-        toast.success(t("deposit.requestReceived"));
+        toast.success(`${t("deposit.requestReceived")} (${t("records.pending")})`);
         setAmount("");
+        if (screenshotPreview) URL.revokeObjectURL(screenshotPreview);
+        setScreenshotFile(null);
         setScreenshotPreview(null);
         if (fileInputRef.current) fileInputRef.current.value = "";
         qc.invalidateQueries({ queryKey: ["financial-records"] });
@@ -144,11 +171,19 @@ function DepositPage() {
       toast.error(t("deposit.uploadHint"));
       return;
     }
+    if (!screenshotFile) {
+      toast.error(t("deposit.uploadHint"));
+      return;
+    }
+    if (!currentAddress) {
+      toast.error(t("common.error"));
+      return;
+    }
 
     depositMutation.mutate({
       network,
       amount: num,
-      screenshotUrl: screenshotPreview,
+      file: screenshotFile,
     });
   };
 
@@ -241,7 +276,7 @@ function DepositPage() {
                     className="truncate text-xs font-mono text-foreground text-start px-2"
                     dir="ltr"
                   >
-                    {currentAddress}
+                    {addressDisplay}
                   </p>
                 </div>
                 <button
@@ -263,7 +298,7 @@ function DepositPage() {
                 <span>{t("deposit.scanQr")}</span>
               </button>
 
-              {showQrModal && (
+              {showQrModal && currentAddress && (
                 <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white text-black max-w-[220px] mx-auto animate-in fade-in duration-200 shadow-xl border border-border">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
@@ -309,7 +344,7 @@ function DepositPage() {
               <input
                 type="file"
                 ref={fileInputRef}
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 onChange={handleFileChange}
                 className="hidden"
                 id="screenshot-input"
@@ -372,7 +407,7 @@ function DepositPage() {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={depositMutation.isPending || !screenshotPreview || !amount}
+                disabled={depositMutation.isPending || !screenshotFile || !amount || !currentAddress}
                 className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl text-sm font-black text-primary-foreground brand-gradient shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all cursor-pointer"
               >
                 <Send className="h-4 w-4 rtl:rotate-180" />
@@ -417,15 +452,19 @@ function DepositPage() {
             {/* Persistent QR Code Preview Card */}
             <div className="surface-card glow-border p-6 rounded-3xl text-center space-y-3">
               <h4 className="text-xs font-black text-foreground">{t("deposit.scanQr")}</h4>
-              <div className="p-3 bg-white rounded-2xl inline-block shadow-md">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
-                    currentAddress,
-                  )}`}
-                  alt={t("deposit.scanQr")}
-                  className="h-36 w-36 mx-auto"
-                />
-              </div>
+              {currentAddress ? (
+                <div className="p-3 bg-white rounded-2xl inline-block shadow-md">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
+                      currentAddress,
+                    )}`}
+                    alt={t("deposit.scanQr")}
+                    className="h-36 w-36 mx-auto"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-danger">{addressDisplay}</p>
+              )}
               <p className="text-xs font-mono text-muted-foreground font-bold">{network}</p>
             </div>
           </div>

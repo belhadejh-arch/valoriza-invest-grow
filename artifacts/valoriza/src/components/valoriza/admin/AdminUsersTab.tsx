@@ -50,6 +50,9 @@ export function AdminUsersTab() {
   } = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => getAdminUsers(),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const blockMutation = useMutation({

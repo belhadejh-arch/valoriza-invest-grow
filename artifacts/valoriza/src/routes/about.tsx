@@ -31,7 +31,7 @@ export const Route = createFileRoute("/about")({
 
 function AboutPage() {
   const [supportOpen, setSupportOpen] = useState(false);
-  const { t, dir } = useI18n();
+  const { t, dir, lang } = useI18n();
   const content = useLocalizedContent();
   const fetchData = getAboutData;
 
@@ -61,31 +61,44 @@ function AboutPage() {
   }
 
   const s = data.settings ?? {};
-  const companyDesc = s.about_company
-    ? content(s.about_company)
-    : t("public.about.companyDefault");
+  const companyDesc = s.about_company ? content(s.about_company) : null;
   const visionText = s.platform_vision
     ? content(s.platform_vision)
     : t("public.about.visionDefault");
   const goalsText = s.platform_goals
     ? content(s.platform_goals)
     : t("public.about.goalsDefault");
-  const localizeMetric = (value: string | number | null | undefined, fallback: string) => {
-    if (value === null || value === undefined || value === "") return fallback;
-    const digits = String(value).replace(/[٠-٩]/g, (digit) =>
-      String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)),
-    );
-    const numeric = digits.match(/[\d,.]+/)?.[0];
-    return numeric ?? content(String(value));
+  const parseNonNegativeCount = (value: unknown): number | null => {
+    if (value === null || value === undefined || String(value).trim() === "") return null;
+    const digits = String(value)
+      .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+      .replace(/[٬,]/g, "")
+      .trim();
+    const parsed = typeof value === "number" ? value : Number(digits);
+    return Number.isFinite(parsed) && Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
   };
-  const membersCount = localizeMetric(s.members_count, "75,000");
-  const establishedYear = localizeMetric(s.established_year, "2018");
-  const headquarters = s.headquarters
-    ? content(s.headquarters)
-    : t("public.about.headquartersDefault");
-  const fundsCount = s.funds_count
-    ? content(s.funds_count)
-    : t("public.about.fundsDefault");
+  const formatCount = (value: number | null) =>
+    value === null ? null : value.toLocaleString(lang);
+  const membersCount = formatCount(parseNonNegativeCount(s.members_count));
+  const fundsCount = formatCount(parseNonNegativeCount(s.funds_count));
+  const parsedYear = parseNonNegativeCount(s.established_year);
+  const establishedYear =
+    parsedYear !== null &&
+    Number.isInteger(parsedYear) &&
+    parsedYear >= 1000 &&
+    parsedYear <= new Date().getFullYear()
+      ? parsedYear.toLocaleString(lang)
+      : null;
+  const headquartersConfigured =
+    typeof s.headquarters === "string"
+      ? s.headquarters.trim().length > 0
+      : s.headquarters !== null &&
+        typeof s.headquarters === "object" &&
+        Object.values(s.headquarters).some((value) => typeof value === "string" && value.trim().length > 0);
+  const headquarters = headquartersConfigured ? content(s.headquarters) : null;
+  const headquartersIsMadrid = /madrid|مدريد/i.test(headquarters ?? "");
+  const hasStatistics =
+    establishedYear !== null || membersCount !== null || headquarters !== null || fundsCount !== null;
   const supportLinks = Array.isArray(data.supportLinks)
     ? data.supportLinks.filter((link: unknown) => link !== null && typeof link === "object")
     : [];
@@ -108,97 +121,124 @@ function AboutPage() {
       </header>
 
       <main className="mx-auto w-full max-w-lg px-4 py-4 pb-16 space-y-4">
-        {/* Madrid Headquarters Hero Banner matching Section 4 */}
+        {/* Company and configured headquarters */}
         <section id="about-hq-banner" className="surface-card glow-border overflow-hidden">
-          <div className="relative h-44 sm:h-52 w-full">
-            <img
-              src={madridHQImg}
-              alt={t("public.about.hqAlt")}
-              className="h-full w-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/60 to-transparent" />
+          {headquarters && (
+            <div className="relative h-44 sm:h-52 w-full bg-gradient-to-br from-navy-deep via-surface to-navy-deep">
+              {headquartersIsMadrid && (
+                <img
+                  src={madridHQImg}
+                  alt={headquarters}
+                  className="h-full w-full object-cover"
+                />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/60 to-transparent" />
 
-            <div className="absolute bottom-3 right-3 left-3 flex items-end justify-between">
-              <div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-navy-deep/90 border border-gold/50 px-2.5 py-0.5 text-[11px] font-extrabold text-gold shadow-gold-glow">
-                  <Building2 className="h-3.5 w-3.5 text-gold" />
-                  {t("public.about.hq")}
-                </span>
-                <h1 className="mt-1 text-xl sm:text-2xl font-black text-foreground drop-shadow-md">
-                  {t("public.about.name")}
-                </h1>
-              </div>
+              <div className="absolute bottom-3 right-3 left-3 flex items-end justify-between">
+                <div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-navy-deep/90 border border-gold/50 px-2.5 py-0.5 text-[11px] font-extrabold text-gold shadow-gold-glow">
+                    <Building2 className="h-3.5 w-3.5 text-gold" />
+                    {t("public.about.hq")}
+                  </span>
+                  <h1 className="mt-1 text-xl sm:text-2xl font-black text-foreground drop-shadow-md">
+                    {t("public.about.name")}
+                  </h1>
+                </div>
 
-              <div className="text-start">
-                <span className="inline-flex items-center gap-1 rounded-full bg-cyan-glow/20 border border-cyan-glow/40 px-2 py-0.5 text-[11px] font-bold text-cyan-glow">
-                  <MapPin className="h-3 w-3" />
-                  {headquarters}
-                </span>
+                <div className="text-start">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-cyan-glow/20 border border-cyan-glow/40 px-2 py-0.5 text-[11px] font-bold text-cyan-glow">
+                    <MapPin className="h-3 w-3" />
+                    {headquarters}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="p-4 pt-2">
-            <p className="text-xs sm:text-sm font-semibold text-foreground/90 leading-relaxed text-justify">
-              {companyDesc}
-            </p>
+            {!headquarters && (
+              <h1 className="mb-2 text-xl sm:text-2xl font-black text-foreground">
+                {t("public.about.name")}
+              </h1>
+            )}
+            {companyDesc && (
+              <p className="text-xs sm:text-sm font-semibold text-foreground/90 leading-relaxed text-justify">
+                {companyDesc}
+              </p>
+            )}
           </div>
         </section>
 
         {/* Key Statistics Grid matching Section 4 */}
-        <section id="about-statistics-section">
-          <h2 className="text-sm font-extrabold text-foreground mb-2 flex items-center gap-1.5">
-            <Sparkles className="h-4 w-4 text-gold" />
-            {t("public.about.stats")}
-          </h2>
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Stat 1: Year */}
-            <div className="surface-card p-3 border-border/80 flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-gold/40 text-gold">
-                <Calendar className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">{t("public.about.founded")}</p>
-                <p className="text-base font-black text-gold-gradient">{establishedYear}</p>
-              </div>
-            </div>
+        {hasStatistics && (
+          <section id="about-statistics-section">
+            <h2 className="text-sm font-extrabold text-foreground mb-2 flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4 text-gold" />
+              {t("public.about.stats")}
+            </h2>
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Stat 1: Year */}
+              {establishedYear !== null && (
+                <div className="surface-card p-3 border-border/80 flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-gold/40 text-gold">
+                    <Calendar className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold">
+                      {t("public.about.founded")}
+                    </p>
+                    <p className="text-base font-black text-gold-gradient">{establishedYear}</p>
+                  </div>
+                </div>
+              )}
 
-            {/* Stat 2: Members */}
-            <div className="surface-card p-3 border-border/80 flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow">
-                <Users className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">{t("public.about.members")}</p>
-                <p className="text-base font-black text-cyan-glow">+{membersCount}</p>
-              </div>
-            </div>
+              {/* Stat 2: Members */}
+              {membersCount !== null && (
+                <div className="surface-card p-3 border-border/80 flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold">
+                      {t("public.about.members")}
+                    </p>
+                    <p className="text-base font-black text-cyan-glow">{membersCount}</p>
+                  </div>
+                </div>
+              )}
 
-            {/* Stat 3: HQ Location */}
-            <div className="surface-card p-3 border-border/80 flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-electric">
-                <MapPin className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">{t("public.about.official")}</p>
-                <p className="text-xs font-black text-foreground">{headquarters}</p>
-              </div>
-            </div>
+              {/* Stat 3: HQ Location */}
+              {headquarters && (
+                <div className="surface-card p-3 border-border/80 flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-electric">
+                    <MapPin className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold">
+                      {t("public.about.official")}
+                    </p>
+                    <p className="text-xs font-black text-foreground">{headquarters}</p>
+                  </div>
+                </div>
+              )}
 
-            {/* Stat 4: Funds */}
-            <div className="surface-card p-3 border-border/80 flex items-center gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-success/40 text-success">
-                <Vault className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-semibold">
-                  {t("public.about.funds")}
-                </p>
-                <p className="text-xs font-black text-success">{fundsCount}</p>
-              </div>
+              {/* Stat 4: Funds */}
+              {fundsCount !== null && (
+                <div className="surface-card p-3 border-border/80 flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-surface border border-success/40 text-success">
+                    <Vault className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground font-semibold">
+                      {t("public.about.funds")}
+                    </p>
+                    <p className="text-xs font-black text-success">{fundsCount}</p>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Platform Vision matching Section 4 */}
         <section id="about-vision-card" className="surface-card glow-border p-4">

@@ -1,8 +1,21 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Crown, Edit2, CheckCircle2, XCircle, X, RefreshCw, Video, DollarSign } from "lucide-react";
+import {
+  Crown,
+  Edit2,
+  CheckCircle2,
+  XCircle,
+  X,
+  RefreshCw,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
-import { getAdminVipPackages, saveVipPackage } from "@/lib/valoriza-admin.functions";
+import {
+  deleteVipPackage,
+  getAdminVipPackages,
+  saveVipPackage,
+} from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
@@ -12,6 +25,7 @@ export function AdminVipPackagesTab() {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPkg, setEditingPkg] = useState<any | null>(null);
+  const [deletingPkg, setDeletingPkg] = useState<any | null>(null);
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState(20);
@@ -34,12 +48,37 @@ export function AdminVipPackagesTab() {
     onSuccess: () => {
       toast.success(t("admin.vipPackageUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-vip-packages"] });
-      queryClient.invalidateQueries({ queryKey: ["investment-data"] });
+      queryClient.invalidateQueries({ queryKey: ["investment"] });
+      queryClient.invalidateQueries({ queryKey: ["home"] });
       queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
       setModalOpen(false);
     },
     onError: () => toast.error(t("common.error")),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteVipPackage,
+    onSuccess: () => {
+      toast.success(t("common.success"));
+      queryClient.invalidateQueries({ queryKey: ["admin-vip-packages"] });
+      queryClient.invalidateQueries({ queryKey: ["investment"] });
+      queryClient.invalidateQueries({ queryKey: ["home"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
+      setDeletingPkg(null);
+    },
+    onError: () => toast.error(t("common.error")),
+  });
+
+  const handleOpenCreate = () => {
+    setEditingPkg(null);
+    setName("");
+    setPrice(20);
+    setDailyProfit(0.5);
+    setDailyTasks(2);
+    setTaskReward(0.25);
+    setIsActive(true);
+    setModalOpen(true);
+  };
 
   const handleOpenEdit = (pkg: any) => {
     setEditingPkg(pkg);
@@ -61,14 +100,24 @@ export function AdminVipPackagesTab() {
             {t("admin.vipPackagesDescription")}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>{t("admin.refresh")}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleOpenCreate}
+            className="flex items-center gap-1.5 rounded-xl brand-gradient px-3 py-1.5 text-xs font-black text-primary-foreground shadow-glow"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span>{t("admin.addVipPackage")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span>{t("admin.refresh")}</span>
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -100,13 +149,26 @@ export function AdminVipPackagesTab() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleOpenEdit(pkg)}
-                  className="rounded-lg bg-surface border border-border p-1.5 text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow transition-colors"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(pkg)}
+                    title={t("admin.editPackage")}
+                    aria-label={t("admin.editPackage")}
+                    className="rounded-lg bg-surface border border-border p-1.5 text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow transition-colors"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeletingPkg(pkg)}
+                    title={t("admin.deleteVipPackage")}
+                    aria-label={t("admin.deleteVipPackage")}
+                    className="rounded-lg bg-surface border border-danger/40 p-1.5 text-danger hover:bg-danger/10 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
 
               <div className="mt-3.5 space-y-1.5 rounded-xl bg-navy-deep p-2.5 border border-border/60 text-[11px]">
@@ -148,16 +210,19 @@ export function AdminVipPackagesTab() {
       )}
 
       {/* Edit VIP Package Modal */}
-      {modalOpen && editingPkg && (
+      {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-sm rounded-3xl border border-vip/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                {t("admin.editPackage")}: {content(editingPkg.name)}
+                {editingPkg
+                  ? `${t("admin.editPackage")}: ${content(editingPkg.name)}`
+                  : t("admin.addVipPackage")}
               </h3>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
+                aria-label={t("common.close")}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -245,7 +310,7 @@ export function AdminVipPackagesTab() {
                 disabled={saveMutation.isPending}
                 onClick={() =>
                   saveMutation.mutate({
-                    id: editingPkg.id,
+                    ...(editingPkg ? { id: editingPkg.id } : {}),
                     name,
                     price,
                     dailyProfit,
@@ -257,6 +322,36 @@ export function AdminVipPackagesTab() {
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
                 {saveMutation.isPending ? t("admin.saving") : t("admin.saveChanges")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingPkg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-danger/40 bg-navy-deep p-5 shadow-2xl">
+            <h3 className="text-sm font-extrabold text-foreground">
+              {t("admin.deleteVipPackage")}
+            </h3>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t("admin.deleteVipPackageConfirmation")}: {content(deletingPkg.name)}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingPkg(null)}
+                className="rounded-xl border border-border px-4 py-2 text-xs font-bold text-foreground"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate({ id: deletingPkg.id })}
+                className="rounded-xl bg-danger px-4 py-2 text-xs font-black text-white disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? t("admin.saving") : t("admin.deleteVipPackage")}
               </button>
             </div>
           </div>

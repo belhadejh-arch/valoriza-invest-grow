@@ -8,8 +8,19 @@ const post = <T = any, R = any>(path: string, fallback?: (data: T) => string) =>
   });
 
 export const getInvestmentData = get("/api/app/investment");
-export const activateTrial = () => backendRequest("/api/app/trial", { method: "POST" });
-export const purchaseVip = post<{ level?: number; packageId?: string }>("/api/app/vip/purchase");
+export type TrialActivationResult =
+  | { ok: true; trialExpiresAt: string }
+  | { ok: false; reason: string };
+export type VipPurchaseResult =
+  | { ok: true; vipLevel: number; newBalance: number }
+  | { ok: false; reason: string };
+
+export const activateTrial = () =>
+  backendRequest<TrialActivationResult>("/api/app/trial", { method: "POST" });
+export const purchaseVip = post<
+  { level: number; packageId?: string },
+  VipPurchaseResult
+>("/api/app/vip/purchase");
 export const investInSavingsFund = post<{ fundId: string; amount: number }>("/api/app/invest");
 
 export const getTeamData = get("/api/app/team");

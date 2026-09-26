@@ -55,28 +55,6 @@ function WithdrawalPage() {
     queryFn: () => fetchRecords(),
   });
 
-  if (isInfoLoading || isRecordsLoading) {
-    return (
-      <div className="min-h-[100dvh] bg-background pb-28 text-foreground" dir={isRTL ? "rtl" : "ltr"}>
-        <AppHeader />
-        <div className="flex justify-center items-center h-64">
-          <p>{t("common.loading")}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (isInfoError || isRecordsError || !info || !recordsData) {
-    return (
-      <div className="min-h-[100dvh] bg-background pb-28 text-foreground" dir={isRTL ? "rtl" : "ltr"}>
-        <AppHeader />
-        <div className="flex justify-center items-center h-64">
-          <p className="text-danger">{t("common.error")}</p>
-        </div>
-      </div>
-    );
-  }
-
   const balance = info?.balance ?? 0;
   const boundAddress = info?.boundAddress;
   const isAddressLocked = Boolean(boundAddress?.locked && boundAddress?.address);
@@ -139,6 +117,28 @@ function WithdrawalPage() {
     },
     onError: () => toast.error(t("common.error")),
   });
+
+  if (isInfoLoading || isRecordsLoading) {
+    return (
+      <div className="min-h-[100dvh] bg-background pb-28 text-foreground" dir={isRTL ? "rtl" : "ltr"}>
+        <AppHeader />
+        <div className="flex justify-center items-center h-64">
+          <p>{t("common.loading")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isInfoError || isRecordsError || !info || !recordsData) {
+    return (
+      <div className="min-h-[100dvh] bg-background pb-28 text-foreground" dir={isRTL ? "rtl" : "ltr"}>
+        <AppHeader />
+        <div className="flex justify-center items-center h-64">
+          <p className="text-danger">{t("common.error")}</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleBind = (e: React.FormEvent) => {
     e.preventDefault();

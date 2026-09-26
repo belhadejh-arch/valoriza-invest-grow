@@ -234,9 +234,9 @@ export const translations = {
     "team.referralLevels": "مستويات الإحالة والعمولات",
     "team.viewAllLevels": "عرض جميع المستويات",
     "team.level1": "المستوى الأول (A)",
-    "team.level1Rate": "عمولة 10% من شحن الفريق المباشر",
+    "team.level1Rate": "عمولة 8% من شحن الفريق المباشر",
     "team.level2": "المستوى الثاني (B)",
-    "team.level2Rate": "عمولة 3% من شحن المستوى الثاني",
+    "team.level2Rate": "عمولة 4% من شحن المستوى الثاني",
     "team.level3": "المستوى الثالث (C)",
     "team.level3Rate": "عمولة 1% من شحن المستوى الثالث",
     "team.autoCalcNote":
@@ -439,12 +439,56 @@ export const translations = {
   es: {} as Record<string, string>,
 };
 
+const featureTranslations = {
+  ar: {
+    "public.wheel.noPrizesConfigured": "عجلة الحظ غير متاحة حاليًا لعدم إعداد الجوائز.",
+    "admin.prizeType": "نوع الجائزة",
+    "admin.passwordMinLength": "يجب ألا تقل كلمة المرور الجديدة عن 8 أحرف.",
+    "admin.addVipPackage": "إضافة باقة VIP",
+    "admin.deleteVipPackage": "حذف باقة VIP",
+    "admin.deleteVipPackageConfirmation": "هل تريد حذف باقة VIP هذه؟ لا يمكن حذف باقة مرتبطة بمستخدمين.",
+    "team.level1Rate": "عمولة 8% من شحن الفريق المباشر",
+    "team.level2Rate": "عمولة 4% من شحن المستوى الثاني",
+  },
+  en: {
+    "public.wheel.noPrizesConfigured": "The wheel is unavailable until prizes are configured.",
+    "admin.prizeType": "Prize type",
+    "admin.passwordMinLength": "The new password must be at least 8 characters.",
+    "admin.addVipPackage": "Add VIP package",
+    "admin.deleteVipPackage": "Delete VIP package",
+    "admin.deleteVipPackageConfirmation": "Delete this VIP package? Packages assigned to users cannot be deleted.",
+    "team.level1Rate": "8% commission on direct team deposits",
+    "team.level2Rate": "4% commission on second-level deposits",
+  },
+  fr: {
+    "public.wheel.noPrizesConfigured": "La roue n’est pas disponible tant que les prix ne sont pas configurés.",
+    "admin.prizeType": "Type de récompense",
+    "admin.passwordMinLength": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
+    "admin.addVipPackage": "Ajouter une formule VIP",
+    "admin.deleteVipPackage": "Supprimer la formule VIP",
+    "admin.deleteVipPackageConfirmation": "Supprimer cette formule VIP ? Les formules attribuées à des membres ne peuvent pas être supprimées.",
+    "team.level1Rate": "Commission de 8 % sur les dépôts directs de l'équipe",
+    "team.level2Rate": "Commission de 4 % sur les dépôts du deuxième niveau",
+  },
+  es: {
+    "public.wheel.noPrizesConfigured": "La ruleta no está disponible hasta que se configuren los premios.",
+    "admin.prizeType": "Tipo de premio",
+    "admin.passwordMinLength": "La nueva contraseña debe tener al menos 8 caracteres.",
+    "admin.addVipPackage": "Añadir paquete VIP",
+    "admin.deleteVipPackage": "Eliminar paquete VIP",
+    "admin.deleteVipPackageConfirmation": "¿Eliminar este paquete VIP? No se pueden eliminar paquetes asignados a usuarios.",
+    "team.level1Rate": "Comisión del 8 % por depósitos del equipo directo",
+    "team.level2Rate": "Comisión del 4 % por depósitos del segundo nivel",
+  },
+} as const;
+
 const localeModules = [publicTranslations, pagesTranslations, adminTranslations] as const;
 for (const lang of ["ar", "en", "fr", "es"] as const) {
   Object.assign(
     translations[lang],
     coreTranslations[lang],
     ...localeModules.map((module) => module[lang]),
+    featureTranslations[lang],
   );
 }
 

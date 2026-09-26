@@ -5,7 +5,7 @@ const adminPost = <T = any, R = any>(path: string) => (data: T) =>
   backendRequest<R>(path, { method: "POST", body: JSON.stringify(data) });
 
 export const getAdminOverview = adminGet("/api/admin/overview");
-export const getAdminUsers = adminGet("/api/admin/users");
+export const getAdminUsers = adminGet<any[]>("/api/admin/users");
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",
 );
@@ -32,7 +32,17 @@ export const reviewWithdrawal = adminPost<{
 export const getAdminFunds = adminGet("/api/admin/funds");
 export const saveInvestmentFund = adminPost<Record<string, unknown>>("/api/admin/funds/save");
 export const getAdminVipPackages = adminGet("/api/admin/vip-packages");
-export const saveVipPackage = adminPost<Record<string, unknown>>("/api/admin/vip-packages/save");
+export type VipPackageSaveInput = {
+  id?: string;
+  name: string;
+  price: number;
+  dailyProfit: number;
+  dailyTasks: number;
+  taskReward: number;
+  isActive: boolean;
+};
+export const saveVipPackage = adminPost<VipPackageSaveInput>("/api/admin/vip-packages/save");
+export const deleteVipPackage = adminPost<{ id: string }>("/api/admin/vip-packages/delete");
 export const getAdminTasks = adminGet("/api/admin/tasks");
 export const saveAdminTask = adminPost<Record<string, unknown>>("/api/admin/tasks/save");
 export const toggleTaskStatus = adminPost<{ taskId: string; isActive: boolean }>(
@@ -42,5 +52,9 @@ export const getAdminWheelPrizes = adminGet("/api/admin/wheel");
 export const saveWheelPrize = adminPost<Record<string, unknown>>("/api/admin/wheel/save");
 export const getAdminSettings = adminGet("/api/admin/settings");
 export const saveAdminSettings = adminPost<Record<string, unknown>>("/api/admin/settings/save");
+export const changeAdminPassword = adminPost<{
+  currentPassword: string;
+  newPassword: string;
+}>("/api/auth/password");
 export const broadcastNotification = adminPost<Record<string, unknown>>("/api/admin/notifications");
 export const getAdminAuditLogs = adminGet("/api/admin/audit-logs");

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -16,7 +16,14 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createDepositRequest, requestWithdrawal } from "@/lib/valoriza-pages.functions";
+import {
+  bindWithdrawalAddress,
+  getInvestmentData,
+  getWithdrawalInfo,
+  investInSavingsFund,
+  requestWithdrawal,
+} from "@/lib/valoriza-pages.functions";
+import { backendRequest } from "@/lib/backend-client";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
 
@@ -28,53 +35,95 @@ interface DepositModalProps {
   isOpen: boolean;
   onClose: () => void;
   addresses?: Record<string, string>;
+  minDeposit?: number;
+  onSuccess?: () => void;
 }
 
-export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) {
+export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSuccess }: DepositModalProps) {
   const { t, dir } = useI18n();
-  const content = useLocalizedContent();
-  const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
+  const [network, setNetwork] = useState<"USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20">("USDT-ERC20");
   const [amount, setAmount] = useState<string>("");
+  const [proof, setProof] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const defaultAddresses: Record<string, string> = {
-    ERC20: "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b",
-    BEP20: "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b",
-    TRC20: "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
-    ...addresses,
-  };
-
-  const currentAddress = defaultAddresses[network] || defaultAddresses.ERC20;
+  const currentAddress = addresses?.[network.replace("USDT-", "")] ?? "";
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(currentAddress);
-    setCopied(true);
-    toast.success(t("public.deposit.copied"));
-    setTimeout(() => setCopied(false), 2000);
+    if (!currentAddress) {
+      toast.error(t("common.error"));
+      return;
+    }
+    void navigator.clipboard.writeText(currentAddress).then(() => {
+      setCopied(true);
+      toast.success(t("public.deposit.copied"));
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => toast.error(t("common.error")));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseFloat(amount);
-    if (isNaN(num) || num < 10) {
+    if (!Number.isFinite(num) || num < minDeposit) {
       toast.error(t("public.deposit.minimumError"));
+      return;
+    }
+    if (!proof) {
+      toast.error(t("deposit.uploadHint"));
+      return;
+    }
+    if (!currentAddress) {
+      toast.error(t("common.error"));
       return;
     }
 
     setSubmitting(true);
     try {
-      await createDepositRequest({
-        network: network as any,
-        amount: num,
-        screenshotUrl: "",
+      const upload = await backendRequest<{
+        uploadURL?: string;
+        uploadUrl?: string;
+        signedUrl?: string;
+        objectPath?: string;
+      }>("/api/app/deposit-proof/upload-url", {
+        method: "POST",
+        body: JSON.stringify({
+          name: proof.name,
+          size: proof.size,
+          contentType: proof.type,
+        }),
       });
-      toast.success(t("public.deposit.success"));
+      const uploadURL = upload.uploadURL ?? upload.uploadUrl ?? upload.signedUrl;
+      if (!uploadURL || !upload.objectPath) {
+        throw new Error("Deposit proof upload URL response is incomplete");
+      }
+      const uploaded = await fetch(uploadURL, {
+        method: "PUT",
+        headers: { "Content-Type": proof.type },
+        body: proof,
+      });
+      if (!uploaded.ok) throw new Error(`Deposit proof upload failed: ${uploaded.status}`);
+      const result = await backendRequest<{ ok?: boolean; reason?: string }>("/api/app/deposit", {
+        method: "POST",
+        body: JSON.stringify({ network, amount: num, objectPath: upload.objectPath }),
+      });
+      if (!result.ok) {
+        if (result.reason === "BELOW_MIN_DEPOSIT") toast.error(t("public.deposit.minimumError"));
+        else if (result.reason === "SCREENSHOT_REQUIRED") toast.error(t("deposit.uploadHint"));
+        else toast.error(t("public.deposit.error"));
+        return;
+      }
+      toast.success(`${t("public.deposit.success")} (${t("records.pending")})`);
       setAmount("");
+      setProof(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      onSuccess?.();
       onClose();
-    } catch {
+    } catch (error) {
+      console.error("Deposit submission failed", error);
       toast.error(t("public.deposit.error"));
     } finally {
       setSubmitting(false);
@@ -115,12 +164,13 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
 
         {/* Network Selector matching Page 6 */}
         <div className="mt-4 grid grid-cols-3 gap-2">
-          {(["ERC20", "BEP20", "TRC20"] as const).map((net) => {
+          {(["USDT-ERC20", "USDT-BEP20", "USDT-TRC20"] as const).map((net) => {
+            const displayNetwork = net.replace("USDT-", "");
             const isSelected = network === net;
             return (
               <button
-                key={net}
-                id={`deposit-net-${net}`}
+                key={displayNetwork}
+                id={`deposit-net-${displayNetwork}`}
                 type="button"
                 onClick={() => setNetwork(net)}
                 className={`relative flex flex-col items-center justify-center rounded-2xl border p-3 transition-all ${
@@ -137,8 +187,8 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-sm font-bold">
                   ₮
                 </div>
-                <span className="mt-1.5 text-xs font-bold text-foreground">USDT-{net}</span>
-                <span className="text-[10px] text-muted-foreground">{net}</span>
+                  <span className="mt-1.5 text-xs font-bold text-foreground">{net}</span>
+                <span className="text-[10px] text-muted-foreground">{displayNetwork}</span>
               </button>
             );
           })}
@@ -149,12 +199,12 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-foreground">{t("public.deposit.address")}</span>
             <span className="text-[10px] text-cyan-glow font-semibold">
-              {t("public.deposit.network").replace("{network}", network)}
+               {t("public.deposit.network").replace("{network}", network.replace("USDT-", ""))}
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-navy-deep border border-border/70 p-2.5">
             <code className="text-[11px] text-foreground font-mono truncate select-all" dir="ltr">
-              {content(currentAddress, { allowLanguageNeutral: true })}
+              {currentAddress || t("common.error")}
             </code>
             <button
               id="copy-deposit-addr-btn"
@@ -181,7 +231,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
               <input
                 id="deposit-amount-input"
                 type="number"
-                min="10"
+                min={minDeposit}
                 step="0.01"
                 placeholder={t("public.deposit.amountPlaceholder")}
                 value={amount}
@@ -195,10 +245,37 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-foreground">{t("deposit.proof")}</label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+                  toast.error(t("deposit.invalidImage"));
+                  event.target.value = "";
+                  return;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                  toast.error(t("deposit.fileTooLarge"));
+                  event.target.value = "";
+                  return;
+                }
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                setProof(file);
+                setPreviewUrl(URL.createObjectURL(file));
+              }}
+              className="block w-full text-xs text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-surface file:px-3 file:py-2 file:text-xs file:font-bold file:text-foreground"
+            />
+            {previewUrl && <img src={previewUrl} alt={t("deposit.previewAlt")} className="max-h-36 rounded-xl object-contain" />}
+          </div>
+
           <button
             id="submit-deposit-btn"
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !proof || !currentAddress}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
             {submitting ? t("public.deposit.submitting") : t("public.deposit.submit")}
@@ -240,26 +317,86 @@ interface WithdrawalModalProps {
 export function WithdrawalModal({
   isOpen,
   onClose,
-  balance = 125.5,
+  balance,
   existingAddress,
   onSuccess,
 }: WithdrawalModalProps) {
   const { t, dir } = useI18n();
-  const content = useLocalizedContent();
+  const qc = useQueryClient();
   const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
-  const [addressInput, setAddressInput] = useState(
-    content(existingAddress?.address || "", { allowLanguageNeutral: true }),
-  );
-  const [isLocked, setIsLocked] = useState(Boolean(existingAddress?.address));
+  const [addressInput, setAddressInput] = useState("");
   const [amount, setAmount] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
+  const withdrawalInfoQuery = useQuery({
+    queryKey: ["withdrawal-info"],
+    queryFn: getWithdrawalInfo,
+    enabled: isOpen,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const info = withdrawalInfoQuery.data as any;
+  const boundAddress = info?.boundAddress ?? existingAddress ?? null;
+  const isLocked = Boolean(boundAddress?.locked && boundAddress?.address);
+  const activeNetwork = boundAddress?.network ?? "ERC20";
+  const availableBalance = Number(info?.balance ?? balance ?? 0);
+  const feePercent = Number(info?.settings?.feePercent ?? 10);
+  const minWithdrawal = Number(info?.settings?.minWithdrawal ?? 6);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (boundAddress?.address) {
+      setAddressInput(boundAddress.address);
+      if (["ERC20", "BEP20", "TRC20"].includes(boundAddress.network)) {
+        setNetwork(boundAddress.network);
+      }
+    } else if (info) {
+      setAddressInput("");
+    }
+  }, [boundAddress?.address, boundAddress?.network, info]);
 
-  const feePercent = 10;
   const numAmount = parseFloat(amount) || 0;
   const feeAmount = (numAmount * feePercent) / 100;
   const netAmount = Math.max(0, numAmount - feeAmount);
+
+  const bindMutation = useMutation({
+    mutationFn: bindWithdrawalAddress,
+    onSuccess: (result: any) => {
+      if (result?.ok) {
+        toast.success(t("public.withdraw.bindSuccess"));
+        qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
+      } else {
+        toast.error(t("public.withdraw.error"));
+      }
+    },
+    onError: () => toast.error(t("public.withdraw.error")),
+  });
+
+  const withdrawalMutation = useMutation({
+    mutationFn: requestWithdrawal,
+    onSuccess: (result: any) => {
+      if (result?.ok) {
+        toast.success(
+          t("public.withdraw.success").replace("{amount}", Number(result.netAmount ?? netAmount).toFixed(2)),
+        );
+        setAmount("");
+        qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
+        qc.invalidateQueries({ queryKey: ["financial-records"] });
+        qc.invalidateQueries({ queryKey: ["account"] });
+        qc.invalidateQueries({ queryKey: ["home"] });
+        onSuccess?.();
+        onClose();
+      } else if (result?.reason === "INSUFFICIENT_BALANCE") {
+        toast.error(t("public.withdraw.insufficient"));
+      } else if (result?.reason === "BELOW_MIN_WITHDRAWAL") {
+        toast.error(t("public.withdraw.minimumError"));
+      } else if (result?.reason === "ADDRESS_MISMATCH") {
+        toast.error(t("withdraw.addressMismatch"));
+      } else {
+        toast.error(t("public.withdraw.error"));
+      }
+    },
+    onError: () => toast.error(t("public.withdraw.error")),
+  });
+
+  if (!isOpen) return null;
 
   const handleBindAddress = (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,8 +404,7 @@ export function WithdrawalModal({
       toast.error(t("public.withdraw.invalidAddress"));
       return;
     }
-    setIsLocked(true);
-    toast.success(t("public.withdraw.bindSuccess"));
+    bindMutation.mutate({ network, address: addressInput.trim() });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -277,33 +413,20 @@ export function WithdrawalModal({
       toast.error(t("public.withdraw.bindFirst"));
       return;
     }
-    if (numAmount < 6) {
+    if (numAmount < minWithdrawal) {
       toast.error(t("public.withdraw.minimumError"));
       return;
     }
-    if (numAmount > balance) {
+    if (numAmount > availableBalance) {
       toast.error(t("public.withdraw.insufficient"));
       return;
     }
 
-    // Check withdrawal hours 09:00 - 16:00
-    // Allow demo submission with notice if outside window
-    setSubmitting(true);
-    try {
-      await requestWithdrawal({
-        network: network as any,
-        address: addressInput.trim(),
-        amount: numAmount,
-      });
-      toast.success(t("public.withdraw.success").replace("{amount}", netAmount.toFixed(2)));
-      setAmount("");
-      onClose();
-      onSuccess?.();
-    } catch {
-      toast.error(t("public.withdraw.error"));
-    } finally {
-      setSubmitting(false);
+    if (!isLocked || network !== activeNetwork || addressInput.trim() !== boundAddress?.address) {
+      toast.error(t("withdraw.addressMismatch"));
+      return;
     }
+    withdrawalMutation.mutate({ network, address: boundAddress.address, amount: numAmount });
   };
 
   return (
@@ -327,7 +450,7 @@ export function WithdrawalModal({
             <div>
               <h2 className="text-lg font-extrabold text-foreground">{t("public.withdraw.title")}</h2>
               <p className="text-[11px] text-muted-foreground">
-                {t("public.withdraw.balance")} <span className="text-gold font-bold">${balance.toFixed(2)}</span>
+                 {t("public.withdraw.balance")} <span className="text-gold font-bold">${availableBalance.toFixed(2)}</span>
               </p>
             </div>
           </div>
@@ -349,8 +472,9 @@ export function WithdrawalModal({
                 key={net}
                 id={`withdraw-net-${net}`}
                 type="button"
+                disabled={isLocked}
                 onClick={() => setNetwork(net)}
-                className={`relative flex flex-col items-center justify-center rounded-2xl border p-3 transition-all ${
+                className={`relative flex flex-col items-center justify-center rounded-2xl border p-3 transition-all disabled:cursor-not-allowed disabled:opacity-60 ${
                   isSelected
                     ? "border-cyan-glow bg-surface shadow-[0_0_12px_oklch(0.82_0.14_205/0.3)]"
                     : "border-border/60 bg-navy hover:bg-surface/50"
@@ -395,7 +519,7 @@ export function WithdrawalModal({
               placeholder={t("public.withdraw.addressPlaceholder")}
               value={addressInput}
               onChange={(e) => setAddressInput(e.target.value)}
-              disabled={isLocked}
+              disabled={isLocked || withdrawalInfoQuery.isLoading}
               dir="ltr"
               className="w-full rounded-xl border border-border bg-navy px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none disabled:opacity-75"
             />
@@ -404,9 +528,14 @@ export function WithdrawalModal({
                 id="bind-address-btn"
                 type="button"
                 onClick={handleBindAddress}
-                className="shrink-0 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow"
+                disabled={
+                  bindMutation.isPending ||
+                  withdrawalInfoQuery.isLoading ||
+                  withdrawalInfoQuery.isError
+                }
+                className="shrink-0 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {t("public.withdraw.bind")}
+                {bindMutation.isPending ? t("withdraw.binding") : t("public.withdraw.bind")}
               </button>
             ) : (
               <span className="shrink-0 flex items-center justify-center h-8 w-8 rounded-xl bg-success/20 text-success">
@@ -428,8 +557,8 @@ export function WithdrawalModal({
               <input
                 id="withdraw-amount-input"
                 type="number"
-                min="6"
-                max={balance}
+                min={minWithdrawal}
+                max={availableBalance}
                 step="0.01"
                 placeholder={t("public.withdraw.amountPlaceholder")}
                 value={amount}
@@ -464,10 +593,10 @@ export function WithdrawalModal({
           <button
             id="submit-withdraw-btn"
             type="submit"
-            disabled={submitting || !isLocked}
+            disabled={withdrawalMutation.isPending || !isLocked || withdrawalInfoQuery.isLoading}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
-            {submitting ? t("public.withdraw.submitting") : t("public.withdraw.submit")}
+            {withdrawalMutation.isPending ? t("public.withdraw.submitting") : t("public.withdraw.submit")}
           </button>
         </form>
 
@@ -502,71 +631,82 @@ export function WithdrawalModal({
 interface SavingsFundModalProps {
   isOpen: boolean;
   onClose: () => void;
-  funds?: Array<{
-    id: string;
-    code: string;
-    nameAr: string;
-    nameEn: string;
-    taglineAr: string;
-    durationDays: number;
-    profitPercent: number;
-    minAmount: number;
-  }>;
 }
 
-export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalProps) {
+export function SavingsFundModal({ isOpen, onClose }: SavingsFundModalProps) {
   const { t, dir } = useI18n();
   const content = useLocalizedContent();
+  const qc = useQueryClient();
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const investmentQuery = useQuery({
+    queryKey: ["investment"],
+    queryFn: getInvestmentData,
+    enabled: isOpen,
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const investmentData = investmentQuery.data as any;
+  const funds = investmentData?.funds ?? [];
+  const balance = Number(investmentData?.wallet?.balance ?? investmentData?.walletBalance ?? 0);
+  const lowestMinimum = funds.length
+    ? Math.min(...funds.map((fund: any) => Number(fund.minAmount ?? fund.min_amount ?? 0)))
+    : null;
+  const investMutation = useMutation({
+    mutationFn: (values: { fundId: string; amount: number; name: string }) =>
+      investInSavingsFund({ fundId: values.fundId, amount: values.amount }),
+    onSuccess: (result: any, values) => {
+      if (result?.ok) {
+        const expectedProfit = result.expectedProfit ?? result.expected_profit;
+        if (expectedProfit !== undefined && expectedProfit !== null && Number.isFinite(Number(expectedProfit))) {
+          toast.success(
+            t("investment.investSuccess")
+              .replace("{fund}", values.name)
+              .replace("{profit}", `$${Number(expectedProfit).toFixed(2)}`),
+          );
+        } else {
+          toast.success(t("common.success"));
+        }
+        setAmounts((current) => ({ ...current, [values.fundId]: "" }));
+        qc.invalidateQueries({ queryKey: ["investment"] });
+        qc.invalidateQueries({ queryKey: ["home"] });
+        qc.invalidateQueries({ queryKey: ["account"] });
+        qc.invalidateQueries({ queryKey: ["financial-records"] });
+      } else if (result?.reason === "INSUFFICIENT_BALANCE") {
+        toast.error(t("investment.insufficientFunds"));
+      } else if (result?.reason === "BELOW_MIN_AMOUNT") {
+        toast.error(t("investment.belowMin").replace("{amount}", String(result.minAmount)));
+      } else {
+        toast.error(t("investment.investError"));
+      }
+    },
+    onError: () => toast.error(t("investment.processError")),
+  });
+
   if (!isOpen) return null;
 
-  const defaultFunds = [
-    {
-      id: "f1",
-      code: "MUMBAI",
-      nameAr: t("public.fund.f1Name"),
-      nameEn: t("public.fund.f1Name"),
-      taglineAr: t("public.fund.f1Tag"),
-      durationDays: 3,
-      profitPercent: 3.08,
-      minAmount: 5,
-    },
-    {
-      id: "f2",
-      code: "NEWMEXICO",
-      nameAr: t("public.fund.f2Name"),
-      nameEn: t("public.fund.f2Name"),
-      taglineAr: t("public.fund.f2Tag"),
-      durationDays: 10,
-      profitPercent: 4.2,
-      minAmount: 5,
-    },
-    {
-      id: "f3",
-      code: "GXR",
-      nameAr: t("public.fund.f3Name"),
-      nameEn: t("public.fund.f3Name"),
-      taglineAr: t("public.fund.f3Tag"),
-      durationDays: 30,
-      profitPercent: 6.4,
-      minAmount: 5,
-    },
-    {
-      id: "f4",
-      code: "NBL",
-      nameAr: t("public.fund.f4Name"),
-      nameEn: t("public.fund.f4Name"),
-      taglineAr: t("public.fund.f4Tag"),
-      durationDays: 160,
-      profitPercent: 10.8,
-      minAmount: 5,
-    },
-  ];
-
-  const hasAdminFunds = Boolean(funds && funds.length > 0);
-  const list = hasAdminFunds ? funds! : defaultFunds;
-  const fundTranslationKey = (id: string, field: "Name" | "Tag") => {
-    const idNum = id.replace("f", "");
-    return `public.fund.f${idNum}${field}`;
+  const fieldVariants = (fund: any, field: string) => ({
+    ar: fund[`${field}Ar`] ?? fund[`${field}_ar`] ?? fund[field]?.ar,
+    en: fund[`${field}En`] ?? fund[`${field}_en`] ?? fund[field]?.en ?? fund[field],
+    fr: fund[`${field}Fr`] ?? fund[`${field}_fr`] ?? fund[field]?.fr,
+    es: fund[`${field}Es`] ?? fund[`${field}_es`] ?? fund[field]?.es,
+  });
+  const handleInvest = (event: React.FormEvent, fund: any) => {
+    event.preventDefault();
+    const minimum = Number(fund.minAmount ?? fund.min_amount ?? 0);
+    const amount = Number(amounts[fund.id] ?? minimum);
+    if (!Number.isFinite(amount) || amount < minimum) {
+      toast.error(t("investment.minAmountError").replace("{amount}", String(minimum)));
+      return;
+    }
+    if (amount > balance) {
+      toast.error(t("investment.balanceTooLow"));
+      return;
+    }
+    investMutation.mutate({
+      fundId: fund.id,
+      amount,
+      name: content(fieldVariants(fund, "name")),
+    });
   };
 
   return (
@@ -604,65 +744,84 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
         {/* Hero banner matching Page 3 */}
         <div className="mt-4 surface-card glow-border p-4 text-center">
           <h3 className="text-xl font-extrabold text-gold-gradient">{t("public.fund.title")}</h3>
-          <p className="mt-1 text-xs font-bold text-foreground">
-            {t("public.fund.safe")}
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {t("public.fund.growth")}
+          <p className="mt-1 text-xs font-bold text-foreground">{t("investment.availableBalance")}</p>
+          <p className="mt-1 text-[11px] text-gold">
+            {investmentQuery.isLoading
+              ? t("common.loading")
+              : investmentQuery.isError
+                ? t("common.error")
+                : `$${balance.toFixed(2)}`}
           </p>
         </div>
 
         {/* Funds List matching Page 3 */}
         <div className="mt-4 space-y-3">
-          {list.map((fund) => (
+          {investmentQuery.isLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("common.loading")}</p>
+          ) : investmentQuery.isError ? (
+            <p className="py-6 text-center text-sm text-danger">{t("common.error")}</p>
+          ) : funds.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t("investment.unavailable")}</p>
+          ) : funds.map((fund: any) => {
+            const minimum = Number(fund.minAmount ?? fund.min_amount ?? 0);
+            const durationDays = Number(fund.durationDays ?? fund.duration_days ?? 0);
+            const profitPercent = Number(fund.profitPercent ?? fund.profit_percent ?? 0);
+            const fundName = content(fieldVariants(fund, "name"));
+            return (
             <div
               key={fund.id}
-              className="surface-card glow-border p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
+              className="surface-card glow-border p-3.5 space-y-3"
             >
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-bold text-xs">
                   {content(fund.code, { allowLanguageNeutral: true })}
                 </div>
                 <div>
-                  <h4 className="text-sm font-extrabold text-foreground">
-                    {hasAdminFunds
-                      ? content({ ar: fund.nameAr, en: fund.nameEn })
-                      : t(fundTranslationKey(fund.id, "Name"))}
-                  </h4>
-                  <p className="text-[11px] text-muted-foreground">
-                    {hasAdminFunds
-                      ? content(fund.taglineAr)
-                      : t(fundTranslationKey(fund.id, "Tag"))}
-                  </p>
+                  <h4 className="text-sm font-extrabold text-foreground">{fundName}</h4>
+                  <p className="text-[11px] text-muted-foreground">{content(fieldVariants(fund, "tagline"))}</p>
                   <div className="mt-1.5 flex items-center gap-3 text-[11px]">
                     <span className="flex items-center gap-1 text-cyan-glow">
                       <Clock className="h-3.5 w-3.5" />
-                      {t("public.fund.duration")} <b>{fund.durationDays} {t("public.fund.days")}</b>
+                      {t("public.fund.duration")} <b>{durationDays} {t("public.fund.days")}</b>
                     </span>
                     <span className="flex items-center gap-1 text-success font-bold">
                       <TrendingUp className="h-3.5 w-3.5" />
-                      {t("public.fund.profit")} {fund.profitPercent}%
+                      {t("public.fund.profit")} {profitPercent}%
                     </span>
                   </div>
                 </div>
               </div>
-
-              <Link
-                to="/investment"
-                onClick={onClose}
-                className="shrink-0 inline-flex items-center justify-center rounded-xl gold-gradient px-4 py-2 text-xs font-extrabold text-navy-deep shadow-gold-glow hover:brightness-110 transition-all"
-              >
-                {t("public.fund.invest")}
-              </Link>
+              <form onSubmit={(event) => handleInvest(event, fund)} className="flex gap-2">
+                <input
+                  type="number"
+                  min={minimum}
+                  max={balance}
+                  step="0.01"
+                  value={amounts[fund.id] ?? ""}
+                  onChange={(event) => setAmounts((current) => ({ ...current, [fund.id]: event.target.value }))}
+                  placeholder={t("investment.minPlaceholder").replace("{amount}", String(minimum))}
+                  className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-bold text-foreground"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={investMutation.isPending || balance < minimum}
+                  className="shrink-0 rounded-xl gold-gradient px-4 py-2 text-xs font-extrabold text-navy-deep shadow-gold-glow hover:brightness-110 transition-all disabled:opacity-50"
+                >
+                  {investMutation.isPending ? t("common.loading") : t("investment.investNow")}
+                </button>
+              </form>
             </div>
-          ))}
+          );})}
         </div>
 
         {/* Min investment note matching Page 3 */}
-        <div className="mt-4 rounded-2xl border border-gold/40 bg-gold/10 p-3 text-center text-xs font-bold text-gold flex items-center justify-center gap-1.5">
-          <Sparkles className="h-4 w-4" />
-          <span>{t("public.fund.minimum")}</span>
-        </div>
+        {lowestMinimum !== null && (
+          <div className="mt-4 rounded-2xl border border-gold/40 bg-gold/10 p-3 text-center text-xs font-bold text-gold flex items-center justify-center gap-1.5">
+            <Sparkles className="h-4 w-4" />
+            <span>{t("investment.minAmount")}: ${lowestMinimum}</span>
+          </div>
+        )}
       </div>
     </div>
   );

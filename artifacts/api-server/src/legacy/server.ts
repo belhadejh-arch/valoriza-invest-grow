@@ -15,6 +15,11 @@ import {
   requireAuth,
   verifyPassword,
 } from "./auth.js";
+import {
+  createDepositProofReadUrl,
+  createDepositProofUpload,
+  verifyDepositProofObject,
+} from "./deposit-proof-storage.js";
 
 const app = express();
 app.use(express.json({ limit: "8mb" }));
@@ -46,6 +51,8 @@ function number(value: unknown) {
   return Number(value ?? 0);
 }
 
+const DEFAULT_DAILY_LOGIN_REWARD = 0.11;
+
 function settingsMap(rows: { key: string; value: string }[]) {
   return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
@@ -61,6 +68,10 @@ async function ensureUserRows(userId: string) {
   await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
     userId,
   ]);
+  await query(
+    "INSERT INTO user_wheel_chances (user_id,chances) VALUES ($1,0) ON CONFLICT (user_id) DO NOTHING",
+    [userId],
+  );
 }
 
 async function changeBalance(
@@ -79,9 +90,9 @@ async function changeBalance(
   const after = before + amount;
   if (after < 0) throw Object.assign(new Error("INSUFFICIENT_BALANCE"), { status: 400 });
   await client.query(
-    `UPDATE wallets SET balance = $1, total_earned = total_earned + CASE WHEN $2 > 0 AND $3 <> 'deposit' THEN $2 ELSE 0 END,
-      total_deposited = total_deposited + CASE WHEN $3 = 'deposit' THEN $2 ELSE 0 END,
-      total_withdrawn = total_withdrawn + CASE WHEN $3 = 'withdrawal' THEN -$2 ELSE 0 END,
+    `UPDATE wallets SET balance = $1, total_earned = total_earned + CASE WHEN $2::numeric > 0 AND $3 <> 'deposit' THEN $2::numeric ELSE 0 END,
+      total_deposited = total_deposited + CASE WHEN $3 = 'deposit' THEN $2::numeric ELSE 0 END,
+      total_withdrawn = total_withdrawn + CASE WHEN $3 = 'withdrawal' THEN -$2::numeric ELSE 0 END,
       updated_at = now() WHERE user_id = $4`,
     [after, amount, type, userId],
   );
@@ -223,13 +234,35 @@ app.post("/api/auth/logout", async (request, response, next) => {
 app.post("/api/auth/password", async (request, response, next) => {
   try {
     const user = await requireAuth(request);
-    const password = String(request.body?.password ?? "");
+    const currentPassword = String(request.body?.currentPassword ?? "");
+    const password = String(request.body?.newPassword ?? request.body?.password ?? "");
+    if (!currentPassword) return response.status(400).json({ message: "CURRENT_PASSWORD_REQUIRED" });
     if (password.length < 8) return response.status(400).json({ message: "PASSWORD_TOO_SHORT" });
-    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [
-      await hashPassword(password),
-      user.id,
-    ]);
-    return response.json({ user });
+    if (Buffer.byteLength(password, "utf8") > 72)
+      return response.status(400).json({ message: "PASSWORD_TOO_LONG" });
+    const currentToken =
+      request.cookies?.valoriza_session ||
+      request.header("authorization")?.replace(/^Bearer /, "");
+    if (!currentToken) return response.status(401).json({ message: "UNAUTHORIZED" });
+    const hash = await hashPassword(password);
+    await withTransaction(async (client) => {
+      const result = await client.query<{ password_hash: string }>(
+        "SELECT password_hash FROM users WHERE id=$1 FOR UPDATE",
+        [user.id],
+      );
+      if (!result.rows[0] || !(await verifyPassword(currentPassword, result.rows[0].password_hash))) {
+        const error = new Error("CURRENT_PASSWORD_INVALID") as Error & { status?: number };
+        error.status = 400;
+        throw error;
+      }
+      await client.query("UPDATE users SET password_hash=$1 WHERE id=$2", [hash, user.id]);
+      await client.query(
+        `DELETE FROM sessions
+         WHERE user_id=$1 AND token_hash <> encode(digest($2, 'sha256'), 'hex')`,
+        [user.id, currentToken],
+      );
+    });
+    return response.json({ ok: true, user });
   } catch (error) {
     return next(error);
   }
@@ -260,6 +293,43 @@ async function userRoute(
 }
 app.use("/api/app", userRoute);
 
+app.post("/api/app/deposit-proof/upload-url", async (request, response, next) => {
+  try {
+    const user = (request as express.Request & { authUser: { id: string } }).authUser;
+    const { contentType, size } = request.body ?? {};
+    const imageName = request.body?.name;
+    const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (
+      typeof imageName !== "string" ||
+      imageName.length > 255 ||
+      typeof contentType !== "string" ||
+      !acceptedTypes.has(contentType) ||
+      !Number.isInteger(size) ||
+      size <= 0 ||
+      size > 5 * 1024 * 1024
+    ) {
+      return response.status(400).json({ ok: false, reason: "INVALID_PROOF_FILE" });
+    }
+    const { objectKey, uploadUrl } = await createDepositProofUpload(user.id);
+    const proof = await query<{ id: string }>(
+      "INSERT INTO deposit_proofs (user_id,object_key,content_type,file_size) VALUES ($1,$2,$3,$4) RETURNING id",
+      [user.id, objectKey, contentType, size],
+    );
+    return response.json({
+      ok: true,
+      proofId: proof.rows[0].id,
+      uploadURL: uploadUrl,
+      uploadUrl,
+      objectPath: objectKey,
+      name: imageName,
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get("/api/app/home", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
@@ -277,14 +347,16 @@ app.get("/api/app/home", async (request, response, next) => {
         "SELECT id, label_ar, prize_type, prize_value, icon, accent FROM lucky_wheel_configs WHERE is_active = true ORDER BY sort_order",
       ),
       query(
-        "SELECT count(*)::int AS count FROM lucky_wheel_spins WHERE user_id = $1 AND spin_date = current_date",
+        "SELECT chances FROM user_wheel_chances WHERE user_id = $1",
         [user.id],
       ),
       query(
-        "SELECT id FROM daily_login_rewards WHERE user_id = $1 AND reward_date = current_date",
+        `SELECT id FROM daily_login_rewards WHERE user_id = $1 AND reward_date =
+           (now() AT TIME ZONE COALESCE((SELECT value FROM platform_settings WHERE key='platform_timezone'),'UTC'))::date`,
         [user.id],
       ),
     ]);
+    settings.daily_login_reward ??= String(DEFAULT_DAILY_LOGIN_REWARD);
     response.json({
       profile: profile.rows[0],
       wallet: {
@@ -303,10 +375,10 @@ app.get("/api/app/home", async (request, response, next) => {
           icon: p.icon,
           accent: p.accent,
         })),
-        spinsLeft: Math.max(0, number(settings.daily_spins ?? 3) - number(spins.rows[0]?.count)),
+        spinsLeft: Math.max(0, number(spins.rows[0]?.chances)),
       },
       dailyReward: {
-        amount: number(settings.daily_login_reward ?? 0),
+        amount: number(settings.daily_login_reward),
         claimed: Boolean(daily.rowCount),
       },
     });
@@ -319,11 +391,18 @@ app.post("/api/app/daily-reward", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const settings = await getSettings();
-    const amount = number(settings.daily_login_reward ?? 0.11);
+    const amount = number(settings.daily_login_reward ?? DEFAULT_DAILY_LOGIN_REWARD);
+    if (!Number.isFinite(amount) || amount < 0)
+      return response.status(500).json({ ok: false, reason: "INVALID_DAILY_REWARD_SETTING" });
     const result = await withTransaction(async (client) => {
+      const timezone = await client.query<{ value: string }>(
+        "SELECT value FROM platform_settings WHERE key='platform_timezone'",
+      );
+      const platformTimezone = timezone.rows[0]?.value ?? "UTC";
       const inserted = await client.query(
-        "INSERT INTO daily_login_rewards (user_id, reward_date, amount) VALUES ($1,current_date,$2) ON CONFLICT DO NOTHING RETURNING id",
-        [user.id, amount],
+        `INSERT INTO daily_login_rewards (user_id, reward_date, amount)
+         VALUES ($1,(now() AT TIME ZONE $2)::date,$3) ON CONFLICT (user_id,reward_date) DO NOTHING RETURNING id`,
+        [user.id, platformTimezone, amount],
       );
       if (!inserted.rowCount) return { ok: false, amount: 0 };
       await changeBalance(
@@ -339,37 +418,57 @@ app.post("/api/app/daily-reward", async (request, response, next) => {
       );
       return { ok: true, amount };
     });
-    response.json(result);
+    return response.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 app.post("/api/app/spin", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const settings = await getSettings();
-    const maxSpins = number(settings.daily_spins ?? 3);
     const result = await withTransaction(async (client) => {
-      const used = await client.query(
-        "SELECT count(*)::int AS count FROM lucky_wheel_spins WHERE user_id=$1 AND spin_date=current_date",
+      await client.query(
+        "INSERT INTO user_wheel_chances (user_id,chances) VALUES ($1,0) ON CONFLICT (user_id) DO NOTHING",
         [user.id],
       );
-      if (number(used.rows[0]?.count) >= maxSpins) return { ok: false, reason: "NO_SPINS_LEFT" };
+      const balance = await client.query<{ chances: number }>(
+        "SELECT chances FROM user_wheel_chances WHERE user_id=$1 FOR UPDATE",
+        [user.id],
+      );
+      const chances = Number(balance.rows[0]?.chances ?? 0);
+      if (chances <= 0) return { ok: false, reason: "NO_SPINS_LEFT", spinsLeft: 0 };
       const prizes = await client.query<{
         id: string;
         label_ar: string;
         prize_type: string;
         prize_value: string;
+        probability: string;
         icon: string | null;
         accent: string;
       }>(
-        "SELECT id,label_ar,prize_type,prize_value,icon,accent FROM lucky_wheel_configs WHERE is_active=true ORDER BY sort_order",
+        "SELECT id,label_ar,prize_type,prize_value,probability,icon,accent FROM lucky_wheel_configs WHERE is_active=true ORDER BY sort_order",
       );
       if (!prizes.rowCount) return { ok: false, reason: "NO_PRIZES_CONFIGURED" };
-      const prize = prizes.rows[Math.floor(Math.random() * prizes.rows.length)];
+      const totalWeight = prizes.rows.reduce((sum, row) => sum + Math.max(0, number(row.probability)), 0);
+      if (!Number.isFinite(totalWeight) || totalWeight <= 0)
+        return { ok: false, reason: "NO_PRIZE_PROBABILITIES_CONFIGURED" };
+      let pick = Math.random() * totalWeight;
+      let prize = prizes.rows[prizes.rows.length - 1];
+      for (const candidate of prizes.rows) {
+        pick -= Math.max(0, number(candidate.probability));
+        if (pick < 0) {
+          prize = candidate;
+          break;
+        }
+      }
       await client.query(
-        "INSERT INTO lucky_wheel_spins (user_id,config_id,spin_date,prize_value) VALUES ($1,$2,current_date,$3)",
+        "UPDATE user_wheel_chances SET chances=chances-1,updated_at=now() WHERE user_id=$1",
+        [user.id],
+      );
+      await client.query(
+        `INSERT INTO lucky_wheel_spins (user_id,config_id,spin_date,prize_value)
+         VALUES ($1,$2,(now() AT TIME ZONE COALESCE((SELECT value FROM platform_settings WHERE key='platform_timezone'),'UTC'))::date,$3)`,
         [user.id, prize.id, prize.prize_value],
       );
       if (number(prize.prize_value) > 0) {
@@ -393,12 +492,12 @@ app.post("/api/app/spin", async (request, response, next) => {
         prizeValue: number(prize.prize_value),
         icon: prize.icon,
         accent: prize.accent,
-        spinsLeft: maxSpins - number(used.rows[0]?.count) - 1,
+        spinsLeft: chances - 1,
       };
     });
-    response.json(result);
+    return response.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -413,7 +512,8 @@ app.get("/api/app/account", async (request, response, next) => {
       query("SELECT balance FROM wallets WHERE user_id = $1", [user.id]),
       getSettings(),
       query(
-        "SELECT id FROM daily_login_rewards WHERE user_id = $1 AND reward_date = current_date",
+        `SELECT id FROM daily_login_rewards WHERE user_id = $1 AND reward_date =
+           (now() AT TIME ZONE COALESCE((SELECT value FROM platform_settings WHERE key='platform_timezone'),'UTC'))::date`,
         [user.id],
       ),
     ]);
@@ -421,7 +521,7 @@ app.get("/api/app/account", async (request, response, next) => {
       profile: profile.rows[0],
       balance: number(wallet.rows[0]?.balance),
       dailyReward: {
-        amount: number(settings.daily_login_reward),
+        amount: number(settings.daily_login_reward ?? DEFAULT_DAILY_LOGIN_REWARD),
         claimed: Boolean(daily.rowCount),
       },
     });
@@ -445,19 +545,67 @@ app.get("/api/app/settings", async (_request, response, next) => {
 app.get("/api/app/records", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const result = await query(
-      `SELECT id, type, amount, status, description, created_at FROM transactions WHERE user_id = $1
-       UNION ALL SELECT id, 'deposit' AS type, amount, status, 'طلب إيداع' AS description, created_at FROM deposits WHERE user_id = $1
-       UNION ALL SELECT id, 'withdrawal' AS type, amount, status, 'طلب سحب' AS description, created_at FROM withdrawals WHERE user_id = $1
-       ORDER BY created_at DESC LIMIT 100`,
-      [user.id],
-    );
+    const [depositResult, withdrawalResult, transactionResult, rewardResult] = await Promise.all([
+      query(
+        `SELECT id, amount, network, deposit_address AS address, tx_hash AS "txHash", status,
+                reject_reason AS "adminNote", created_at AS "createdAt"
+         FROM deposits WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,
+        [user.id],
+      ),
+      query(
+        `SELECT id, amount, fee, net_amount AS "netAmount", network, address, status,
+                reject_reason AS "adminNote", created_at AS "createdAt"
+         FROM withdrawals WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,
+        [user.id],
+      ),
+      query(
+        `SELECT id, type, status, amount, balance_after AS "balanceAfter", description,
+                created_at AS "createdAt"
+         FROM transactions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,
+        [user.id],
+      ),
+      query(
+        `SELECT id, source, amount, description_ar AS description, created_at AS "createdAt"
+         FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,
+        [user.id],
+      ),
+    ]);
+    const deposits = depositResult.rows.map((row) => ({
+      ...row,
+      amount: number(row.amount),
+      createdAt: row.createdAt,
+    }));
+    const withdrawals = withdrawalResult.rows.map((row) => ({
+      ...row,
+      amount: number(row.amount),
+      fee: number(row.fee),
+      netAmount: number(row.netAmount),
+      createdAt: row.createdAt,
+    }));
+    const transactions = transactionResult.rows.map((row) => ({
+      ...row,
+      amount: number(row.amount),
+      balanceAfter: number(row.balanceAfter),
+      createdAt: row.createdAt,
+    }));
+    const rewards = rewardResult.rows.map((row) => ({
+      ...row,
+      amount: number(row.amount),
+      createdAt: row.createdAt,
+    }));
+    const records = [
+      ...transactions,
+      ...deposits.map((row) => ({ ...row, type: "deposit", description: "طلب إيداع" })),
+      ...withdrawals.map((row) => ({ ...row, type: "withdrawal", description: "طلب سحب" })),
+    ]
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+      .slice(0, 100);
     response.json({
-      records: result.rows.map((row) => ({
-        ...row,
-        amount: number(row.amount),
-        createdAt: row.created_at,
-      })),
+      deposits,
+      withdrawals,
+      transactions,
+      rewards,
+      records,
     });
   } catch (error) {
     next(error);
@@ -536,6 +684,8 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const level = Number(request.body?.level);
+    if (!Number.isInteger(level) || level < 1)
+      return response.status(400).json({ ok: false, reason: "INVALID_VIP_LEVEL" });
     const result = await withTransaction(async (client) => {
       const plan = await client.query<{
         id: string;
@@ -563,30 +713,97 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
         expires,
         user.id,
       ]);
+      const chanceSetting = await client.query<{ value: string }>(
+        "SELECT value FROM platform_settings WHERE key='daily_spins'",
+      );
+      const grantedChances = Number(chanceSetting.rows[0]?.value ?? 3);
+      if (!Number.isInteger(grantedChances) || grantedChances < 0)
+        throw new Error("INVALID_VIP_SPIN_CHANCES_SETTING");
+      await client.query(
+        `INSERT INTO user_wheel_chances (user_id,chances) VALUES ($1,$2)
+         ON CONFLICT (user_id) DO UPDATE SET chances=user_wheel_chances.chances+EXCLUDED.chances,updated_at=now()`,
+        [user.id, grantedChances],
+      );
       const wallet = await client.query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]);
-      return { ok: true, vipLevel: level, newBalance: number(wallet.rows[0]?.balance) };
+      return { ok: true, vipLevel: level, newBalance: number(wallet.rows[0]?.balance), grantedChances };
     });
-    response.json(result);
+    return response.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 app.post("/api/app/deposit", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { amount, screenshotUrl, txHash } = request.body ?? {};
-    const network = String(request.body?.network ?? "").replace(/^USDT-/, "");
+    const { amount, txHash, proofId } = request.body ?? {};
+    const objectPath = request.body?.objectPath;
+    const network = String(request.body?.network ?? "").replace(/^USDT-/, "").toUpperCase();
+    if (
+      (proofId !== undefined && (typeof proofId !== "string" || !/^[0-9a-f-]{36}$/i.test(proofId))) ||
+      (objectPath !== undefined && typeof objectPath !== "string")
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_DEPOSIT_PROOF" });
     const settings = await getSettings();
     const value = Number(amount);
-    if (value < number(settings.min_deposit ?? 10))
-      return response.json({ ok: false, reason: "BELOW_MIN_DEPOSIT" });
+    if (
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      value >= 1e14 ||
+      !["ERC20", "BEP20", "TRC20"].includes(network)
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_DEPOSIT_REQUEST" });
+    const minimum = number(settings.min_deposit ?? 10);
+    if (!Number.isFinite(minimum) || minimum < 0)
+      return response.status(500).json({ ok: false, reason: "INVALID_MIN_DEPOSIT_SETTING" });
+    if (value < minimum)
+      return response.status(400).json({ ok: false, reason: "BELOW_MIN_DEPOSIT" });
     const address = settings[`deposit_address_${network}`] ?? "";
-    const result = await query(
-      "INSERT INTO deposits (user_id,amount,network,deposit_address,screenshot_url,tx_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-      [user.id, value, String(address), String(screenshotUrl ?? ""), txHash ?? null],
+    if (!address) return response.status(503).json({ ok: false, reason: "DEPOSIT_ADDRESS_NOT_CONFIGURED" });
+    const proof = await query<{
+      id: string;
+      object_key: string;
+      content_type: string;
+      file_size: number;
+    }>(
+      `SELECT id,object_key,content_type,file_size FROM deposit_proofs
+       WHERE user_id=$1 AND ($2::uuid IS NULL OR id=$2)
+         AND ($3::text IS NULL OR object_key=$3)
+         AND NOT EXISTS (SELECT 1 FROM deposits d WHERE d.proof_id=deposit_proofs.id)
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id, proofId ?? null, objectPath ?? null],
     );
-    return response.json({ ok: true, depositId: result.rows[0].id });
+    if (
+      (typeof proofId !== "string" && typeof objectPath !== "string") ||
+      !proof.rowCount ||
+      (proofId && objectPath && proof.rows[0].object_key !== objectPath)
+    )
+      return response.status(400).json({ ok: false, reason: "SCREENSHOT_REQUIRED" });
+    if (
+      !(await verifyDepositProofObject(
+        proof.rows[0].object_key,
+        proof.rows[0].content_type,
+        number(proof.rows[0].file_size),
+      ))
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_OR_MISSING_PROOF_FILE" });
+    const result = await withTransaction(async (client) => {
+      const inserted = await client.query<{ id: string }>(
+        `INSERT INTO deposits (user_id,amount,network,deposit_address,screenshot_url,tx_hash,proof_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+        [
+          user.id,
+          value,
+          network,
+          String(address),
+          "/api/admin/deposits/proof",
+          typeof txHash === "string" && txHash.trim() ? txHash.trim().slice(0, 200) : null,
+          proof.rows[0].id,
+        ],
+      );
+      return { ok: true, depositId: inserted.rows[0].id };
+    });
+    return response.json(result);
   } catch (error) {
     return next(error);
   }
@@ -594,12 +811,19 @@ app.post("/api/app/deposit", async (request, response, next) => {
 
 app.get("/api/public/about", async (_request, response, next) => {
   try {
-    const [settings, links] = await Promise.all([
+    const [settings, links, counts] = await Promise.all([
       getSettings(true),
       query(
         "SELECT id,label_ar,sublabel_ar,platform,url FROM customer_service_links WHERE is_active=true ORDER BY sort_order",
       ),
+      query<{ members_count: string; funds_count: string }>(
+        `SELECT
+           (SELECT COUNT(*)::text FROM users) AS members_count,
+           (SELECT COUNT(*)::text FROM investment_funds WHERE is_active=true) AS funds_count`,
+      ),
     ]);
+    settings.members_count = counts.rows[0].members_count;
+    settings.funds_count = counts.rows[0].funds_count;
     response.json({ settings, links: links.rows });
   } catch (error) {
     next(error);
@@ -611,6 +835,14 @@ app.post("/api/app/invest", async (request, response, next) => {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const { fundId, amount } = request.body ?? {};
     const value = Number(amount);
+    if (
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      value >= 1e14 ||
+      typeof fundId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(fundId)
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_INVESTMENT_AMOUNT" });
     const result = await withTransaction(async (client) => {
       const fund = await client.query<{
         duration_days: number;
@@ -624,8 +856,8 @@ app.post("/api/app/invest", async (request, response, next) => {
         return { ok: false, reason: "BELOW_MIN_INVESTMENT" };
       const matures = new Date(Date.now() + fund.rows[0].duration_days * 86400000);
       const expected = (value * number(fund.rows[0].profit_percent)) / 100;
-      const investment = await client.query<{ id: string }>(
-        "INSERT INTO investments (user_id,fund_id,amount,expected_profit,matures_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
+      const investment = await client.query<{ id: string; expected_profit: string }>(
+        "INSERT INTO investments (user_id,fund_id,amount,expected_profit,matures_at) VALUES ($1,$2,$3,$4,$5) RETURNING id,expected_profit",
         [user.id, fundId, value, expected, matures],
       );
       const newBalance = await changeBalance(
@@ -640,11 +872,16 @@ app.post("/api/app/invest", async (request, response, next) => {
         "UPDATE wallets SET invested_balance = invested_balance + $1 WHERE user_id = $2",
         [value, user.id],
       );
-      return { ok: true, investmentId: investment.rows[0].id, newBalance };
+      return {
+        ok: true,
+        investmentId: investment.rows[0].id,
+        newBalance,
+        expectedProfit: number(investment.rows[0].expected_profit),
+      };
     });
-    response.json(result);
+    return response.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -677,6 +914,13 @@ app.post("/api/app/withdrawal/address", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const { network, address } = request.body ?? {};
+    const normalizedAddress = typeof address === "string" ? address.trim() : "";
+    if (
+      !["ERC20", "BEP20", "TRC20"].includes(network) ||
+      !normalizedAddress ||
+      normalizedAddress.length > 256
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_WITHDRAWAL_ADDRESS" });
     const current = await query<{ locked: boolean }>(
       "SELECT locked FROM withdrawal_addresses WHERE user_id=$1",
       [user.id],
@@ -690,9 +934,9 @@ app.post("/api/app/withdrawal/address", async (request, response, next) => {
     await query(
       `INSERT INTO withdrawal_addresses (user_id,network,address,locked) VALUES ($1,$2,$3,true)
       ON CONFLICT (user_id) DO UPDATE SET network=EXCLUDED.network,address=EXCLUDED.address,locked=true`,
-      [user.id, network, String(address).trim()],
+      [user.id, network, normalizedAddress],
     );
-    return response.json({ ok: true, address: String(address).trim(), network });
+    return response.json({ ok: true, address: normalizedAddress, network });
   } catch (error) {
     return next(error);
   }
@@ -703,11 +947,26 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const { network, address, amount } = request.body ?? {};
     const value = Number(amount);
+    const normalizedAddress = typeof address === "string" ? address.trim() : "";
+    if (
+      !Number.isFinite(value) ||
+      value <= 0 ||
+      value >= 1e14 ||
+      !["ERC20", "BEP20", "TRC20"].includes(network) ||
+      !normalizedAddress ||
+      normalizedAddress.length > 256
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_WITHDRAWAL_REQUEST" });
     const settings = await getSettings();
+    if (settings.withdrawals_enabled === "false")
+      return response.status(403).json({ ok: false, reason: "WITHDRAWALS_DISABLED" });
     const minimum = number(settings.min_withdrawal ?? 6);
     if (value < minimum)
-      return response.json({ ok: false, reason: "BELOW_MIN_WITHDRAWAL", minWithdrawal: minimum });
-    const fee = Math.round(value * number(settings.withdrawal_fee_percent ?? 10)) / 100;
+      return response.status(400).json({ ok: false, reason: "BELOW_MIN_WITHDRAWAL", minWithdrawal: minimum });
+    const feePercent = number(settings.withdrawal_fee_percent ?? 10);
+    if (!Number.isFinite(feePercent) || feePercent < 0 || feePercent > 100)
+      return response.status(500).json({ ok: false, reason: "INVALID_WITHDRAWAL_FEE_SETTING" });
+    const fee = Math.round((value * feePercent) * 100) / 10000;
     const result = await withTransaction(async (client) => {
       const locked = await client.query<{ address: string; network: string }>(
         "SELECT address,network FROM withdrawal_addresses WHERE user_id=$1",
@@ -715,7 +974,7 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
       );
       if (
         locked.rows[0] &&
-        (locked.rows[0].address !== String(address).trim() || locked.rows[0].network !== network)
+        (locked.rows[0].address !== normalizedAddress || locked.rows[0].network !== network)
       )
         return {
           ok: false,
@@ -724,7 +983,7 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
         };
       const withdrawal = await client.query<{ id: string }>(
         "INSERT INTO withdrawals (user_id,amount,fee,net_amount,network,address) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-        [user.id, value, fee, value - fee, network, String(address).trim()],
+        [user.id, value, fee, value - fee, network, normalizedAddress],
       );
       await changeBalance(client, user.id, -value, "withdrawal", "طلب سحب", withdrawal.rows[0].id);
       return { ok: true, withdrawalId: withdrawal.rows[0].id, netAmount: value - fee, fee };
@@ -1005,7 +1264,7 @@ app.get("/api/admin/users", async (_request, response, next) => {
       `SELECT p.id,p.username,p.email,p.phone,p.referral_code,p.vip_level,p.trial_active,p.is_blocked,p.created_at,
         w.balance,w.total_deposited,w.total_withdrawn,w.invested_balance,w.team_income,
         (SELECT count(*)::int FROM referrals r WHERE r.referrer_id=p.id) AS team_count
-       FROM profiles p LEFT JOIN wallets w ON w.user_id=p.id ORDER BY p.created_at DESC LIMIT 100`,
+       FROM profiles p LEFT JOIN wallets w ON w.user_id=p.id ORDER BY p.created_at DESC`,
     );
     response.json(
       result.rows.map((row) => ({
@@ -1112,7 +1371,7 @@ app.get("/api/admin/deposits", async (_request, response, next) => {
         amount: number(row.amount),
         network: row.network,
         depositAddress: row.deposit_address,
-        screenshotUrl: row.screenshot_url,
+        screenshotUrl: row.proof_id ? `/api/admin/deposits/${row.id}/proof` : null,
         txHash: row.tx_hash,
         status: row.status,
         rejectReason: row.reject_reason,
@@ -1125,10 +1384,35 @@ app.get("/api/admin/deposits", async (_request, response, next) => {
   }
 });
 
+app.get("/api/admin/deposits/:depositId/proof", async (request, response, next) => {
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(request.params.depositId))
+      return response.status(400).json({ message: "INVALID_DEPOSIT_ID" });
+    const result = await query<{ object_key: string }>(
+      `SELECT proof.object_key FROM deposits deposit
+       JOIN deposit_proofs proof ON proof.id=deposit.proof_id AND proof.user_id=deposit.user_id
+       WHERE deposit.id=$1`,
+      [request.params.depositId],
+    );
+    if (!result.rowCount) return response.status(404).json({ message: "DEPOSIT_PROOF_NOT_FOUND" });
+    const signedUrl = await createDepositProofReadUrl(result.rows[0].object_key);
+    return response.redirect(302, signedUrl);
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.post("/api/admin/deposits/review", async (request, response, next) => {
   try {
     const admin = (request as express.Request & { authUser: { id: string } }).authUser;
     const { depositId, action, rejectReason } = request.body ?? {};
+    if (
+      typeof depositId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(depositId) ||
+      !["approve", "reject"].includes(action) ||
+      (rejectReason != null && (typeof rejectReason !== "string" || rejectReason.length > 500))
+    )
+      return response.status(400).json({ ok: false, reason: "INVALID_REVIEW_REQUEST" });
     const result = await withTransaction(async (client) => {
       const deposit = await client.query<{
         id: string;
@@ -1160,7 +1444,7 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
         for (const referral of referralRows.rows) {
           const rate = Number(rateByKey[`referral_rate_l${referral.level}`] ?? 0);
           if (!Number.isFinite(rate) || rate <= 0 || rate > 100) continue;
-          const amount = Math.round(number(deposit.rows[0].amount) * rate) / 100;
+          const amount = Math.round((number(deposit.rows[0].amount) * rate * 10000) / 100) / 10000;
           if (amount <= 0) continue;
           await client.query(
             `INSERT INTO referral_commissions
@@ -1192,7 +1476,7 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
     });
     response.json(result);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
@@ -1285,45 +1569,76 @@ app.get("/api/admin/funds", async (_request, response, next) => {
 app.post("/api/admin/funds/save", async (request, response, next) => {
   try {
     const data = request.body ?? {};
-    const nameAr = data.nameAr ?? data.name_ar;
-    const nameEn = data.nameEn ?? data.name_en;
-    const taglineAr = data.taglineAr ?? data.tagline_ar;
-    const durationDays = data.durationDays ?? data.duration_days;
-    const profitPercent = data.profitPercent ?? data.profit_percent;
-    const minAmount = data.minAmount ?? data.min_amount ?? 5;
-    if (data.id) {
-      await query(
-        "UPDATE investment_funds SET name_ar=$1,name_en=$2,tagline_ar=$3,duration_days=$4,profit_percent=$5,min_amount=$6,accent=$7,is_active=$8 WHERE id=$9",
-        [
-          nameAr,
-          nameEn,
-          taglineAr,
-          durationDays,
-          profitPercent,
-          minAmount,
-          data.accent,
-          data.isActive ?? data.is_active ?? true,
-          data.id,
-        ],
-      );
-    } else {
-      await query(
-        "INSERT INTO investment_funds (code,name_ar,name_en,tagline_ar,duration_days,profit_percent,min_amount,accent,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,99)",
-        [
-          data.code,
-          nameAr,
-          nameEn,
-          taglineAr,
-          durationDays,
-          profitPercent,
-          minAmount,
-          data.accent ?? "blue",
-        ],
-      );
+    const nameAr = String(data.nameAr ?? data.name_ar ?? "").trim();
+    const nameEn = String(data.nameEn ?? data.name_en ?? "").trim();
+    const taglineValue = data.taglineAr ?? data.tagline_ar;
+    const taglineAr = taglineValue == null ? null : String(taglineValue).trim();
+    const durationDays = Number(data.durationDays ?? data.duration_days);
+    const profitPercent = Number(data.profitPercent ?? data.profit_percent);
+    const minAmount = Number(data.minAmount ?? data.min_amount ?? 5);
+    const code = String(data.code ?? "").trim();
+    const id = data.id == null ? null : String(data.id);
+    const accent = String(data.accent ?? "blue").trim();
+    const isActiveValue = data.isActive ?? data.is_active ?? true;
+    if (
+      !nameAr ||
+      !nameEn ||
+      nameAr.length > 200 ||
+      nameEn.length > 200 ||
+      (taglineAr != null && taglineAr.length > 500) ||
+      !Number.isInteger(durationDays) ||
+      durationDays < 1 ||
+      !Number.isFinite(profitPercent) ||
+      profitPercent < 0 ||
+      profitPercent > 9999.9999 ||
+      !Number.isFinite(minAmount) ||
+      minAmount < 0 ||
+      minAmount > 99999999999999 ||
+      !accent ||
+      accent.length > 50 ||
+      typeof isActiveValue !== "boolean" ||
+      (id != null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) ||
+      (id == null && !/^[a-z0-9][a-z0-9_-]{1,49}$/i.test(code))
+    ) {
+      return response.status(400).json({ message: "INVALID_FUND_DATA" });
     }
-    response.json({ ok: true });
+    if (data.id) {
+      const result = await query(
+        "UPDATE investment_funds SET name_ar=$1,name_en=$2,tagline_ar=$3,duration_days=$4,profit_percent=$5,min_amount=$6,accent=$7,is_active=$8 WHERE id=$9 RETURNING *",
+        [
+          nameAr,
+          nameEn,
+          taglineAr,
+          durationDays,
+          profitPercent,
+          minAmount,
+          accent,
+          isActiveValue,
+          id,
+        ],
+      );
+      if (!result.rowCount) return response.status(404).json({ message: "FUND_NOT_FOUND" });
+      return response.json({ ok: true, fund: result.rows[0] });
+    } else {
+      const result = await query(
+        "INSERT INTO investment_funds (code,name_ar,name_en,tagline_ar,duration_days,profit_percent,min_amount,accent,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,99) RETURNING *",
+        [
+          code,
+          nameAr,
+          nameEn,
+          taglineAr,
+          durationDays,
+          profitPercent,
+          minAmount,
+          accent,
+        ],
+      );
+      return response.json({ ok: true, fund: result.rows[0] });
+    }
   } catch (error) {
-    next(error);
+    if ((error as { code?: string }).code === "23505")
+      return response.status(409).json({ message: "FUND_CODE_ALREADY_EXISTS" });
+    return next(error);
   }
 });
 
@@ -1338,23 +1653,99 @@ app.get("/api/admin/vip-packages", async (_request, response, next) => {
 app.post("/api/admin/vip-packages/save", async (request, response, next) => {
   try {
     const data = request.body ?? {};
-    await query(
-      "UPDATE vip_packages SET name=$1,price=$2,daily_profit=$3,daily_tasks=$4,task_reward=$5,duration_days=$6,accent=$7,is_active=$8 WHERE id=$9",
-      [
-        data.name,
-        data.price,
-        data.dailyProfit ?? data.daily_profit,
-        data.dailyTasks ?? data.daily_tasks,
-        data.taskReward ?? data.task_reward,
-        data.durationDays ?? data.duration_days ?? 365,
-        data.accent,
-        data.isActive ?? data.is_active ?? true,
-        data.id,
-      ],
-    );
-    response.json({ ok: true });
+    const id = data.id == null || data.id === "" ? null : String(data.id);
+    let level: number;
+    if (data.level == null || data.level === "") {
+      if (id) {
+        const existing = await query<{ level: number }>(
+          "SELECT level FROM vip_packages WHERE id=$1",
+          [id],
+        );
+        if (!existing.rows[0]) return response.status(404).json({ message: "VIP_PACKAGE_NOT_FOUND" });
+        level = Number(existing.rows[0].level);
+      } else {
+        const nextLevel = await query<{ level: number }>(
+          "SELECT COALESCE(MAX(level), 0) + 1 AS level FROM vip_packages",
+        );
+        level = Number(nextLevel.rows[0]?.level);
+      }
+    } else {
+      level = Number(data.level);
+    }
+    const name = String(data.name ?? "").trim();
+    const price = Number(data.price);
+    const dailyProfit = Number(data.dailyProfit ?? data.daily_profit);
+    const dailyTasks = Number(data.dailyTasks ?? data.daily_tasks);
+    const taskReward = Number(data.taskReward ?? data.task_reward);
+    const durationDays = Number(data.durationDays ?? data.duration_days ?? 365);
+    const accent = String(data.accent ?? "blue").trim();
+    const isActive = data.isActive ?? data.is_active ?? true;
+    const validId =
+      id == null ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    if (
+      !validId ||
+      !Number.isInteger(level) ||
+      level < 1 ||
+      level > 32767 ||
+      !name ||
+      name.length > 200 ||
+      !Number.isFinite(price) ||
+      price < 0 ||
+      price > 99999999999999 ||
+      !Number.isFinite(dailyProfit) ||
+      dailyProfit < 0 ||
+      dailyProfit > 99999999999999 ||
+      !Number.isInteger(dailyTasks) ||
+      dailyTasks < 0 ||
+      dailyTasks > 32767 ||
+      !Number.isFinite(taskReward) ||
+      taskReward < 0 ||
+      taskReward > 99999999999999 ||
+      !Number.isInteger(durationDays) ||
+      durationDays < 1 ||
+      durationDays > 32767 ||
+      !accent ||
+      accent.length > 50 ||
+      typeof isActive !== "boolean"
+    ) {
+      return response.status(400).json({ message: "INVALID_VIP_PACKAGE_DATA" });
+    }
+    if (id) {
+      const result = await query(
+        `UPDATE vip_packages SET level=$1,name=$2,price=$3,daily_profit=$4,daily_tasks=$5,
+         task_reward=$6,duration_days=$7,accent=$8,is_active=$9 WHERE id=$10 RETURNING *`,
+        [level, name, price, dailyProfit, dailyTasks, taskReward, durationDays, accent, isActive, id],
+      );
+      if (!result.rowCount) return response.status(404).json({ message: "VIP_PACKAGE_NOT_FOUND" });
+      return response.json({ ok: true, package: result.rows[0] });
+    } else {
+      const result = await query(
+        `INSERT INTO vip_packages (level,name,price,daily_profit,daily_tasks,task_reward,duration_days,accent,is_active)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [level, name, price, dailyProfit, dailyTasks, taskReward, durationDays, accent, isActive],
+      );
+      return response.json({ ok: true, package: result.rows[0] });
+    }
   } catch (error) {
-    next(error);
+    if ((error as { code?: string }).code === "23505")
+      return response.status(409).json({ message: "VIP_PACKAGE_LEVEL_ALREADY_EXISTS" });
+    return next(error);
+  }
+});
+
+app.post("/api/admin/vip-packages/delete", async (request, response, next) => {
+  try {
+    const id = String(request.body?.id ?? "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))
+      return response.status(400).json({ message: "INVALID_VIP_PACKAGE_ID" });
+    const result = await query("DELETE FROM vip_packages WHERE id=$1", [id]);
+    if (!result.rowCount) return response.status(404).json({ message: "VIP_PACKAGE_NOT_FOUND" });
+    return response.json({ ok: true });
+  } catch (error) {
+    if ((error as { code?: string }).code === "23503")
+      return response.status(409).json({ message: "VIP_PACKAGE_IN_USE" });
+    return next(error);
   }
 });
 
@@ -1473,18 +1864,45 @@ app.post("/api/admin/settings/save", async (request, response, next) => {
     const settings = request.body?.settings ?? request.body ?? {};
     if (!settings || typeof settings !== "object" || Array.isArray(settings))
       return response.status(400).json({ message: "INVALID_SETTINGS" });
+    const fixedReferralRates: Record<string, number> = {
+      referral_rate_l1: 8,
+      referral_rate_l2: 4,
+      referral_rate_l3: 1,
+    };
+    const fixedDepositAddresses: Record<string, string> = {
+      deposit_address_TRC20: "THT9uwaJnzjFXxjcq8mDfioEb4xNPjnGP6",
+      deposit_address_ERC20: "0x2b84FD5e05E11148Bc600Df7060a506f3D0E682b",
+      deposit_address_BEP20: "0x2b84FD5e05E11148Bc600Df7060a506f3D0E682b",
+    };
     for (const [key, value] of Object.entries(settings)) {
-      if (/^referral_rate_l[123]$/.test(key)) {
-        if (value === "" || value === null || !Number.isFinite(Number(value)) ||
-            Number(value) < 0 || Number(value) > 100) {
-          return response.status(400).json({ message: "INVALID_REFERRAL_RATE" });
-        }
+      if (
+        Object.hasOwn(fixedReferralRates, key) &&
+        (value === "" || value === null || Number(value) !== fixedReferralRates[key])
+      )
+        return response.status(400).json({ message: "REFERRAL_RATES_ARE_FIXED" });
+      if (
+        Object.hasOwn(fixedDepositAddresses, key) &&
+        value !== fixedDepositAddresses[key]
+      )
+        return response.status(400).json({ message: "DEPOSIT_ADDRESSES_ARE_FIXED" });
+      if (key === "daily_spins" && (!Number.isInteger(Number(value)) || Number(value) < 0))
+        return response.status(400).json({ message: "INVALID_VIP_SPIN_CHANCES" });
+      if (key === "platform_timezone") {
+        if (typeof value !== "string" || !value.trim())
+          return response.status(400).json({ message: "INVALID_PLATFORM_TIMEZONE" });
+        const timezone = await query("SELECT 1 FROM pg_timezone_names WHERE name=$1", [value]);
+        if (!timezone.rowCount)
+          return response.status(400).json({ message: "INVALID_PLATFORM_TIMEZONE" });
       }
-      await query(
-        "INSERT INTO platform_settings (key,value,is_public) VALUES ($1,$2,true) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",
-        [key, String(value)],
-      );
     }
+    await withTransaction(async (client) => {
+      for (const [key, value] of Object.entries(settings)) {
+        await client.query(
+          "INSERT INTO platform_settings (key,value,is_public) VALUES ($1,$2,true) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_at=now()",
+          [key, String(value)],
+        );
+      }
+    });
     return response.json({ ok: true });
   } catch (error) {
     return next(error);
@@ -1557,13 +1975,13 @@ async function initDatabase() {
 
     // Ensure default primary admin user exists and is linked
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@valoriza.com").trim().toLowerCase();
-    const adminPassword = process.env.ADMIN_PASSWORD || "ValorizaAdmin2025!";
+    const adminPassword = process.env.ADMIN_PASSWORD;
     const adminCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
       adminEmail,
     ]);
     let adminId = adminCheck.rows[0]?.id;
 
-    if (!adminId) {
+    if (!adminId && adminPassword) {
       const adminHash = await hashPassword(adminPassword);
       const res = await query<{ id: string }>(
         `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
@@ -1589,7 +2007,7 @@ async function initDatabase() {
         [adminId],
       );
       logger.info("Primary admin created");
-    } else {
+    } else if (adminId) {
       await query(
         "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
         [adminId],
@@ -1599,6 +2017,8 @@ async function initDatabase() {
         [adminId],
       );
       logger.info("Primary admin verified");
+    } else {
+      logger.warn("Primary admin was not bootstrapped: set ADMIN_PASSWORD to create one");
     }
 
     // Ensure default user exists
@@ -1710,10 +2130,14 @@ async function initDatabase() {
         ["withdrawals_enabled", "true", "تفعيل السحب", true],
         ["min_investment", "5", "الحد الأدنى للاستثمار", true],
         ["daily_login_reward", "0.11", "مكافأة تسجيل الدخول اليومية", true],
-        ["referral_rate_l1", "0.08", "عمولة المستوى الأول", true],
-        ["referral_rate_l2", "0.04", "عمولة المستوى الثاني", true],
-        ["referral_rate_l3", "0.01", "عمولة المستوى الثالث", true],
-        ["daily_spins", "3", "فرص عجلة الحظ اليومية", true],
+        ["referral_rate_l1", "8", "عمولة المستوى الأول", true],
+        ["referral_rate_l2", "4", "عمولة المستوى الثاني", true],
+        ["referral_rate_l3", "1", "عمولة المستوى الثالث", true],
+        ["daily_spins", "3", "فرص عجلة الحظ عند تفعيل VIP", true],
+        ["platform_timezone", "UTC", "المنطقة الزمنية للمنصة", true],
+        ["deposit_address_TRC20", "THT9uwaJnzjFXxjcq8mDfioEb4xNPjnGP6", "عنوان إيداع USDT TRC20", true],
+        ["deposit_address_ERC20", "0x2b84FD5e05E11148Bc600Df7060a506f3D0E682b", "عنوان إيداع USDT ERC20", true],
+        ["deposit_address_BEP20", "0x2b84FD5e05E11148Bc600Df7060a506f3D0E682b", "عنوان إيداع USDT BEP20", true],
       ];
       for (const setting of settings) {
         await query(

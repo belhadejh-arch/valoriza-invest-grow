@@ -1,22 +1,42 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Plus, Edit2, CheckCircle2, XCircle, X, RefreshCw, Percent } from "lucide-react";
+import { Plus, Edit2, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminWheelPrizes, saveWheelPrize } from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
+
+type WheelPrize = {
+  id: string;
+  label_ar: string;
+  prize_type: string;
+  prize_value: number | string;
+  probability: number | string;
+  icon: string | null;
+  accent: string;
+  is_active: boolean;
+};
+
+const accents = {
+  gold: "#e5a823",
+  green: "#10b981",
+  blue: "#0284c7",
+  purple: "#8b5cf6",
+  red: "#ef4444",
+};
 
 export function AdminWheelTab() {
   const { t } = useI18n();
   const content = useLocalizedContent();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingPrize, setEditingPrize] = useState<any | null>(null);
+  const [editingPrize, setEditingPrize] = useState<WheelPrize | null>(null);
 
   const [label, setLabel] = useState("");
-  const [amount, setAmount] = useState(0.5);
-  const [probabilityWeight, setProbabilityWeight] = useState(20);
-  const [color, setColor] = useState("#00E5FF");
+  const [prizeType, setPrizeType] = useState("cash");
+  const [amount, setAmount] = useState("0.5");
+  const [probability, setProbability] = useState("20");
+  const [accent, setAccent] = useState("blue");
   const [isActive, setIsActive] = useState(true);
 
   const {
@@ -25,7 +45,7 @@ export function AdminWheelTab() {
     refetch,
   } = useQuery({
     queryKey: ["admin-wheel-prizes"],
-    queryFn: () => getAdminWheelPrizes(),
+    queryFn: () => getAdminWheelPrizes() as Promise<WheelPrize[]>,
   });
 
   const saveMutation = useMutation({
@@ -33,23 +53,25 @@ export function AdminWheelTab() {
     onSuccess: () => {
       toast.success(t("admin.wheelPrizeUpdated"));
       queryClient.invalidateQueries({ queryKey: ["admin-wheel-prizes"] });
-      queryClient.invalidateQueries({ queryKey: ["wheel-prizes"] });
+      queryClient.invalidateQueries({ queryKey: ["home"] });
       setModalOpen(false);
     },
     onError: () => toast.error(t("common.error")),
   });
 
   const totalWeight = prizes.reduce(
-    (sum: number, p: any) => sum + (p.is_active ? p.probability_weight : 0),
+    (sum: number, prize) =>
+      sum + (prize.is_active ? Math.max(0, Number(prize.probability) || 0) : 0),
     0,
   );
 
-  const handleOpenEdit = (prize: any) => {
+  const handleOpenEdit = (prize: WheelPrize) => {
     setEditingPrize(prize);
-    setLabel(prize.label);
-    setAmount(Number(prize.amount));
-    setProbabilityWeight(prize.probability_weight);
-    setColor(prize.color || "#00E5FF");
+    setLabel(prize.label_ar || "");
+    setPrizeType(prize.prize_type || "cash");
+    setAmount(String(prize.prize_value ?? 0));
+    setProbability(String(prize.probability ?? 0));
+    setAccent(prize.accent || "blue");
     setIsActive(prize.is_active);
     setModalOpen(true);
   };
@@ -57,12 +79,22 @@ export function AdminWheelTab() {
   const handleOpenCreate = () => {
     setEditingPrize(null);
     setLabel("");
-    setAmount(1.0);
-    setProbabilityWeight(10);
-    setColor("#FFD700");
+    setPrizeType("cash");
+    setAmount("0.5");
+    setProbability("10");
+    setAccent("blue");
     setIsActive(true);
     setModalOpen(true);
   };
+  const amountValue = prizeType === "none" ? 0 : Number(amount);
+  const probabilityValue = Number(probability);
+  const canSave =
+    label.trim().length > 0 &&
+    Number.isFinite(probabilityValue) &&
+    probabilityValue > 0 &&
+    Number.isFinite(amountValue) &&
+    amountValue >= 0 &&
+    (prizeType === "none" || amountValue > 0);
 
   return (
     <div className="space-y-4">
@@ -88,11 +120,17 @@ export function AdminWheelTab() {
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           {t("admin.loadingWheelPrizes")}
         </div>
+      ) : prizes.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-surface/50 p-8 text-center text-xs text-muted-foreground">
+          {t("common.none")}
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {prizes.map((prize: any) => {
+          {prizes.map((prize) => {
             const chance =
-              totalWeight > 0 ? ((prize.probability_weight / totalWeight) * 100).toFixed(1) : "0";
+              totalWeight > 0
+                ? ((Number(prize.probability) / totalWeight) * 100).toFixed(1)
+                : "0";
             return (
               <div
                 key={prize.id}
@@ -106,14 +144,19 @@ export function AdminWheelTab() {
                   <div className="flex items-center gap-2">
                     <span
                       className="h-4 w-4 rounded-full border border-white/20 shadow-sm"
-                      style={{ backgroundColor: prize.color || "#00E5FF" }}
+                      style={{
+                        backgroundColor:
+                          accents[prize.accent as keyof typeof accents] || accents.blue,
+                      }}
                     />
-                    <h3 className="text-xs font-black text-foreground">{content(prize.label)}</h3>
+                    <h3 className="text-xs font-black text-foreground">{content(prize.label_ar)}</h3>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(prize)}
+                    title={t("admin.editPrize")}
+                    aria-label={t("admin.editPrize")}
                     className="rounded-lg bg-surface border border-border p-1 text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow"
                   >
                     <Edit2 className="h-3 w-3" />
@@ -121,9 +164,13 @@ export function AdminWheelTab() {
                 </div>
 
                 <div className="mt-3 text-center">
-                  <p className="text-xl font-black text-gold">${Number(prize.amount).toFixed(2)}</p>
+                  <p className="text-xl font-black text-gold">
+                    {prize.prize_type === "cash"
+                      ? `$${Number(prize.prize_value).toFixed(2)}`
+                      : content(prize.label_ar)}
+                  </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {t("admin.probability")}: {chance}% ({prize.probability_weight} {t("admin.points")})
+                    {t("admin.probability")}: {chance}% ({Number(prize.probability)} {t("admin.points")})
                   </p>
                 </div>
 
@@ -148,12 +195,13 @@ export function AdminWheelTab() {
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
                 {editingPrize
-                  ? `${t("admin.editPrize")}: ${content(editingPrize.label)}`
+                  ? `${t("admin.editPrize")}: ${content(editingPrize.label_ar)}`
                   : t("admin.addPrizeSegment")}
               </h3>
               <button
                 type="button"
                 onClick={() => setModalOpen(false)}
+                aria-label={t("common.close")}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -167,6 +215,7 @@ export function AdminWheelTab() {
                 </label>
                 <input
                   type="text"
+                  required
                   value={label}
                   placeholder={t("admin.arabicPrizeLabelPlaceholder")}
                   onChange={(e) => setLabel(e.target.value)}
@@ -174,14 +223,33 @@ export function AdminWheelTab() {
                 />
               </div>
 
+              <div>
+                <label className="text-[10px] text-muted-foreground font-bold">
+                  {t("admin.prizeType")}
+                </label>
+                <select
+                  value={prizeType}
+                  onChange={(event) => setPrizeType(event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+                >
+                  <option value="cash">{t("admin.cashPrize")}</option>
+                  <option value="none">{t("common.none")}</option>
+                  {prizeType !== "cash" && prizeType !== "none" && (
+                    <option value={prizeType}>{prizeType}</option>
+                  )}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">{t("admin.amountUsd")}</label>
                   <input
                     type="number"
-                    step="0.05"
+                    min="0.01"
+                    step="0.01"
+                    disabled={prizeType === "none"}
                     value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
+                    onChange={(e) => setAmount(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
@@ -191,9 +259,11 @@ export function AdminWheelTab() {
                   </label>
                   <input
                     type="number"
-                    min="1"
-                    value={probabilityWeight}
-                    onChange={(e) => setProbabilityWeight(Number(e.target.value))}
+                    min="0.0001"
+                    step="0.0001"
+                    required
+                    value={probability}
+                    onChange={(e) => setProbability(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
                   />
                 </div>
@@ -203,14 +273,21 @@ export function AdminWheelTab() {
                 <label className="text-[10px] text-muted-foreground font-bold">
                   {t("admin.wheelSegmentColor")}
                 </label>
-                <div className="mt-1 flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                    className="h-8 w-12 rounded cursor-pointer border border-border bg-transparent"
-                  />
-                  <span className="font-mono text-xs text-muted-foreground">{color}</span>
+                <div className="mt-2 flex items-center gap-2">
+                  {Object.entries(accents).map(([name, swatch]) => (
+                    <button
+                      key={name}
+                      type="button"
+                      title={name}
+                      aria-label={name}
+                      aria-pressed={accent === name}
+                      onClick={() => setAccent(name)}
+                      className={`h-7 w-7 rounded-full border-2 ${
+                        accent === name ? "border-foreground ring-2 ring-cyan-glow" : "border-white/20"
+                      }`}
+                      style={{ backgroundColor: swatch }}
+                    />
+                  ))}
                 </div>
               </div>
 
@@ -229,14 +306,16 @@ export function AdminWheelTab() {
 
               <button
                 type="button"
-                disabled={saveMutation.isPending}
+                disabled={!canSave || saveMutation.isPending}
                 onClick={() =>
                   saveMutation.mutate({
-                    id: editingPrize?.id,
+                    ...(editingPrize ? { id: editingPrize.id } : {}),
                     label,
-                    amount,
-                    probabilityWeight,
-                    color,
+                    prizeType,
+                    prizeValue: amountValue,
+                    probability: probabilityValue,
+                    icon: editingPrize?.icon ?? null,
+                    accent,
                     isActive,
                   })
                 }

@@ -24,18 +24,21 @@ export type PrizeItem = {
   accent: string;
 };
 
+export type LuckyWheelSpinResult =
+  | {
+      ok: true;
+      id: string;
+      label: string;
+      prizeType: string;
+      prizeValue: number;
+      spinsLeft: number;
+    }
+  | { ok: false; reason?: string; spinsLeft?: number };
+
 interface LuckyWheelProps {
   prizes: PrizeItem[];
   spinsLeft: number;
-  onSpin: () => Promise<{
-    ok: boolean;
-    prizeId?: string;
-    label?: string;
-    value?: number;
-    cash?: boolean;
-    spinsLeft?: number;
-    reason?: string;
-  }>;
+  onSpin: () => Promise<LuckyWheelSpinResult>;
   disabled?: boolean;
 }
 
@@ -46,98 +49,29 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
   const { t, dir, lang } = useI18n();
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [isSpinning, setIsSpinning] = useState(false);
+  const [serverSpinsLeft, setServerSpinsLeft] = useState(() =>
+    Number.isFinite(spinsLeft) ? Math.max(0, spinsLeft) : 0,
+  );
   const [winModal, setWinModal] = useState<{
     label: string;
     value: number;
-    cash: boolean;
     prizeType: string;
   } | null>(null);
   const content = useLocalizedContent();
-  const spinTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const spinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setServerSpinsLeft(Number.isFinite(spinsLeft) ? Math.max(0, spinsLeft) : 0);
+  }, [spinsLeft]);
 
   useEffect(() => {
     return () => {
-      if (spinTimerRef.current) clearInterval(spinTimerRef.current);
+      if (spinTimerRef.current) clearTimeout(spinTimerRef.current);
     };
   }, []);
 
-  // Standard 9 visual boxes matching PDF Page 2
-  const default9Boxes: PrizeItem[] = [
-    {
-      id: "w-50",
-      label: t("public.wheel.prize50"),
-      prizeType: "cash",
-      prizeValue: 50,
-      icon: "banknote",
-      accent: "gold",
-    },
-    {
-      id: "w-05",
-      label: t("public.wheel.prize05"),
-      prizeType: "cash",
-      prizeValue: 0.5,
-      icon: "coin",
-      accent: "green",
-    },
-    {
-      id: "w-luck1",
-      label: t("public.wheel.luck"),
-      prizeType: "none",
-      prizeValue: 0,
-      icon: "smile",
-      accent: "blue",
-    },
-    {
-      id: "w-2",
-      label: t("public.wheel.prize2"),
-      prizeType: "cash",
-      prizeValue: 2,
-      icon: "coins",
-      accent: "purple",
-    },
-    {
-      id: "w-phone",
-      label: t("public.wheel.phone"),
-      prizeType: "item",
-      prizeValue: 0,
-      icon: "smartphone",
-      accent: "red",
-    },
-    {
-      id: "w-luck2",
-      label: t("public.wheel.luck"),
-      prizeType: "none",
-      prizeValue: 0,
-      icon: "smile",
-      accent: "blue",
-    },
-    {
-      id: "w-80",
-      label: t("public.wheel.prize80"),
-      prizeType: "cash",
-      prizeValue: 80,
-      icon: "money-bag",
-      accent: "gold",
-    },
-    {
-      id: "w-1",
-      label: t("public.wheel.prize1"),
-      prizeType: "cash",
-      prizeValue: 1,
-      icon: "coin",
-      accent: "green",
-    },
-    {
-      id: "w-vip",
-      label: t("public.wheel.vip"),
-      prizeType: "vip",
-      prizeValue: 0,
-      icon: "crown",
-      accent: "purple",
-    },
-  ];
-
-  const gridPrizes = prizes && prizes.length === 9 ? prizes : default9Boxes;
+  const gridPrizes = Array.isArray(prizes) ? prizes : [];
+  const hasPrizes = gridPrizes.length > 0;
   const displayPrizeLabel = (label: string, prizeType?: string, value?: number) => {
     const translated: Record<string, string> = {
       "50 دولار": t("public.wheel.prize50"),
@@ -225,7 +159,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
 
   const handleStartSpin = async () => {
     if (isSpinning || disabled) return;
-    if (spinsLeft <= 0) {
+    if (serverSpinsLeft <= 0) {
       toast.error(t("public.wheel.noSpins"));
       return;
     }
@@ -233,75 +167,74 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     setIsSpinning(true);
 
     try {
-      // 1. Call server function to get authoritative result
-      const resPromise = onSpin();
+      // The server alone authorizes the spin and supplies the prize and remaining chances.
+      const result = await onSpin();
+      if (typeof result.spinsLeft === "number" && Number.isFinite(result.spinsLeft)) {
+        setServerSpinsLeft(Math.max(0, result.spinsLeft));
+      }
+      if (!result.ok) {
+        setIsSpinning(false);
+        setHighlightedIndex(null);
+        toast.error(
+          result.reason === "NO_SPINS_LEFT"
+            ? t("public.wheel.noSpinsToday")
+            : result.reason === "NO_PRIZES_CONFIGURED"
+              ? t("public.wheel.noPrizesConfigured")
+              : t("public.wheel.error"),
+        );
+        return;
+      }
 
-      // 2. Start fast cycling animation
       let step = 0;
       let intervalMs = 60;
+      const wait = (duration: number) =>
+        new Promise<void>((resolve) => {
+          spinTimerRef.current = setTimeout(() => {
+            spinTimerRef.current = null;
+            resolve();
+          }, duration);
+        });
+
       const startTime = Date.now();
+      while (Date.now() - startTime < 2000) {
+        setHighlightedIndex(PERIMETER_ORDER[step % PERIMETER_ORDER.length]);
+        step += 1;
+        await wait(intervalMs);
+      }
 
-      const runCycle = async () => {
-        const currentPerimeterIdx = step % PERIMETER_ORDER.length;
-        const boxIdx = PERIMETER_ORDER[currentPerimeterIdx];
-        setHighlightedIndex(boxIdx);
-        step++;
+      let targetIndex = result.id
+        ? gridPrizes.findIndex((prize) => prize.id === result.id)
+        : -1;
+      if (targetIndex < 0 && result.prizeType !== undefined && result.prizeValue !== undefined) {
+        targetIndex = gridPrizes.findIndex(
+          (prize) =>
+            prize.prizeType === result.prizeType &&
+            Number(prize.prizeValue) === Number(result.prizeValue),
+        );
+      }
+      if (targetIndex < 0 && result.label) {
+        targetIndex = gridPrizes.findIndex((prize) => prize.label === result.label);
+      }
+      if (targetIndex < 0) targetIndex = 0;
 
-        const elapsed = Date.now() - startTime;
-        if (elapsed < 2000) {
-          spinTimerRef.current = setTimeout(runCycle, intervalMs);
-        } else {
-          // Await server resolution
-          const res = await resPromise;
-          if (!res.ok) {
-            setIsSpinning(false);
-            setHighlightedIndex(null);
-            toast.error(
-              res.reason === "NO_SPINS_LEFT"
-                ? t("public.wheel.noSpinsToday")
-                : t("public.wheel.error"),
-            );
-            return;
-          }
-
-          // Find index of winning prize
-          let targetIndex = gridPrizes.findIndex(
-            (p) =>
-              p.id === res.prizeId ||
-              p.label === res.label ||
-              (res.label?.includes("0.5") && p.label.includes("0.5")) ||
-              (res.label?.includes("1") && p.label.includes("1")) ||
-              (res.label?.includes("2") && p.label.includes("2")),
-          );
-          if (targetIndex === -1) targetIndex = 2; // default to luck
-
-          // Deceleration phase until targetIndex is reached
-          const decelerate = () => {
-            const currIdx = PERIMETER_ORDER[step % PERIMETER_ORDER.length];
-            setHighlightedIndex(currIdx);
-            step++;
-            intervalMs += 25;
-
-            if (intervalMs > 280 && currIdx === targetIndex) {
-              // Landed on target!
-              setIsSpinning(false);
-              setHighlightedIndex(targetIndex);
-              setWinModal({
-                label: res.label || gridPrizes[targetIndex].label,
-                value: res.value ?? gridPrizes[targetIndex].prizeValue,
-                cash: Boolean(res.cash),
-                prizeType: gridPrizes[targetIndex].prizeType,
-              });
-            } else {
-              spinTimerRef.current = setTimeout(decelerate, intervalMs);
-            }
-          };
-
-          decelerate();
+      let currentIndex = -1;
+      do {
+        currentIndex = PERIMETER_ORDER[step % PERIMETER_ORDER.length];
+        setHighlightedIndex(currentIndex);
+        step += 1;
+        intervalMs += 25;
+        if (intervalMs <= 280 || currentIndex !== targetIndex) {
+          await wait(intervalMs);
         }
-      };
+      } while (intervalMs <= 280 || currentIndex !== targetIndex);
 
-      runCycle();
+      setHighlightedIndex(targetIndex);
+      setWinModal({
+        label: result.label ?? gridPrizes[targetIndex].label,
+        value: Number(result.prizeValue ?? gridPrizes[targetIndex].prizeValue),
+        prizeType: result.prizeType ?? gridPrizes[targetIndex].prizeType,
+      });
+      setIsSpinning(false);
     } catch {
       setIsSpinning(false);
       setHighlightedIndex(null);
@@ -325,24 +258,39 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
       {/* Main Grid + Action Panel matching Page 2 */}
       <div className="mt-3 grid grid-cols-1 md:grid-cols-12 gap-3 items-stretch">
         {/* 3x3 Prize Grid (col-span-8) */}
-        <div className="md:col-span-8 grid grid-cols-3 gap-2">
-          {gridPrizes.map((prize, idx) => {
-            const isLit = highlightedIndex === idx;
-            return (
-              <div
-                key={idx}
-                id={`wheel-prize-box-${idx}`}
-                onClick={handleStartSpin}
-                className={`${getBoxStyle(prize, isLit)} h-20 sm:h-22 cursor-pointer active:scale-95`}
-              >
-                {renderIcon(prize)}
-                <span className="text-[11px] sm:text-xs font-black leading-tight truncate w-full">
-                  {displayPrizeLabel(prize.label, prize.prizeType, prize.prizeValue)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        {hasPrizes ? (
+          <div className="md:col-span-8 grid grid-cols-3 gap-2">
+            {gridPrizes.map((prize, idx) => {
+              const isLit = highlightedIndex === idx;
+              return (
+                <div
+                  key={prize.id}
+                  id={`wheel-prize-box-${idx}`}
+                  onClick={serverSpinsLeft > 0 && !disabled ? handleStartSpin : undefined}
+                  className={`${getBoxStyle(prize, isLit)} h-20 sm:h-22 ${
+                    serverSpinsLeft > 0 && !disabled
+                      ? "cursor-pointer active:scale-95"
+                      : "cursor-default"
+                  }`}
+                >
+                  {renderIcon(prize)}
+                  <span className="w-full truncate text-[11px] font-black leading-tight sm:text-xs">
+                    {displayPrizeLabel(prize.label, prize.prizeType, prize.prizeValue)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            className="surface-card border-border/80 p-6 text-center md:col-span-8 flex min-h-48 items-center justify-center"
+            role="status"
+          >
+            <p className="text-sm font-semibold text-muted-foreground">
+              {t("public.wheel.noPrizesConfigured")}
+            </p>
+          </div>
+        )}
 
         {/* Right Info Panel matching Page 2 (col-span-4) */}
         <div className="md:col-span-4 surface-card border-border/80 p-3.5 flex flex-col justify-between items-center text-center">
@@ -353,7 +301,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               id="wheel-spins-left-counter"
               className="mt-1 text-4xl font-extrabold text-foreground"
             >
-              {spinsLeft}
+              {serverSpinsLeft}
             </div>
           </div>
 
@@ -361,16 +309,18 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
             <button
               id="start-wheel-spin-btn"
               type="button"
-              disabled={isSpinning || spinsLeft <= 0 || disabled}
+              disabled={isSpinning || serverSpinsLeft <= 0 || !hasPrizes || disabled}
               onClick={handleStartSpin}
               className="w-full rounded-2xl gold-gradient py-3 px-4 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow flex items-center justify-center gap-2 hover:brightness-110 active:scale-95 transition-all disabled:opacity-50"
             >
               <RotateCw className={`h-4 w-4 ${isSpinning ? "animate-spin" : ""}`} />
               <span>{isSpinning ? t("public.wheel.spinning") : t("public.wheel.spin")}</span>
             </button>
-            <p className="mt-2 text-[10px] text-muted-foreground font-medium">
-              {t("public.wheel.spinCost")}
-            </p>
+            {hasPrizes && (
+              <p className="mt-2 text-[10px] font-medium text-muted-foreground">
+                {serverSpinsLeft <= 0 ? t("public.wheel.noSpins") : t("public.wheel.spinCost")}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -389,7 +339,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
           >
             <div className="flex justify-center mb-3">
               <div className="flex h-16 w-16 items-center justify-center rounded-3xl gold-gradient shadow-gold-glow">
-                {winModal.cash ? (
+                {winModal.prizeType === "cash" ? (
                   <Trophy className="h-9 w-9 text-navy-deep" />
                 ) : (
                   <Sparkles className="h-9 w-9 text-navy-deep" />
@@ -398,7 +348,9 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
             </div>
 
             <h4 className="text-xl font-black text-gold-gradient">
-              {winModal.cash ? t("public.wheel.congrats") : t("public.wheel.result")}
+              {winModal.prizeType === "cash"
+                ? t("public.wheel.congrats")
+                : t("public.wheel.result")}
             </h4>
 
             <p className="mt-2 text-sm text-foreground">
@@ -408,7 +360,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
               </strong>
             </p>
 
-            {winModal.cash && (
+            {winModal.prizeType === "cash" && (
               <p className="mt-1 text-xs text-success font-semibold">
                 {t("public.wheel.credited").replace(
                   "{prize}",
