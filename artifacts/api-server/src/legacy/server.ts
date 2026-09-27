@@ -606,12 +606,19 @@ app.post("/api/app/spin", async (request, response, next) => {
   }
 });
 
+// Count only claims earned at the trial rate during this account's trial window.
+const TRIAL_COMPLETED_COUNT_SQL = `(SELECT count(*)::int FROM task_completions tc
+  WHERE tc.user_id=p.id AND tc.completed_at >= p.trial_started_at
+    AND tc.completed_at < p.trial_expires_at AND tc.reward=0.5)`;
+
 app.get("/api/app/account", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const [profile, wallet, settings, daily] = await Promise.all([
       query(
-        "SELECT username,email,phone,vip_level,referral_code,trial_active FROM profiles WHERE id = $1",
+        `SELECT p.username,p.email,p.phone,p.vip_level,p.referral_code,p.trial_active,
+           p.trial_started_at,p.trial_expires_at,${TRIAL_COMPLETED_COUNT_SQL} AS trial_completed_count
+         FROM profiles p WHERE p.id = $1`,
         [user.id],
       ),
       query("SELECT balance FROM wallets WHERE user_id = $1", [user.id]),
@@ -728,7 +735,9 @@ app.get("/api/app/investment", async (request, response, next) => {
       ),
       query("SELECT * FROM vip_packages WHERE is_active = true ORDER BY level"),
       query(
-        "SELECT vip_level,trial_active,trial_started_at,trial_expires_at FROM profiles WHERE id = $1",
+        `SELECT p.vip_level,p.trial_active,p.trial_started_at,p.trial_expires_at,
+           ${TRIAL_COMPLETED_COUNT_SQL} AS trial_completed_count
+         FROM profiles p WHERE p.id = $1`,
         [user.id],
       ),
       query("SELECT balance FROM wallets WHERE user_id = $1", [user.id]),
@@ -1136,6 +1145,7 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
 });
 
 const TASK_PROFILE_SQL = `SELECT p.vip_level,p.vip_expires_at,p.trial_active,p.trial_expires_at,
+  ${TRIAL_COMPLETED_COUNT_SQL} AS trial_completed_count,
   vip.task_reward,vip.daily_tasks FROM profiles p
   LEFT JOIN vip_packages vip ON vip.level=p.vip_level WHERE p.id=$1`;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

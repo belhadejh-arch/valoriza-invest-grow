@@ -89,8 +89,8 @@ function TasksPage() {
         queryClient.invalidateQueries({ queryKey: ["rewards"] });
         queryClient.invalidateQueries({ queryKey: ["home"] });
         queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
-        queryClient.invalidateQueries({ queryKey: ["investment-data"] });
-        queryClient.invalidateQueries({ queryKey: ["account-data"] });
+        queryClient.invalidateQueries({ queryKey: ["investment"] });
+        queryClient.invalidateQueries({ queryKey: ["account"] });
         setActiveWatchTask(null);
         setWatchSessionId(null);
       } else {

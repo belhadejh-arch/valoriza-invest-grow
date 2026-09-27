@@ -3,6 +3,7 @@ export type TaskProfile = {
   vip_expires_at: Date | null;
   trial_active: boolean;
   trial_expires_at: Date | null;
+  trial_completed_count: number;
   task_reward: string | null;
   daily_tasks: number | null;
 };
@@ -19,7 +20,8 @@ export function taskEntitlement(profile: TaskProfile | undefined) {
     !vipActive &&
     Boolean(profile?.trial_active) &&
     profile?.trial_expires_at != null &&
-    new Date(profile.trial_expires_at).getTime() > now;
+    new Date(profile.trial_expires_at).getTime() > now &&
+    Number(profile.trial_completed_count) < 6;
 
   return {
     vipLevel: vipActive ? level : 0,

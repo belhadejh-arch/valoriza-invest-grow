@@ -441,6 +441,8 @@ export const translations = {
 
 const featureTranslations = {
   ar: {
+    "investment.trialStatusActive": "لقد تم تفعيل الفترة التجريبية",
+    "investment.trialStatusExpired": "انتهت صلاحية الفترة التجريبية",
     "public.wheel.noPrizesConfigured": "عجلة الحظ غير متاحة حاليًا لعدم إعداد الجوائز.",
     "admin.prizeType": "نوع الجائزة",
     "admin.passwordMinLength": "يجب ألا تقل كلمة المرور الجديدة عن 8 أحرف.",
@@ -451,6 +453,8 @@ const featureTranslations = {
     "team.level2Rate": "عمولة 4% من شحن المستوى الثاني",
   },
   en: {
+    "investment.trialStatusActive": "Your free trial has been activated",
+    "investment.trialStatusExpired": "Your free trial has expired",
     "public.wheel.noPrizesConfigured": "The wheel is unavailable until prizes are configured.",
     "admin.prizeType": "Prize type",
     "admin.passwordMinLength": "The new password must be at least 8 characters.",
@@ -461,6 +465,8 @@ const featureTranslations = {
     "team.level2Rate": "4% commission on second-level deposits",
   },
   fr: {
+    "investment.trialStatusActive": "Votre période d’essai est activée",
+    "investment.trialStatusExpired": "Votre période d’essai a expiré",
     "public.wheel.noPrizesConfigured": "La roue n’est pas disponible tant que les prix ne sont pas configurés.",
     "admin.prizeType": "Type de récompense",
     "admin.passwordMinLength": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
@@ -471,6 +477,8 @@ const featureTranslations = {
     "team.level2Rate": "Commission de 4 % sur les dépôts du deuxième niveau",
   },
   es: {
+    "investment.trialStatusActive": "Tu periodo de prueba está activado",
+    "investment.trialStatusExpired": "Tu periodo de prueba ha terminado",
     "public.wheel.noPrizesConfigured": "La ruleta no está disponible hasta que se configuren los premios.",
     "admin.prizeType": "Tipo de premio",
     "admin.passwordMinLength": "La nueva contraseña debe tener al menos 8 caracteres.",

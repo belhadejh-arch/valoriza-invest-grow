@@ -134,7 +134,9 @@ function AccountPage() {
     email: rawProfile.email ?? "",
     referralCode: rawProfile.referralCode ?? rawProfile.referral_code ?? "",
     vipLevel: Number(rawProfile.vipLevel ?? rawProfile.vip_level ?? 0),
-    trialActive: Boolean(rawProfile.trialActive ?? rawProfile.trial_active),
+    trialActive: Boolean(rawProfile.trialActive ?? rawProfile.trial_active) &&
+      new Date(rawProfile.trialExpiresAt ?? rawProfile.trial_expires_at ?? 0).getTime() > Date.now() &&
+      Number(rawProfile.trialCompletedCount ?? rawProfile.trial_completed_count ?? 0) < 6,
   };
   const dailyReward = data.dailyReward ?? { amount: 0, claimed: false };
   const Chevron = isRTL ? ChevronLeft : ChevronRight;

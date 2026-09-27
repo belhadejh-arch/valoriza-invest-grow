@@ -37,6 +37,7 @@ function InvestmentPage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["investment"],
     queryFn: getInvestmentData,
+    refetchOnMount: "always",
   });
 
   const trialMutation = useMutation({
@@ -121,9 +122,16 @@ function InvestmentPage() {
   const userVipLevel = Number(
     data?.profile?.vipLevel ?? (data as any)?.profile?.vip_level ?? 0,
   );
-  const isTrialActive = Boolean(
-    data?.profile?.trialActive ?? (data as any)?.profile?.trial_active,
-  );
+  const profile = data?.profile ?? {};
+  const trialStartedAt = profile.trialStartedAt ?? profile.trial_started_at;
+  const trialExpiresAt = profile.trialExpiresAt ?? profile.trial_expires_at;
+  const trialCompletedCount = Number(profile.trialCompletedCount ?? profile.trial_completed_count ?? 0);
+  const trialUsed = Boolean(trialStartedAt);
+  const trialActive = trialUsed &&
+    Boolean(profile.trialActive ?? profile.trial_active) &&
+    Number.isFinite(Date.parse(trialExpiresAt ?? "")) &&
+    Date.parse(trialExpiresAt) > Date.now() &&
+    trialCompletedCount < 6;
   const packages = (data?.packages || (data as any)?.vipPackages || []).map((pkg: any) => ({
     ...pkg,
     id: pkg.id,
@@ -176,27 +184,39 @@ function InvestmentPage() {
           </div>
         </section>
 
-        {!isTrialActive && userVipLevel === 0 && (
-          <section className="flex flex-col justify-between gap-3 rounded-2xl border border-cyan-glow/40 bg-surface/80 p-3.5 shadow-md sm:flex-row sm:items-center sm:p-4">
+        {(trialUsed || userVipLevel === 0) && (
+          <section className={`flex flex-col justify-between gap-3 rounded-2xl border bg-surface/80 p-3.5 shadow-md sm:flex-row sm:items-center sm:p-4 ${
+            trialUsed ? trialActive ? "border-emerald-500/60" : "border-red-500/60" : "border-cyan-glow/40"
+          }`}>
             <div className="flex items-center gap-3 text-start">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/20 text-cyan-glow">
-                <Timer className="h-5 w-5" />
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+                trialUsed ? trialActive ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400" : "bg-cyan-glow/20 text-cyan-glow"
+              }`}>
+                {trialActive ? <Check className="h-5 w-5" /> : <Timer className="h-5 w-5" />}
               </div>
               <div>
                 <h2 className="text-sm font-extrabold text-foreground">
                   {t("investment.trialBanner")}
                 </h2>
-                <p className="text-xs text-muted-foreground">{t("investment.trialDesc")}</p>
+                <p aria-live="polite" className={`text-xs font-semibold ${
+                  trialUsed ? trialActive ? "text-emerald-400" : "text-red-400" : "text-muted-foreground"
+                }`}>
+                  {trialUsed
+                    ? t(trialActive ? "investment.trialStatusActive" : "investment.trialStatusExpired")
+                    : t("investment.trialDesc")}
+                </p>
               </div>
             </div>
-            <button
-              type="button"
-              disabled={trialMutation.isPending}
-              onClick={() => trialMutation.mutate()}
-              className="shrink-0 rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow transition-all active:scale-95 disabled:opacity-50"
-            >
-              {trialMutation.isPending ? t("common.loading") : t("investment.activateTrial")}
-            </button>
+            {!trialUsed && (
+              <button
+                type="button"
+                disabled={trialMutation.isPending}
+                onClick={() => trialMutation.mutate()}
+                className="shrink-0 rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow transition-all active:scale-95 disabled:opacity-50"
+              >
+                {trialMutation.isPending ? t("common.loading") : t("investment.activateTrial")}
+              </button>
+            )}
           </section>
         )}
 
