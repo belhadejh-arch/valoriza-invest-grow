@@ -8,3 +8,4 @@
 - [Referral milestone policy](referral-milestone-policy.md) — qualified direct VIP activations count cumulatively, including admin grants; the VIP reward never invents a tier.
 - [Parameterized development SQL](parameterized-development-sql.md) — the SQL callback rejects multiple statements in one parameterized call.
 - [External GitHub deploy sync](external-github-deploy-sync.md) — public Git fetch can work while HTTPS push auth fails; use the bound GitHub connection to publish source changes.
+- [Trial task cap](trial-task-cap.md) — the trial ends at six paid trial tasks or its two-day deadline, whichever comes first; daily limits alone are insufficient.
