@@ -1,11 +1,11 @@
 import { backendRequest } from "@/lib/backend-client";
 
-const SIGNING_TIMEOUT_MS = 45_000;
-const UPLOAD_TIMEOUT_MS = 60_000;
-const SIGNING_RETRY_DELAY_MS = 500;
-const TRANSIENT_SIGNING_STATUSES = new Set([429, 500, 502, 503, 504]);
+const UPLOAD_TIMEOUT_MS = 90_000;
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const TRANSIENT_UPLOAD_STATUSES = new Set([502, 503, 504]);
 
-export type DepositProofErrorStage = "signing" | "details" | "upload";
+export type DepositProofErrorStage = "validation" | "details" | "upload";
 
 export class DepositProofUploadError extends Error {
   readonly stage: DepositProofErrorStage;
@@ -21,7 +21,6 @@ export class DepositProofUploadError extends Error {
 
 export interface DepositProofUploadDetails {
   proofId: string;
-  uploadURL: string;
   objectPath: string;
 }
 
@@ -31,99 +30,64 @@ function getHttpStatus(error: unknown): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
-function isTimeout(error: unknown): boolean {
+function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-function shouldRetrySigning(error: unknown): boolean {
+function shouldRetryUpload(error: unknown): boolean {
   const status = getHttpStatus(error);
   return status !== undefined
-    ? TRANSIENT_SIGNING_STATUSES.has(status)
-    : isTimeout(error);
+    ? TRANSIENT_UPLOAD_STATUSES.has(status)
+    : isAbortError(error);
 }
 
 export async function requestDepositProofUpload(
   file: File,
 ): Promise<DepositProofUploadDetails> {
-  let response: {
-    proofId?: string;
-    uploadURL?: string;
-    uploadUrl?: string;
-    signedUrl?: string;
-    objectPath?: string;
-  } | undefined;
-  let lastError: unknown;
+  if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+    throw new DepositProofUploadError("validation", "invalidImage");
+  }
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    throw new DepositProofUploadError("validation", "fileTooLarge");
+  }
 
+  let response: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      response = await backendRequest("/api/app/deposit-proof/upload-url", {
+      response = await backendRequest<unknown>("/api/app/deposit-proof", {
         method: "POST",
-        body: JSON.stringify({
-          name: file.name,
-          size: file.size,
-          contentType: file.type,
-        }),
-      }, SIGNING_TIMEOUT_MS);
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      }, UPLOAD_TIMEOUT_MS);
       break;
     } catch (error) {
-      lastError = error;
-      if (attempt === 1 || !shouldRetrySigning(error)) {
+      if (attempt === 1 || !shouldRetryUpload(error)) {
         const status = getHttpStatus(error);
-        throw new DepositProofUploadError("signing", error instanceof Error ? error.message : "Upload signing failed", status);
+        throw new DepositProofUploadError(
+          "upload",
+          error instanceof Error ? error.message : "Deposit proof upload failed",
+          status,
+        );
       }
-      await new Promise((resolve) => setTimeout(resolve, SIGNING_RETRY_DELAY_MS));
     }
   }
 
-  if (!response) {
-    const status = getHttpStatus(lastError);
-    throw new DepositProofUploadError(
-      "signing",
-      lastError instanceof Error ? lastError.message : "Upload signing failed",
-      status,
-    );
-  }
-
-  const uploadURL = response.uploadURL ?? response.uploadUrl ?? response.signedUrl;
   if (
+    !response ||
+    typeof response !== "object" ||
+    !("ok" in response) ||
+    response.ok !== true ||
+    !("proofId" in response) ||
     typeof response.proofId !== "string" ||
-    !response.proofId ||
-    typeof uploadURL !== "string" ||
-    !uploadURL ||
+    !response.proofId.trim() ||
+    !("objectPath" in response) ||
     typeof response.objectPath !== "string" ||
-    !response.objectPath
+    !response.objectPath.trim()
   ) {
-    throw new DepositProofUploadError("details", "Deposit proof upload details are incomplete");
+    throw new DepositProofUploadError("details", "Deposit proof upload response is malformed");
   }
 
-  return { proofId: response.proofId, uploadURL, objectPath: response.objectPath };
-}
-
-export async function uploadDepositProofFile(uploadURL: string, file: File): Promise<void> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(uploadURL, {
-      method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
-      signal: controller.signal,
-    });
-  } catch (error) {
-    throw new DepositProofUploadError(
-      "upload",
-      error instanceof Error ? error.message : "Deposit proof upload failed",
-    );
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) {
-    throw new DepositProofUploadError(
-      "upload",
-      `Deposit proof upload failed: ${response.status}`,
-      response.status,
-    );
-  }
+  return { proofId: response.proofId, objectPath: response.objectPath };
 }

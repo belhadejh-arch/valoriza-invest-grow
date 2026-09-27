@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
+import { pipeline } from "node:stream/promises";
 import { logger } from "../lib/logger.js";
 import { pool, query, withTransaction } from "./db.js";
 import { REFERRAL_MILESTONES, evaluateReferralMilestones, getReferralMilestones } from "./referral-milestones.js";
@@ -21,8 +22,11 @@ import {
   revokeOtherAdminSessions,
 } from "./admin-auth.js";
 import {
-  createDepositProofReadUrl,
-  createDepositProofUpload,
+  createDepositProofKey,
+  createDepositProofReadStream,
+  hasValidDepositProofSignature,
+  readDepositProofMetadata,
+  storeDepositProofObject,
   verifyDepositProofObject,
 } from "./deposit-proof-storage.js";
 
@@ -386,45 +390,68 @@ async function userRoute(
 }
 app.use("/api/app", userRoute);
 
-app.post("/api/app/deposit-proof/upload-url", async (request, response, next) => {
+app.post(
+  "/api/app/deposit-proof",
+  express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "5mb" }),
+  async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { contentType, size } = request.body ?? {};
-    const imageName = request.body?.name;
+    const contentType = request.headers["content-type"]?.split(";")[0];
+    const bytes = request.body;
     const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
     if (
-      typeof imageName !== "string" ||
-      imageName.length > 255 ||
       typeof contentType !== "string" ||
       !acceptedTypes.has(contentType) ||
-      !Number.isInteger(size) ||
-      size <= 0 ||
-      size > 5 * 1024 * 1024
+      !Buffer.isBuffer(bytes) ||
+      bytes.length <= 0 ||
+      bytes.length > 5 * 1024 * 1024 ||
+      !hasValidDepositProofSignature(bytes, contentType)
     ) {
       return response.status(400).json({ ok: false, reason: "INVALID_PROOF_FILE" });
     }
-    const { objectKey, uploadUrl } = await createDepositProofUpload(user.id);
-    const proof = await query<{ id: string }>(
-      "INSERT INTO deposit_proofs (user_id,object_key,content_type,file_size) VALUES ($1,$2,$3,$4) RETURNING id",
-      [user.id, objectKey, contentType, size],
+    const { objectKey, sha256 } = createDepositProofKey(user.id, bytes);
+    const existing = await query<{ id: string; content_type: string; file_size: number }>(
+      "SELECT id,content_type,file_size FROM deposit_proofs WHERE user_id=$1 AND object_key=$2",
+      [user.id, objectKey],
     );
+    if (existing.rowCount) {
+      const metadata = await readDepositProofMetadata(objectKey);
+      if (existing.rows[0].content_type !== contentType ||
+          Number(existing.rows[0].file_size) !== bytes.length ||
+          metadata?.sha256 !== sha256)
+        return response.status(409).json({ ok: false, reason: "PROOF_UPLOAD_ID_CONFLICT" });
+      return response.json({ ok: true, proofId: existing.rows[0].id, objectPath: objectKey });
+    }
+    await storeDepositProofObject(objectKey, bytes, contentType, sha256);
+    const proof = await query<{ id: string }>(
+      `INSERT INTO deposit_proofs (user_id,object_key,content_type,file_size)
+       VALUES ($1,$2,$3,$4) ON CONFLICT (object_key) DO NOTHING RETURNING id`,
+      [user.id, objectKey, contentType, bytes.length],
+    );
+    const saved = proof.rowCount ? {
+      id: proof.rows[0].id,
+      content_type: contentType,
+      file_size: bytes.length,
+    } : (
+      await query<{ id: string; content_type: string; file_size: number }>(
+        "SELECT id,content_type,file_size FROM deposit_proofs WHERE user_id=$1 AND object_key=$2",
+        [user.id, objectKey],
+      )
+    ).rows[0];
+    if (!saved || saved.content_type !== contentType || Number(saved.file_size) !== bytes.length)
+      return response.status(409).json({ ok: false, reason: "PROOF_UPLOAD_ID_CONFLICT" });
     return response.json({
       ok: true,
-      proofId: proof.rows[0].id,
-      uploadURL: uploadUrl,
-      uploadUrl,
+      proofId: saved.id,
       objectPath: objectKey,
-      name: imageName,
-      method: "PUT",
-      headers: { "Content-Type": contentType },
     });
   } catch (error) {
-    if (error instanceof Error &&
-        (error.message.startsWith("OBJECT_STORAGE_SIGNING_FAILED") ||
-         error.message === "OBJECT_STORAGE_INVALID_SIGN_RESPONSE")) {
-      logger.warn({ err: error }, "Deposit proof upload signing temporarily unavailable");
-      return response.status(503).json({ ok: false, reason: "PROOF_UPLOAD_TEMPORARILY_UNAVAILABLE" });
+    if (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_")) {
+      logger.error({ err: error }, "Deposit proof storage upload failed");
+      return response.status(503).json({ ok: false, reason: "PROOF_STORAGE_UNAVAILABLE" });
     }
+    if (error instanceof Error && error.message === "DEPOSIT_PROOF_UPLOAD_CONFLICT")
+      return response.status(409).json({ ok: false, reason: "PROOF_UPLOAD_ID_CONFLICT" });
     return next(error);
   }
 });
@@ -887,10 +914,16 @@ app.post("/api/app/deposit", async (request, response, next) => {
       return response.status(400).json({ ok: false, reason: "SCREENSHOT_REQUIRED" });
     // A retry after a lost browser response should show the already received
     // pending request, not ask the customer to upload the receipt again.
-    const received = await query<{ id: string }>(
-      "SELECT id FROM deposits WHERE user_id=$1 AND proof_id=$2", [user.id, proof.rows[0].id],
+    const received = await query<{ id: string; amount: string; network: string; status: string }>(
+      "SELECT id,amount,network,status FROM deposits WHERE user_id=$1 AND proof_id=$2",
+      [user.id, proof.rows[0].id],
     );
-    if (received.rowCount) return response.json({ ok: true, depositId: received.rows[0].id, alreadySubmitted: true });
+    if (received.rowCount) {
+      const previous = received.rows[0];
+      if (previous.status !== "pending" || number(previous.amount) !== value || previous.network !== network)
+        return response.status(409).json({ ok: false, reason: "PROOF_ALREADY_USED" });
+      return response.json({ ok: true, depositId: previous.id, alreadySubmitted: true });
+    }
     if (
       !(await verifyDepositProofObject(
         proof.rows[0].object_key,
@@ -903,11 +936,16 @@ app.post("/api/app/deposit", async (request, response, next) => {
       // Lock this receipt before inserting so simultaneous submissions with
       // the same uploaded proof cannot create a duplicate or a spurious 500.
       await client.query("SELECT id FROM deposit_proofs WHERE id=$1 FOR UPDATE", [proof.rows[0].id]);
-      const duplicate = await client.query<{ id: string }>(
-        "SELECT id FROM deposits WHERE user_id=$1 AND proof_id=$2", [user.id, proof.rows[0].id],
+      const duplicate = await client.query<{ id: string; amount: string; network: string; status: string }>(
+        "SELECT id,amount,network,status FROM deposits WHERE user_id=$1 AND proof_id=$2",
+        [user.id, proof.rows[0].id],
       );
-      if (duplicate.rowCount)
-        return { ok: true, depositId: duplicate.rows[0].id, alreadySubmitted: true };
+      if (duplicate.rowCount) {
+        const previous = duplicate.rows[0];
+        if (previous.status !== "pending" || number(previous.amount) !== value || previous.network !== network)
+          return { ok: false, reason: "PROOF_ALREADY_USED" };
+        return { ok: true, depositId: previous.id, alreadySubmitted: true };
+      }
       const inserted = await client.query<{ id: string }>(
         `INSERT INTO deposits (user_id,amount,network,deposit_address,screenshot_url,tx_hash,proof_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
@@ -923,13 +961,12 @@ app.post("/api/app/deposit", async (request, response, next) => {
       );
       return { ok: true, depositId: inserted.rows[0].id };
     });
+    if (!result.ok) return response.status(409).json(result);
     return response.json(result);
   } catch (error) {
-    if (error instanceof Error &&
-        (error.message.startsWith("OBJECT_STORAGE_SIGNING_FAILED") ||
-         error.message === "OBJECT_STORAGE_INVALID_SIGN_RESPONSE")) {
-      logger.warn({ err: error }, "Deposit proof verification signing temporarily unavailable");
-      return response.status(503).json({ ok: false, reason: "PROOF_VERIFICATION_TEMPORARILY_UNAVAILABLE" });
+    if (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_")) {
+      logger.error({ err: error }, "Deposit proof storage verification failed");
+      return response.status(503).json({ ok: false, reason: "PROOF_STORAGE_UNAVAILABLE" });
     }
     return next(error);
   }
@@ -1758,16 +1795,20 @@ app.get("/api/admin/deposits/:depositId/proof", async (request, response, next) 
   try {
     if (!/^[0-9a-f-]{36}$/i.test(request.params.depositId))
       return response.status(400).json({ message: "INVALID_DEPOSIT_ID" });
-    const result = await query<{ object_key: string }>(
-      `SELECT proof.object_key FROM deposits deposit
+    const result = await query<{ object_key: string; content_type: string; file_size: number }>(
+      `SELECT proof.object_key,proof.content_type,proof.file_size FROM deposits deposit
        JOIN deposit_proofs proof ON proof.id=deposit.proof_id AND proof.user_id=deposit.user_id
        WHERE deposit.id=$1`,
       [request.params.depositId],
     );
     if (!result.rowCount) return response.status(404).json({ message: "DEPOSIT_PROOF_NOT_FOUND" });
-    const signedUrl = await createDepositProofReadUrl(result.rows[0].object_key);
-    return response.redirect(302, signedUrl);
+    response.setHeader("Content-Type", result.rows[0].content_type);
+    response.setHeader("Content-Length", String(result.rows[0].file_size));
+    response.setHeader("Cache-Control", "private, no-store");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    await pipeline(createDepositProofReadStream(result.rows[0].object_key), response);
   } catch (error) {
+    if (response.headersSent) return response.destroy(error instanceof Error ? error : undefined);
     return next(error);
   }
 });

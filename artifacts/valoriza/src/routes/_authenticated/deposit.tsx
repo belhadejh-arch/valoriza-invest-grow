@@ -27,7 +27,6 @@ import { backendRequest } from "@/lib/backend-client";
 import {
   DepositProofUploadError,
   requestDepositProofUpload,
-  uploadDepositProofFile,
 } from "@/lib/deposit-proof-upload";
 import { useI18n } from "@/lib/i18n";
 
@@ -129,23 +128,19 @@ function DepositPage() {
         if (error.stage === "details") {
           throw new DepositFlowError(t("deposit.incompleteUploadDetails"));
         }
+        if (error.stage === "validation") {
+          throw new DepositFlowError(
+            error.message === "fileTooLarge"
+              ? t("deposit.fileTooLarge")
+              : t("deposit.invalidImage"),
+          );
+        }
         throw new DepositFlowError(
           error.status
-            ? t("deposit.uploadLinkServerError", undefined, { status: error.status })
-            : t("deposit.uploadLinkConnectionError"),
-        );
-      });
-
-      try {
-        await uploadDepositProofFile(upload.uploadURL, vals.file);
-      } catch (error) {
-        const status = error instanceof DepositProofUploadError ? error.status : undefined;
-        throw new DepositFlowError(
-          status
-            ? t("deposit.imageUploadServerError", undefined, { status })
+            ? t("deposit.imageUploadServerError", undefined, { status: error.status })
             : t("deposit.imageUploadConnectionError"),
         );
-      }
+      });
 
       try {
         return await backendRequest("/api/app/deposit", {
@@ -163,7 +158,9 @@ function DepositPage() {
             ? error.message.match(/API request failed: (\d{3})/)?.[1]
             : null;
         throw new DepositFlowError(
-          status
+          status === "409"
+            ? t("deposit.proofAlreadyUsed")
+            : status
             ? t("deposit.depositServerError", undefined, { status })
             : t("deposit.depositConnectionError"),
         );

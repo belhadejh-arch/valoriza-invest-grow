@@ -1,10 +1,10 @@
 ---
-name: Deposit proof upload timing
-description: Keep client request deadlines compatible with the object-storage signer and proof verification.
+name: Deposit receipt reliability
+description: Why receipt uploads avoid browser-signed URLs and must remain idempotent across lost responses.
 ---
 
-For deposit receipts, allow the browser more time than the server's bounded signing retries and proof-verification requests; retry only transient signer failures, not invalid configuration or rejected files.
+Deposit receipts should not depend on generating browser-facing signed storage URLs when an authenticated server upload can handle these small private images. Preserve the identity of an identical receipt across fresh attempts, not only within a single in-flight request.
 
-**Why:** A short generic browser timeout can abort a valid upload or deposit request while object storage is still responding, and transient signing failures otherwise surface as an unexplained deposit error.
+**Why:** The signing service produced repeated HTTP 500 errors for the user even while isolated development uploads succeeded. Merely increasing retries did not solve that dependency. A lost deposit response can also cause a customer to reselect the same image and accidentally create a second pending financial request if each upload receives a new proof identity.
 
-**How to apply:** When changing receipt storage, signing, or verification, review the browser and server deadlines together and test both entry points (home modal and account deposit page) with a disposable pending deposit.
+**How to apply:** When changing receipt storage or submission, test both entry points with actual uploads, compare retry behavior across reloads, reject reuse with changed amount/network or reviewed status, and verify old receipt previews remain accessible to administrators. Storage failures should be explicit; no external service can guarantee uptime.

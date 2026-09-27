@@ -27,7 +27,6 @@ import { backendRequest } from "@/lib/backend-client";
 import {
   DepositProofUploadError,
   requestDepositProofUpload,
-  uploadDepositProofFile,
 } from "@/lib/deposit-proof-upload";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
@@ -89,7 +88,6 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
     let submittingDeposit = false;
     try {
       const upload = await requestDepositProofUpload(proof);
-      await uploadDepositProofFile(upload.uploadURL, proof);
       submittingDeposit = true;
       const result = await backendRequest<{ ok?: boolean; reason?: string }>("/api/app/deposit", {
         method: "POST",
@@ -118,11 +116,11 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
       if (error instanceof DepositProofUploadError) {
         if (error.stage === "details") {
           toast.error(t("deposit.incompleteUploadDetails"));
-        } else if (error.stage === "signing") {
+        } else if (error.stage === "validation") {
           toast.error(
-            error.status
-              ? t("deposit.uploadLinkServerError", undefined, { status: error.status })
-              : t("deposit.uploadLinkConnectionError"),
+            error.message === "fileTooLarge"
+              ? t("deposit.fileTooLarge")
+              : t("deposit.invalidImage"),
           );
         } else {
           toast.error(
@@ -137,12 +135,14 @@ export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10, onSu
             ? error.message.match(/API request failed: (\d{3})/)?.[1]
             : null;
         toast.error(
-          status
+          status === "409"
+            ? t("deposit.proofAlreadyUsed")
+            : status
             ? t("deposit.depositServerError", undefined, { status })
             : t("deposit.depositConnectionError"),
         );
       } else {
-        toast.error(t("public.deposit.error"));
+        toast.error(t("deposit.imageUploadConnectionError"));
       }
     } finally {
       setSubmitting(false);
