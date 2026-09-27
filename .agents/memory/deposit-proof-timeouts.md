@@ -7,4 +7,8 @@ Deposit receipts should not depend on generating browser-facing signed storage U
 
 **Why:** The signing service produced repeated HTTP 500 errors for the user even while isolated development uploads succeeded. Merely increasing retries did not solve that dependency. A lost deposit response can also cause a customer to reselect the same image and accidentally create a second pending financial request if each upload receives a new proof identity.
 
-**How to apply:** When changing receipt storage or submission, test both entry points with actual uploads, compare retry behavior across reloads, reject reuse with changed amount/network or reviewed status, and verify old receipt previews remain accessible to administrators. Storage failures should be explicit; no external service can guarantee uptime.
+The user hosts the frontend on Vercel and the backend on Render, and explicitly approved storing up-to-5-MiB private receipt bytes in the PostgreSQL database used by Render rather than provisioning another storage account. This is a deployment decision, not permission to assume Replit's development database equals Render's database.
+
+**Why:** Replit's object-storage credential sidecar is not available inside Render, so a successful Replit upload cannot prove the deployed upload works. Saving metadata without the file makes admin review impossible; storing the bytes with the proof row eliminates that cross-provider dependency at the cost of database growth.
+
+**How to apply:** Test both entry points with actual uploads, retry behavior across reloads, and rejection of changed amount/network or reviewed proofs. Keep older Replit-only receipts intact and plan explicit backfill if they exist; the Render process cannot read them simply because the database row has an object key. Check both deployed frontend and backend versions before declaring a live fix.

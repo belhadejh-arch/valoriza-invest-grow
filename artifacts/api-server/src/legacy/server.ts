@@ -25,9 +25,7 @@ import {
   createDepositProofKey,
   createDepositProofReadStream,
   hasValidDepositProofSignature,
-  readDepositProofMetadata,
-  storeDepositProofObject,
-  verifyDepositProofObject,
+  verifyDepositProofBytes,
 } from "./deposit-proof-storage.js";
 
 const app = express();
@@ -409,50 +407,31 @@ app.post(
     ) {
       return response.status(400).json({ ok: false, reason: "INVALID_PROOF_FILE" });
     }
-    const { objectKey, sha256 } = createDepositProofKey(user.id, bytes);
-    const existing = await query<{ id: string; content_type: string; file_size: number }>(
-      "SELECT id,content_type,file_size FROM deposit_proofs WHERE user_id=$1 AND object_key=$2",
-      [user.id, objectKey],
-    );
-    if (existing.rowCount) {
-      const metadata = await readDepositProofMetadata(objectKey);
-      if (existing.rows[0].content_type !== contentType ||
-          Number(existing.rows[0].file_size) !== bytes.length ||
-          metadata?.sha256 !== sha256)
-        return response.status(409).json({ ok: false, reason: "PROOF_UPLOAD_ID_CONFLICT" });
-      return response.json({ ok: true, proofId: existing.rows[0].id, objectPath: objectKey });
-    }
-    await storeDepositProofObject(objectKey, bytes, contentType, sha256);
+    const { objectKey } = createDepositProofKey(user.id, bytes);
+    // The image and its proof ID are committed together. A lost response or
+    // concurrent re-upload of identical bytes always returns the same proof.
     const proof = await query<{ id: string }>(
-      `INSERT INTO deposit_proofs (user_id,object_key,content_type,file_size)
-       VALUES ($1,$2,$3,$4) ON CONFLICT (object_key) DO NOTHING RETURNING id`,
-      [user.id, objectKey, contentType, bytes.length],
+      `INSERT INTO deposit_proofs (user_id,object_key,content_type,file_size,proof_bytes)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (object_key) DO UPDATE
+         SET proof_bytes=COALESCE(deposit_proofs.proof_bytes,EXCLUDED.proof_bytes)
+       WHERE deposit_proofs.user_id=EXCLUDED.user_id
+         AND deposit_proofs.content_type=EXCLUDED.content_type
+         AND deposit_proofs.file_size=EXCLUDED.file_size
+         AND (deposit_proofs.proof_bytes IS NULL OR deposit_proofs.proof_bytes=EXCLUDED.proof_bytes)
+       RETURNING id`,
+      [user.id, objectKey, contentType, bytes.length, bytes],
     );
-    const saved = proof.rowCount ? {
-      id: proof.rows[0].id,
-      content_type: contentType,
-      file_size: bytes.length,
-    } : (
-      await query<{ id: string; content_type: string; file_size: number }>(
-        "SELECT id,content_type,file_size FROM deposit_proofs WHERE user_id=$1 AND object_key=$2",
-        [user.id, objectKey],
-      )
-    ).rows[0];
-    if (!saved || saved.content_type !== contentType || Number(saved.file_size) !== bytes.length)
+    if (!proof.rowCount)
       return response.status(409).json({ ok: false, reason: "PROOF_UPLOAD_ID_CONFLICT" });
     return response.json({
       ok: true,
-      proofId: saved.id,
+      proofId: proof.rows[0].id,
       objectPath: objectKey,
     });
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_")) {
-      logger.error({ err: error }, "Deposit proof storage upload failed");
-      return response.status(503).json({ ok: false, reason: "PROOF_STORAGE_UNAVAILABLE" });
-    }
-    if (error instanceof Error && error.message === "DEPOSIT_PROOF_UPLOAD_CONFLICT")
-      return response.status(409).json({ ok: false, reason: "PROOF_UPLOAD_ID_CONFLICT" });
-    return next(error);
+    logger.error({ err: error }, "Deposit proof database upload failed");
+    return response.status(503).json({ ok: false, reason: "PROOF_STORAGE_UNAVAILABLE" });
   }
 });
 
@@ -899,8 +878,9 @@ app.post("/api/app/deposit", async (request, response, next) => {
       object_key: string;
       content_type: string;
       file_size: number;
+      proof_bytes: Buffer | null;
     }>(
-      `SELECT id,object_key,content_type,file_size FROM deposit_proofs
+      `SELECT id,object_key,content_type,file_size,proof_bytes FROM deposit_proofs
        WHERE user_id=$1 AND ($2::uuid IS NULL OR id=$2)
          AND ($3::text IS NULL OR object_key=$3)
        ORDER BY created_at DESC LIMIT 1`,
@@ -925,11 +905,12 @@ app.post("/api/app/deposit", async (request, response, next) => {
       return response.json({ ok: true, depositId: previous.id, alreadySubmitted: true });
     }
     if (
-      !(await verifyDepositProofObject(
+      !verifyDepositProofBytes(
         proof.rows[0].object_key,
+        proof.rows[0].proof_bytes,
         proof.rows[0].content_type,
         number(proof.rows[0].file_size),
-      ))
+      )
     )
       return response.status(400).json({ ok: false, reason: "INVALID_OR_MISSING_PROOF_FILE" });
     const result = await withTransaction(async (client) => {
@@ -964,10 +945,6 @@ app.post("/api/app/deposit", async (request, response, next) => {
     if (!result.ok) return response.status(409).json(result);
     return response.json(result);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("OBJECT_STORAGE_")) {
-      logger.error({ err: error }, "Deposit proof storage verification failed");
-      return response.status(503).json({ ok: false, reason: "PROOF_STORAGE_UNAVAILABLE" });
-    }
     return next(error);
   }
 });
@@ -1795,18 +1772,25 @@ app.get("/api/admin/deposits/:depositId/proof", async (request, response, next) 
   try {
     if (!/^[0-9a-f-]{36}$/i.test(request.params.depositId))
       return response.status(400).json({ message: "INVALID_DEPOSIT_ID" });
-    const result = await query<{ object_key: string; content_type: string; file_size: number }>(
-      `SELECT proof.object_key,proof.content_type,proof.file_size FROM deposits deposit
+    const result = await query<{ object_key: string; content_type: string; file_size: number; proof_bytes: Buffer | null }>(
+      `SELECT proof.object_key,proof.content_type,proof.file_size,proof.proof_bytes FROM deposits deposit
        JOIN deposit_proofs proof ON proof.id=deposit.proof_id AND proof.user_id=deposit.user_id
        WHERE deposit.id=$1`,
       [request.params.depositId],
     );
     if (!result.rowCount) return response.status(404).json({ message: "DEPOSIT_PROOF_NOT_FOUND" });
+    const proof = result.rows[0];
+    if (proof.proof_bytes && !verifyDepositProofBytes(
+      proof.object_key, proof.proof_bytes, proof.content_type, number(proof.file_size),
+    )) return response.status(503).json({ message: "DEPOSIT_PROOF_CORRUPTED" });
+    if (!proof.proof_bytes && !process.env.DEFAULT_OBJECT_STORAGE_BUCKET_ID)
+      return response.status(404).json({ message: "DEPOSIT_PROOF_NOT_MIGRATED" });
     response.setHeader("Content-Type", result.rows[0].content_type);
     response.setHeader("Content-Length", String(result.rows[0].file_size));
     response.setHeader("Cache-Control", "private, no-store");
     response.setHeader("X-Content-Type-Options", "nosniff");
-    await pipeline(createDepositProofReadStream(result.rows[0].object_key), response);
+    if (proof.proof_bytes) response.end(proof.proof_bytes);
+    else await pipeline(createDepositProofReadStream(proof.object_key), response);
   } catch (error) {
     if (response.headersSent) return response.destroy(error instanceof Error ? error : undefined);
     return next(error);

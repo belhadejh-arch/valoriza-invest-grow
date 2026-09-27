@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { Storage } from "@google-cloud/storage";
 
-// The storage SDK uses Replit's sidecar for credentials, but uploads and reads
-// go directly to object storage. No signed URL service or browser-to-GCS PUT is
-// required for deposit receipts.
+// Legacy receipts uploaded in Replit can still be viewed there. New receipts
+// are stored in PostgreSQL, so Render never requires Replit's sidecar.
 const sidecarEndpoint = "http://127.0.0.1:1106";
 const storage = new Storage({
   credentials: {
@@ -50,66 +49,19 @@ export function hasValidDepositProofSignature(bytes: Uint8Array, contentType: st
   return false;
 }
 
-function storageFailure(operation: string, error: unknown) {
-  return new Error(`OBJECT_STORAGE_${operation}_FAILED`, { cause: error });
-}
-
-export async function readDepositProofMetadata(objectKey: string) {
-  try {
-    const [metadata] = await proofFile(objectKey).getMetadata();
-    return {
-      contentType: metadata.contentType?.split(";")[0],
-      size: Number(metadata.size),
-      sha256: metadata.metadata?.sha256,
-    };
-  } catch (error) {
-    if ((error as { code?: number }).code === 404) return null;
-    throw storageFailure("READ", error);
-  }
-}
-
-export async function storeDepositProofObject(
+export function verifyDepositProofBytes(
   objectKey: string,
-  bytes: Buffer,
-  contentType: string,
-  sha256: string,
-) {
-  const file = proofFile(objectKey);
-  try {
-    // Never overwrite a receipt, including when two attempts use the same ID.
-    await file.save(bytes, {
-      resumable: false,
-      metadata: { contentType, metadata: { sha256 } },
-      preconditionOpts: { ifGenerationMatch: 0 },
-    });
-  } catch (error) {
-    if ((error as { code?: number }).code !== 412)
-      throw storageFailure("WRITE", error);
-    // A retry may find a stored object whose DB insert had not completed.
-    const metadata = await readDepositProofMetadata(objectKey);
-    if (metadata?.contentType !== contentType ||
-        metadata.size !== bytes.length || metadata.sha256 !== sha256)
-      throw new Error("DEPOSIT_PROOF_UPLOAD_CONFLICT");
-  }
-}
-
-export async function verifyDepositProofObject(
-  objectKey: string,
+  bytes: Buffer | null,
   expectedContentType: string,
   expectedSize: number,
 ) {
-  const metadata = await readDepositProofMetadata(objectKey);
-  if (!metadata || metadata.contentType !== expectedContentType ||
-      metadata.size !== expectedSize || expectedSize > 5 * 1024 * 1024)
+  if (!bytes || bytes.length !== expectedSize ||
+      expectedSize > 5 * 1024 * 1024 ||
+      !hasValidDepositProofSignature(bytes, expectedContentType))
     return false;
-
-  try {
-    const [prefix] = await proofFile(objectKey).download({ start: 0, end: 11 });
-    return hasValidDepositProofSignature(prefix, expectedContentType);
-  } catch (error) {
-    if ((error as { code?: number }).code === 404) return false;
-    throw storageFailure("READ", error);
-  }
+  const digest = objectKey.split("/")[2];
+  return !/^[0-9a-f]{64}$/i.test(digest) ||
+    createHash("sha256").update(bytes).digest("hex") === digest.toLowerCase();
 }
 
 export function createDepositProofReadStream(objectKey: string) {
