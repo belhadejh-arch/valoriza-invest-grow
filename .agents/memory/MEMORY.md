@@ -7,3 +7,4 @@
 - [Deposit receipt reliability](deposit-proof-timeouts.md) — avoid signing dependencies; Render cannot use Replit storage credentials, and receipt identity must survive retries.
 - [Referral milestone policy](referral-milestone-policy.md) — qualified direct VIP activations count cumulatively, including admin grants; the VIP reward never invents a tier.
 - [Parameterized development SQL](parameterized-development-sql.md) — the SQL callback rejects multiple statements in one parameterized call.
+- [External GitHub deploy sync](external-github-deploy-sync.md) — public Git fetch can work while HTTPS push auth fails; use the bound GitHub connection to publish source changes.
