@@ -245,7 +245,10 @@ app.post("/api/auth/register", async (request, response, next) => {
       }
       return userId;
     });
-    const token = await createSession(result, response);
+    const token = await createSession(result, response, {
+      email: emailValue,
+      passwordHash,
+    });
     return response.status(201).json({
       ok: true,
       token,
@@ -274,7 +277,7 @@ app.post("/api/auth/login", async (request, response, next) => {
       email: string;
       role: string;
     }>(
-      `SELECT u.id, u.password_hash, p.is_blocked, p.username, p.email,
+      `SELECT u.id, u.password_hash, p.is_blocked, p.username, u.email,
               COALESCE((SELECT role FROM user_roles WHERE user_id = u.id
                         ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
        FROM users u JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
@@ -292,7 +295,10 @@ app.post("/api/auth/login", async (request, response, next) => {
     // but can no longer create customer sessions.
     if (row.role === "admin") return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
-    const token = await createSession(row.id, response);
+    const token = await createSession(row.id, response, {
+      email: row.email,
+      passwordHash: row.password_hash,
+    });
     return response.json({
       ok: true,
       token,
@@ -1652,6 +1658,157 @@ app.get("/api/admin/users", async (request, response, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+app.get("/api/admin/users/:userId/preview", async (request, response, next) => {
+  try {
+    const userId = request.params.userId;
+    if (!UUID_PATTERN.test(userId))
+      return response.status(400).json({ message: "INVALID_USER_ID" });
+    const admin = (request as typeof request & { authUser: { id: string } }).authUser;
+    const [profile, deposits, withdrawals, investments, tasks] = await Promise.all([
+      query(
+        `SELECT u.id,u.email,u.created_at,p.username,p.phone,p.referral_code,
+                p.vip_level,p.trial_active,p.trial_expires_at,p.is_blocked,
+                ${TRIAL_COMPLETED_COUNT_SQL} AS trial_completed_count,
+                w.balance,w.total_earned,w.total_deposited,w.total_withdrawn,
+                w.invested_balance,w.team_income
+         FROM users u JOIN profiles p ON p.id=u.id
+         LEFT JOIN wallets w ON w.user_id=u.id
+         WHERE u.id=$1
+           AND NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')`,
+        [userId],
+      ),
+      query(
+        "SELECT amount,network,status,created_at FROM deposits WHERE user_id=$1 ORDER BY created_at DESC LIMIT 5",
+        [userId],
+      ),
+      query(
+        "SELECT amount,network,status,created_at FROM withdrawals WHERE user_id=$1 ORDER BY created_at DESC LIMIT 5",
+        [userId],
+      ),
+      query(
+        "SELECT amount,status,created_at FROM investments WHERE user_id=$1 ORDER BY created_at DESC LIMIT 5",
+        [userId],
+      ),
+      query<{ total: number }>(
+        "SELECT count(*)::int AS total FROM task_completions WHERE user_id=$1",
+        [userId],
+      ),
+    ]);
+    const user = profile.rows[0];
+    if (!user) return response.status(404).json({ message: "USER_NOT_FOUND" });
+    await query(
+      "INSERT INTO admin_actions (admin_account_id,action,target_user_id,details) VALUES ($1,'VIEW_USER_ACCOUNT',$2,'{}')",
+      [admin.id, userId],
+    );
+    return response.json({
+      user: {
+        id: user.id, username: user.username, email: user.email, phone: user.phone,
+        referralCode: user.referral_code, vipLevel: user.vip_level,
+        trialActive: Boolean(user.trial_active) &&
+          user.trial_expires_at != null &&
+          new Date(user.trial_expires_at).getTime() > Date.now() &&
+          Number(user.trial_completed_count) < 6,
+        isBlocked: user.is_blocked, createdAt: user.created_at,
+      },
+      wallet: {
+        balance: number(user.balance), totalEarned: number(user.total_earned),
+        totalDeposited: number(user.total_deposited),
+        totalWithdrawn: number(user.total_withdrawn),
+        investedBalance: number(user.invested_balance),
+        teamIncome: number(user.team_income),
+      },
+      tasksCompleted: tasks.rows[0]?.total ?? 0,
+      deposits: deposits.rows.map((row) => ({
+        amount: number(row.amount), network: row.network, status: row.status, createdAt: row.created_at,
+      })),
+      withdrawals: withdrawals.rows.map((row) => ({
+        amount: number(row.amount), network: row.network, status: row.status, createdAt: row.created_at,
+      })),
+      investments: investments.rows.map((row) => ({
+        amount: number(row.amount), status: row.status, createdAt: row.created_at,
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.post("/api/admin/users/:userId/email", async (request, response, next) => {
+  try {
+    const userId = request.params.userId;
+    const email = typeof request.body?.email === "string"
+      ? request.body.email.trim().toLowerCase() : "";
+    if (!UUID_PATTERN.test(userId))
+      return response.status(400).json({ message: "INVALID_USER_ID" });
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return response.status(400).json({ message: "INVALID_EMAIL" });
+    const admin = (request as typeof request & { authUser: { id: string } }).authUser;
+    const result = await withTransaction(async (client) => {
+      const target = await client.query<{ email: string }>(
+        `SELECT u.email FROM users u JOIN profiles p ON p.id=u.id
+         WHERE u.id=$1 AND NOT EXISTS
+           (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')
+         FOR UPDATE OF u`,
+        [userId],
+      );
+      if (!target.rowCount) throw Object.assign(new Error("USER_NOT_FOUND"), { status: 404 });
+      if (target.rows[0].email.toLowerCase() === email) return { email };
+      const duplicate = await client.query(
+        "SELECT 1 FROM users WHERE lower(email)=$1 AND id<>$2",
+        [email, userId],
+      );
+      if (duplicate.rowCount) throw Object.assign(new Error("EMAIL_IN_USE"), { status: 409 });
+      await client.query("UPDATE users SET email=$1 WHERE id=$2", [email, userId]);
+      await client.query("UPDATE profiles SET email=$1,updated_at=now() WHERE id=$2", [email, userId]);
+      await client.query("DELETE FROM sessions WHERE user_id=$1", [userId]);
+      await client.query(
+        `INSERT INTO admin_actions (admin_account_id,action,target_user_id,details)
+         VALUES ($1,'CHANGE_USER_EMAIL',$2,$3)`,
+        [admin.id, userId, JSON.stringify({ previousEmail: target.rows[0].email, email })],
+      );
+      return { email };
+    });
+    return response.json({ ok: true, ...result });
+  } catch (error) {
+    if ((error as { code?: string }).code === "23505")
+      return response.status(409).json({ message: "EMAIL_IN_USE" });
+    return next(error);
+  }
+});
+
+app.post("/api/admin/users/:userId/password", async (request, response, next) => {
+  try {
+    const userId = request.params.userId;
+    const password = request.body?.newPassword;
+    if (!UUID_PATTERN.test(userId))
+      return response.status(400).json({ message: "INVALID_USER_ID" });
+    if (typeof password !== "string" || password.length < 8 ||
+        Buffer.byteLength(password, "utf8") > 72)
+      return response.status(400).json({ message: "INVALID_NEW_PASSWORD" });
+    const admin = (request as typeof request & { authUser: { id: string } }).authUser;
+    const hash = await hashPassword(password);
+    await withTransaction(async (client) => {
+      const updated = await client.query(
+        `UPDATE users u SET password_hash=$1
+         WHERE u.id=$2 AND EXISTS (SELECT 1 FROM profiles p WHERE p.id=u.id)
+           AND NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=u.id AND r.role='admin')
+         RETURNING u.id`,
+        [hash, userId],
+      );
+      if (!updated.rowCount) throw Object.assign(new Error("USER_NOT_FOUND"), { status: 404 });
+      await client.query("DELETE FROM sessions WHERE user_id=$1", [userId]);
+      await client.query(
+        `INSERT INTO admin_actions (admin_account_id,action,target_user_id,details)
+         VALUES ($1,'RESET_USER_PASSWORD',$2,'{}')`,
+        [admin.id, userId],
+      );
+    });
+    return response.json({ ok: true });
+  } catch (error) {
+    return next(error);
   }
 });
 

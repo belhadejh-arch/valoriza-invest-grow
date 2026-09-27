@@ -15,6 +15,43 @@ export const getAdminUsers = ({ page, search }: { page: number; search: string }
   backendRequest<AdminUsersResponse>(
     `/api/admin/users?page=${page}&search=${encodeURIComponent(search)}`,
   );
+export type AdminUserPreview = {
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    phone: string | null;
+    referralCode: string;
+    vipLevel: number;
+    trialActive: boolean;
+    isBlocked: boolean;
+    createdAt: string;
+  };
+  wallet: {
+    balance: number;
+    totalEarned: number;
+    totalDeposited: number;
+    totalWithdrawn: number;
+    investedBalance: number;
+    teamIncome: number;
+  };
+  tasksCompleted: number;
+  deposits: { amount: number; network: string; status: string; createdAt: string }[];
+  withdrawals: { amount: number; network: string; status: string; createdAt: string }[];
+  investments: { amount: number; status: string; createdAt: string }[];
+};
+export const getAdminUserPreview = (userId: string) =>
+  backendRequest<AdminUserPreview>(`/api/admin/users/${encodeURIComponent(userId)}/preview`);
+export const changeUserEmail = ({ userId, email }: { userId: string; email: string }) =>
+  backendRequest<{ ok: true; email: string }>(`/api/admin/users/${encodeURIComponent(userId)}/email`, {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+export const resetUserPassword = ({ userId, newPassword }: { userId: string; newPassword: string }) =>
+  backendRequest<{ ok: true }>(`/api/admin/users/${encodeURIComponent(userId)}/password`, {
+    method: "POST",
+    body: JSON.stringify({ newPassword }),
+  });
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",
 );

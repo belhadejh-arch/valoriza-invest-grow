@@ -16,6 +16,7 @@ import {
   MinusCircle,
   X,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -26,6 +27,7 @@ import {
 } from "@/lib/valoriza-admin.functions";
 import { useI18n } from "@/lib/i18n";
 import { useLocalizedContent } from "@/lib/localized-content";
+import { AdminUserPreviewDialog } from "./AdminUserPreviewDialog";
 
 export function AdminUsersTab() {
   const { t, isRTL } = useI18n();
@@ -35,6 +37,7 @@ export function AdminUsersTab() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [previewUserId, setPreviewUserId] = useState<string | null>(null);
   const pageSize = 50;
 
   useEffect(() => {
@@ -205,6 +208,15 @@ export function AdminUsersTab() {
                   </td>
                   <td className="p-3">
                     <div className="flex items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewUserId(user.id)}
+                        title={t("admin.previewUser")}
+                        aria-label={`${t("admin.previewUser")}: ${user.username}`}
+                        className="rounded-lg border border-cyan-glow/40 bg-cyan-glow/10 p-1.5 text-cyan-glow hover:bg-cyan-glow/20"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
                       {/* Adjust Balance Button */}
                       <button
                         type="button"
@@ -290,6 +302,14 @@ export function AdminUsersTab() {
             {isRTL ? "‹" : "›"}
           </button>
         </nav>
+      )}
+
+      {previewUserId && (
+        <AdminUserPreviewDialog
+          key={previewUserId}
+          userId={previewUserId}
+          onClose={() => setPreviewUserId(null)}
+        />
       )}
 
       {/* Adjust Balance Modal */}

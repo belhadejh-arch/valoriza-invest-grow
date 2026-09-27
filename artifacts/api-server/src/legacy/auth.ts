@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { Request, Response } from "express";
-import { query } from "./db.js";
+import { query, withTransaction } from "./db.js";
 
 const JWT_SECRET: string = process.env.JWT_SECRET || process.env.SESSION_SECRET || "";
 if (!JWT_SECRET) throw new Error("SESSION_SECRET is required");
@@ -35,18 +35,34 @@ export function clearSessionCookie(response: Response) {
   response.clearCookie(SESSION_COOKIE, { path: "/" });
 }
 
-export async function createSession(userId: string, response: Response) {
+export async function createSession(
+  userId: string,
+  response: Response,
+  expectedCredentials: { email: string; passwordHash: string },
+) {
   // JWT timestamps have one-second precision. A unique ID prevents two logins
   // within the same second from colliding on sessions.token_hash.
   const token = jwt.sign({ sub: userId }, JWT_SECRET, {
     expiresIn: `${SESSION_DAYS}d`,
     jwtid: crypto.randomUUID(),
   });
-  await query(
-    `INSERT INTO sessions (user_id, token_hash, expires_at)
-     VALUES ($1, $2, now() + ($3 || ' days')::interval)`,
-    [userId, hashToken(token), SESSION_DAYS],
-  );
+  await withTransaction(async (client) => {
+    // Serialize the final credential check and session insertion with admin
+    // changes, which also update this user row before deleting sessions.
+    const result = await client.query<{ email: string; password_hash: string }>(
+      "SELECT email,password_hash FROM users WHERE id=$1 FOR UPDATE",
+      [userId],
+    );
+    const current = result.rows[0];
+    if (!current || current.email !== expectedCredentials.email ||
+        current.password_hash !== expectedCredentials.passwordHash)
+      throw Object.assign(new Error("INVALID_CREDENTIALS"), { status: 401 });
+    await client.query(
+      `INSERT INTO sessions (user_id, token_hash, expires_at)
+       VALUES ($1, $2, now() + ($3 || ' days')::interval)`,
+      [userId, hashToken(token), SESSION_DAYS],
+    );
+  });
   setSessionCookie(response, token);
   return token;
 }
