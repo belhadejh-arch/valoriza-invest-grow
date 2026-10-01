@@ -9,16 +9,16 @@ import {
   X,
   RefreshCw,
   Percent,
-  Gift,
-  User,
-  ShieldCheck,
+  Ticket,
+  Users,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAdminWheelPrizes,
   saveWheelPrize,
   getAdminUsers,
-  grantFreeWheelSpin,
+  addFreeWheelSpin,
 } from "@/lib/valoriza-admin.functions";
 
 export function AdminWheelTab() {
@@ -26,15 +26,15 @@ export function AdminWheelTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPrize, setEditingPrize] = useState<any | null>(null);
 
-  // Grant spin state
-  const [selectedTargetUserId, setSelectedTargetUserId] = useState<string>("");
-  const [spinCountToGrant, setSpinCountToGrant] = useState<number>(1);
-
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState(0.5);
   const [probabilityWeight, setProbabilityWeight] = useState(20);
   const [color, setColor] = useState("#00E5FF");
   const [isActive, setIsActive] = useState(true);
+
+  // Grant Free Spin Section State
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [spinsToGrant, setSpinsToGrant] = useState<number>(1);
 
   const {
     data: prizes = [],
@@ -50,16 +50,6 @@ export function AdminWheelTab() {
     queryFn: () => getAdminUsers(),
   });
 
-  const grantSpinMutation = useMutation({
-    mutationFn: grantFreeWheelSpin,
-    onSuccess: (res, vars) => {
-      toast.success(`تم منح ${vars.count} فرصة مجانية للمستخدم بنجاح وحفظها في PostgreSQL 🎁`);
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
   const saveMutation = useMutation({
     mutationFn: saveWheelPrize,
     onSuccess: () => {
@@ -71,17 +61,26 @@ export function AdminWheelTab() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const grantSpinMutation = useMutation({
+    mutationFn: addFreeWheelSpin,
+    onSuccess: (_, vars) => {
+      toast.success(`تم منح ${vars.count || 1} فرصة مجانية للمستخدم بنجاح 🎟️`);
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      setSpinsToGrant(1);
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const totalWeight = prizes.reduce(
-    (sum: number, p: any) =>
-      sum + (p.is_active ? p.probability_weight || Number(p.probability) || 0 : 0),
+    (sum: number, p: any) => sum + (p.is_active ? p.probability_weight : 0),
     0,
   );
 
   const handleOpenEdit = (prize: any) => {
     setEditingPrize(prize);
-    setLabel(prize.label || prize.label_ar);
-    setAmount(Number(prize.amount || prize.prize_value || 0));
-    setProbabilityWeight(prize.probability_weight || Number(prize.probability) || 0);
+    setLabel(prize.label);
+    setAmount(Number(prize.amount));
+    setProbabilityWeight(prize.probability_weight);
     setColor(prize.color || "#00E5FF");
     setIsActive(prize.is_active);
     setModalOpen(true);
@@ -97,106 +96,131 @@ export function AdminWheelTab() {
     setModalOpen(true);
   };
 
-  const targetUserObj = users.find((u: any) => u.id === selectedTargetUserId);
+  const handleSavePrize = () => {
+    if (probabilityWeight < 0) {
+      toast.error("نسبة احتمالية الجائزة لا يمكن أن تكون سالبة");
+      return;
+    }
+
+    const currentOtherWeights = prizes
+      .filter((p: any) => p.id !== editingPrize?.id)
+      .reduce((sum: number, p: any) => sum + (p.is_active ? p.probability_weight : 0), 0);
+
+    const projectedWeight = currentOtherWeights + (isActive ? probabilityWeight : 0);
+    if (projectedWeight > 100) {
+      toast.error(
+        `مجموع الأوزان الكلي سيتجاوز 100% (${projectedWeight.toFixed(1)}%). يرجى تصحيح الأوزان.`,
+      );
+      return;
+    }
+
+    saveMutation.mutate({
+      id: editingPrize?.id,
+      label,
+      amount,
+      probabilityWeight,
+      color,
+      isActive,
+    });
+  };
+
+  const handleGrantSpin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserId) {
+      toast.error("يرجى اختيار المستخدم أولاً");
+      return;
+    }
+    if (spinsToGrant < 1) {
+      toast.error("يرجى إدخال عدد فرص صالح (1 أو أكثر)");
+      return;
+    }
+    grantSpinMutation.mutate({
+      userId: selectedUserId,
+      count: spinsToGrant,
+    });
+  };
 
   return (
-    <div className="space-y-4">
-      {/* SECTION: Grant Free Spin to Specific User (Requirement 2) */}
-      <div className="surface-card glow-border p-4 rounded-2xl bg-surface/90 space-y-3">
-        <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-          <Gift className="h-4 w-4 text-gold" />
-          <h3 className="text-xs font-black text-foreground">منح فرصة مجانية لمستخدم محدد</h3>
-          <span className="text-[10px] text-muted-foreground">
-            (الأدمن يمنح الفرصة للمستخدم وتُحفظ مباشرة في PostgreSQL)
-          </span>
+    <div className="space-y-5">
+      {/* Requirement 2: Grant Free Opportunity to Specific User */}
+      <div className="rounded-2xl border border-gold/40 bg-surface/80 p-4 shadow-sm">
+        <div className="flex items-center justify-between pb-3 border-b border-border/60">
+          <div className="flex items-center gap-2">
+            <Ticket className="h-5 w-5 text-gold" />
+            <div>
+              <h3 className="text-xs font-black text-foreground">
+                منح فرصة مجانية في عجلة الحظ لمستخدم محدد
+              </h3>
+              <p className="text-[10px] text-muted-foreground">
+                يتم حفظ الفرص الممنوحة مباشرة في PostgreSQL ويستطيع المستخدم استهلاكها فوراً
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+        <form
+          onSubmit={handleGrantSpin}
+          className="mt-3 grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+        >
           <div className="sm:col-span-6">
-            <label className="text-[10px] text-muted-foreground font-bold">اختر المستخدم:</label>
+            <label className="text-[10px] text-muted-foreground font-bold">
+              اختر المستخدم المراد منحه فرصة مجانية
+            </label>
             <select
-              value={selectedTargetUserId}
-              onChange={(e) => setSelectedTargetUserId(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-gold focus:outline-none"
             >
-              <option value="">-- حدد مستخدم من القائمة --</option>
+              <option value="">-- اضغط للاختيار من المستخدمين ({users.length}) --</option>
               {users.map((u: any) => (
                 <option key={u.id} value={u.id}>
-                  {u.username} ({u.email}) - الرصيد: ${u.balance.toFixed(2)} [فرص:{" "}
-                  {u.wheelSpinsAvailable || 0}]
+                  {u.username || "مستخدم"} ({u.email}) - الرصيد: ${u.balance.toFixed(2)} - الفرص:{" "}
+                  {u.wheelSpins || 0}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="sm:col-span-3">
-            <label className="text-[10px] text-muted-foreground font-bold">عدد الفرص:</label>
+            <label className="text-[10px] text-muted-foreground font-bold">
+              عدد الفرص المجانية
+            </label>
             <input
               type="number"
               min="1"
-              max="50"
-              value={spinCountToGrant}
-              onChange={(e) => setSpinCountToGrant(Math.max(1, parseInt(e.target.value) || 1))}
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none text-center font-bold"
+              step="1"
+              value={spinsToGrant}
+              onChange={(e) => setSpinsToGrant(Math.max(1, parseInt(e.target.value) || 1))}
+              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-gold focus:outline-none font-bold"
             />
           </div>
 
           <div className="sm:col-span-3">
             <button
-              type="button"
-              disabled={!selectedTargetUserId || grantSpinMutation.isPending}
-              onClick={() =>
-                grantSpinMutation.mutate({
-                  userId: selectedTargetUserId,
-                  count: spinCountToGrant,
-                })
-              }
-              className="w-full flex items-center justify-center gap-1.5 rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 disabled:opacity-50 cursor-pointer"
+              type="submit"
+              disabled={grantSpinMutation.isPending || !selectedUserId}
+              className="w-full flex items-center justify-center gap-1.5 rounded-xl gold-gradient py-2 px-3 text-xs font-black text-navy-deep shadow-gold-glow hover:opacity-95 active:scale-95 disabled:opacity-50"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Ticket className="h-4 w-4" />
               <span>{grantSpinMutation.isPending ? "جارٍ الحفظ..." : "إضافة فرصة مجانية"}</span>
             </button>
           </div>
-        </div>
-
-        {targetUserObj && (
-          <div className="p-2.5 rounded-xl bg-black/20 border border-border/60 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground">المستخدم المختار:</span>
-              <strong className="text-foreground">{targetUserObj.username}</strong>
-              <span className="text-muted-foreground text-[10px]">({targetUserObj.email})</span>
-            </div>
-            <div className="text-gold font-bold">
-              الفرص الحالية: {targetUserObj.wheelSpinsAvailable || 0} فرصة
-            </div>
-          </div>
-        )}
+        </form>
       </div>
 
-      {/* Weights and Rules Notice Banner */}
-      <div className="rounded-2xl border border-gold/40 bg-gold/10 p-3.5 text-xs text-foreground flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <Sparkles className="h-5 w-5 text-gold shrink-0" />
-          <div>
-            <p className="font-black text-gold">
-              الأوزان المحددة للعجلة: {totalWeight.toFixed(0)}% (مجموع ثابت 85%)
-            </p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              حظ سعيد (25%) + حظ سعيد (25%) + 0.5$ (10%) + 1$ (10%) + 2$ (5%) = 85%. باقي الجوائز
-              بنسبة 0%. ممنوع اختراع جوائز إضافية.
-            </p>
-          </div>
-        </div>
-        <span className="rounded-full bg-surface border border-gold/40 px-2.5 py-1 text-[11px] font-black text-gold shrink-0">
-          المجموع: {totalWeight.toFixed(0)}%
-        </span>
-      </div>
-
-      <div className="flex items-center justify-between">
+      {/* Header and Total Weights Indicator */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-xs font-extrabold text-foreground">إدارة قطاعات وجوائز عجلة الحظ</h2>
-          <p className="text-[10px] text-muted-foreground">
-            تعديل مبالغ الجوائز ونسب احتمالية الفوز (Weights).
+          <h2 className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
+            <Sparkles className="h-4 w-4 text-cyan-glow" />
+            <span>إدارة قطاعات وجوائز عجلة الحظ</span>
+          </h2>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            مجموع الأوزان النشطة حالياً:{" "}
+            <strong className={`font-bold ${totalWeight <= 85 ? "text-emerald-400" : "text-gold"}`}>
+              {totalWeight.toFixed(1)}%
+            </strong>{" "}
+            (المواصفة: 85% بدون اختراع نسبة متبقية)
           </p>
         </div>
         <button
@@ -215,7 +239,7 @@ export function AdminWheelTab() {
           جارٍ جلب جوائز العجلة...
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {prizes.map((prize: any) => {
             const chance =
               totalWeight > 0 ? ((prize.probability_weight / totalWeight) * 100).toFixed(1) : "0";
@@ -230,36 +254,33 @@ export function AdminWheelTab() {
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
-                    <span
-                      className="h-4 w-4 rounded-full border border-white/20 shadow-sm"
-                      style={{ backgroundColor: prize.color || "#00E5FF" }}
-                    />
-                    <h3 className="text-xs font-black text-foreground">{prize.label}</h3>
+                    <span className="text-2xl select-none">{prize.icon || "🎁"}</span>
+                    <div>
+                      <h4 className="text-xs font-extrabold text-foreground leading-snug">
+                        {prize.label}
+                      </h4>
+                      <p className="text-[11px] font-mono text-cyan-glow font-bold mt-0.5">
+                        {Number(prize.amount) > 0
+                          ? `$${Number(prize.amount).toFixed(2)}`
+                          : "لا توجد جائزة"}
+                      </p>
+                    </div>
                   </div>
-
                   <button
                     type="button"
                     onClick={() => handleOpenEdit(prize)}
-                    className="rounded-lg bg-surface border border-border p-1 text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow"
+                    className="rounded-lg bg-surface border border-border p-1 text-muted-foreground hover:text-foreground"
                   >
                     <Edit2 className="h-3 w-3" />
                   </button>
                 </div>
 
-                <div className="mt-3 text-center">
-                  <p className="text-xl font-black text-gold">${Number(prize.amount).toFixed(2)}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    الاحتمالية: {chance}% ({prize.probability_weight} نقاط)
-                  </p>
-                </div>
-
-                <div className="mt-3 pt-2 border-t border-border/50 flex items-center justify-between text-[10px]">
-                  <span className="text-muted-foreground">الحالة:</span>
-                  {prize.is_active ? (
-                    <span className="font-bold text-emerald-400">نشطة في العجلة</span>
-                  ) : (
-                    <span className="font-bold text-muted-foreground">معطلة</span>
-                  )}
+                <div className="mt-3 pt-2.5 border-t border-border/50 flex items-center justify-between text-[10px]">
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <Percent className="h-3 w-3 text-gold" />
+                    <span>الوزن: {prize.probability_weight}%</span>
+                  </div>
+                  <span className="font-bold text-foreground">الاحتمال: {chance}%</span>
                 </div>
               </div>
             );
@@ -267,13 +288,13 @@ export function AdminWheelTab() {
         </div>
       )}
 
-      {/* Edit / Add Modal */}
+      {/* Edit Prize Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="w-full max-w-sm rounded-3xl border border-cyan-glow/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                {editingPrize ? `تعديل جائزة: ${editingPrize.label}` : "إضافة قطاع جائزة"}
+                {editingPrize ? "تعديل جائزة عجلة الحظ" : "إضافة جائزة جديدة"}
               </h3>
               <button
                 type="button"
@@ -286,9 +307,7 @@ export function AdminWheelTab() {
 
             <div className="mt-3 space-y-3">
               <div>
-                <label className="text-[10px] text-muted-foreground font-bold">
-                  اسم / نص الجائزة
-                </label>
+                <label className="text-[10px] text-muted-foreground font-bold">اسم الجائزة</label>
                 <input
                   type="text"
                   value={label}
@@ -299,10 +318,11 @@ export function AdminWheelTab() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-muted-foreground font-bold">المبلغ ($)</label>
+                  <label className="text-[10px] text-muted-foreground font-bold">القيمة ($)</label>
                   <input
                     type="number"
-                    step="0.05"
+                    step="0.1"
+                    min="0"
                     value={amount}
                     onChange={(e) => setAmount(Number(e.target.value))}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
@@ -310,14 +330,15 @@ export function AdminWheelTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    وزن الاحتمالية (Weight)
+                    الوزن % (Weight)
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
+                    max="100"
                     value={probabilityWeight}
                     onChange={(e) => setProbabilityWeight(Number(e.target.value))}
-                    className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-bold"
                   />
                 </div>
               </div>
@@ -353,19 +374,10 @@ export function AdminWheelTab() {
               <button
                 type="button"
                 disabled={saveMutation.isPending}
-                onClick={() =>
-                  saveMutation.mutate({
-                    id: editingPrize?.id,
-                    label,
-                    amount,
-                    probabilityWeight,
-                    color,
-                    isActive,
-                  })
-                }
+                onClick={handleSavePrize}
                 className="w-full mt-3 rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:opacity-50"
               >
-                {saveMutation.isPending ? "جارٍ الحفظ..." : "حفظ التعديلات"}
+                {saveMutation.isPending ? "جارٍ التحقق والحفظ..." : "حفظ التعديلات"}
               </button>
             </div>
           </div>

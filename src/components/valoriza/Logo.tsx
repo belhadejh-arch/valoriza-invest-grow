@@ -18,7 +18,7 @@ export function ValorizaMarkIcon({ className = "h-8 w-8" }: { className?: string
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={`${className} shrink-0`}
-      aria-label="Valoriza Mark"
+      aria-label="شعار فالوريزا"
       role="img"
     >
       <defs>
@@ -160,8 +160,8 @@ export function Logo({
           <span className="text-white">za</span>
         </div>
         {showTagline && (
-          <div className={`${sub} mt-1 font-medium tracking-wide text-muted-foreground`}>
-            Invest Today .. Build Tomorrow
+          <div className={`${sub} mt-1 font-medium tracking-wide text-muted-foreground`} dir="rtl">
+            استثمر اليوم .. لبناء مستقبلك غداً
           </div>
         )}
       </div>
@@ -174,8 +174,8 @@ export function Logo({
       <ValorizaMarkIcon className={dims} />
 
       {/* Brand Wordmark matching the exact typography and coloring from the user's logo */}
-      <div className="leading-none text-start" dir="ltr">
-        <div className={`${title} font-black tracking-tight flex items-baseline`}>
+      <div className="leading-none text-start">
+        <div className={`${title} font-black tracking-tight flex items-baseline`} dir="ltr">
           {/* Stylized Gradient V */}
           <span className="bg-gradient-to-br from-[#00D2FF] via-[#0088FF] to-[#0B51D8] bg-clip-text text-transparent drop-shadow-[0_2px_8px_rgba(0,180,255,0.4)]">
             V
@@ -204,8 +204,9 @@ export function Logo({
         {showTagline && (
           <div
             className={`${sub} mt-0.5 font-medium tracking-wide text-muted-foreground/90 whitespace-nowrap hidden xs:block sm:block`}
+            dir="rtl"
           >
-            Invest Today .. Build Tomorrow
+            استثمر اليوم .. لبناء مستقبلك غداً
           </div>
         )}
       </div>

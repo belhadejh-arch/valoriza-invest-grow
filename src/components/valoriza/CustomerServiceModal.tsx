@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Headphones, MessageCircle, Send, X } from "lucide-react";
 import supportAgentImg from "@/assets/images/support_agent_1789808781142.jpg";
+import { getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
+import { useServerFn } from "@tanstack/react-start";
 
 export type CustomerSupportLink = {
   id?: string;
@@ -17,32 +20,40 @@ interface CustomerServiceModalProps {
 }
 
 export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerServiceModalProps) {
+  const fetchSettings = useServerFn(getCompanySettingsAndSupport);
+  const { data } = useQuery({
+    queryKey: ["support-links"],
+    queryFn: () => fetchSettings(),
+    enabled: isOpen,
+  });
+
   if (!isOpen) return null;
 
+  const settings = (data as any)?.settings || {};
   const defaultLinks: CustomerSupportLink[] = [
     {
-      title: "موظف الاستقبال",
-      subtitle: "على تيليجرام",
+      title: "خدمة العملاء",
+      subtitle: "على تيليجرام (دعم فني)",
       platform: "telegram",
-      url: "https://t.me/valoriza_support",
+      url: settings.telegram_support_url || "https://t.me/valoriza_support",
     },
     {
-      title: "موظف الاستقبال",
-      subtitle: "على واتساب",
+      title: "خدمة العملاء",
+      subtitle: "على واتساب (دعم فني)",
       platform: "whatsapp",
-      url: "https://wa.me/34600000000",
+      url: settings.whatsapp_support_url || "https://wa.me/34600000000",
     },
     {
       title: "المجموعة الرسمية",
-      subtitle: "على تيليجرام",
+      subtitle: "مجموعة تيليجرام الرسمية",
       platform: "telegram",
-      url: "https://t.me/valoriza_official_group",
+      url: settings.telegram_group_url || "https://t.me/valoriza_official",
     },
     {
       title: "المجموعة الرسمية",
-      subtitle: "على واتساب",
+      subtitle: "مجموعة واتساب الرسمية",
       platform: "whatsapp",
-      url: "https://chat.whatsapp.com/valoriza_vip",
+      url: settings.whatsapp_group_url || "https://chat.whatsapp.com/valoriza",
     },
   ];
 

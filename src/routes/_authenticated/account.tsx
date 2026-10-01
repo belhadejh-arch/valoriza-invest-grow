@@ -25,10 +25,11 @@ import {
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
-import { getAccountData, changeUserPassword, logoutUser } from "@/lib/valoriza-pages.functions";
+import { getAccountData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { getMockAccountData } from "@/lib/mock-data";
-import { setStoredToken } from "@/lib/backend-client";
+import { supabase } from "@/integrations/supabase/client";
+import { backendRequest } from "@/lib/backend-client";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/account")({
@@ -84,36 +85,44 @@ function AccountPage() {
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
-    try {
-      await logoutUser();
-    } catch {
-      // Ignore logout cleanup error
-    }
-    setStoredToken(null);
+    await supabase.auth.signOut();
     navigate({ to: "/", replace: true });
   }
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
     if (newPassword.length < 6) {
-      toast.error(t("account.passwordMinLength") || "كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+      toast.error(t("account.passwordMinLength"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error(t("account.passwordMismatch") || "كلمتا المرور غير متطابقتين");
+      toast.error(t("account.passwordMismatch"));
       return;
     }
 
     setPasswordLoading(true);
     try {
-      const res: any = await changeUserPassword({ newPassword, password: newPassword });
-      if (res && res.ok === false) {
-        throw new Error(res.message || "فشل تغيير كلمة المرور");
-      }
-      toast.success(
-        t("account.passwordChangedSuccess") ||
-          "تم تغيير كلمة المرور وتشفيرها في قاعدة البيانات بنجاح 🔒",
+      // Step 1: Change and hash password in Backend & PostgreSQL
+      const res = await backendRequest<{ ok: boolean; message?: string }>(
+        "/api/auth/change-password",
+        {
+          method: "POST",
+          body: JSON.stringify({ newPassword }),
+        },
       );
+
+      if (!res.ok) {
+        throw new Error(res.message || "فشل تغيير كلمة المرور في الخادم");
+      }
+
+      // Step 2: Optional sync with supabase if available
+      try {
+        await supabase.auth.updateUser({ password: newPassword });
+      } catch (e) {
+        void e;
+      }
+
+      toast.success(res.message || t("account.passwordChangedSuccess"));
       setPasswordModalOpen(false);
       setNewPassword("");
       setConfirmPassword("");
@@ -361,10 +370,8 @@ function AccountPage() {
                 <span className="font-black text-gold">VIP {data.profile.vipLevel}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">SSL / TLS:</span>
-                <span className="font-black text-success">
-                  {isRTL ? "تشفير مالي آمن 256 بت" : "256-bit Encrypted"}
-                </span>
+                <span className="text-muted-foreground">حماية وتشفير البيانات:</span>
+                <span className="font-black text-success">تشفير مالي آمن 256 بت (SSL)</span>
               </div>
             </div>
           </div>

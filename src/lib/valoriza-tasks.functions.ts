@@ -29,6 +29,8 @@ export type TasksPageData = {
   tasks: TaskItem[];
   userBalance: number;
   allDailyTasksCompleted: boolean;
+  tasksEnabled?: boolean;
+  message?: string;
 };
 
 export const getTasksData = createServerFn({ method: "GET" }).handler(() =>

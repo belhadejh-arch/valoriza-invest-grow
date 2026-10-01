@@ -15,6 +15,18 @@ export const getAdminUsers = adminGet("/api/admin/users");
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",
 );
+export const toggleUserWithdrawal = adminPost<{ userId: string; canWithdraw: boolean }>(
+  "/api/admin/users/toggle-withdrawal",
+);
+export const updateUserWithdrawalAddress = adminPost<{
+  userId: string;
+  address: string;
+  network?: string;
+}>("/api/admin/users/withdrawal-address");
+export const addFreeWheelSpin = adminPost<{
+  userId: string;
+  count?: number;
+}>("/api/admin/users/add-wheel-spin");
 export const updateUserVipLevel = adminPost<{ targetUserId: string; vipLevel: number }>(
   "/api/admin/users/vip",
 );
@@ -48,22 +60,5 @@ export const getAdminWheelPrizes = adminGet("/api/admin/wheel");
 export const saveWheelPrize = adminPost<Record<string, unknown>>("/api/admin/wheel/save");
 export const getAdminSettings = adminGet("/api/admin/settings");
 export const saveAdminSettings = adminPost<Record<string, unknown>>("/api/admin/settings/save");
-export const toggleGlobalWithdrawals = adminPost<{ enabled: boolean }>(
-  "/api/admin/withdrawals/toggle-global",
-);
-export const toggleGlobalTasks = adminPost<{ enabled: boolean }>("/api/admin/tasks/toggle-global");
-export const updateUserWithdrawalAddress = adminPost<{
-  userId: string;
-  network: string;
-  address: string;
-}>("/api/admin/users/withdrawal-address");
-export const toggleUserWithdrawalStatus = adminPost<{
-  userId: string;
-  canWithdraw: boolean;
-}>("/api/admin/users/withdrawal-status");
-export const grantFreeWheelSpin = adminPost<{
-  userId: string;
-  count: number;
-}>("/api/admin/wheel/grant-spin");
 export const broadcastNotification = adminPost<Record<string, unknown>>("/api/admin/notifications");
 export const getAdminAuditLogs = adminGet("/api/admin/audit-logs");

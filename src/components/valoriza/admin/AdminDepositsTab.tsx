@@ -25,11 +25,13 @@ export function AdminDepositsTab() {
   const {
     data: deposits = [],
     isLoading,
+    isFetching,
     refetch,
   } = useQuery({
     queryKey: ["admin-deposits"],
     queryFn: () => getAdminDeposits(),
-    refetchInterval: 15000,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   const reviewMutation = useMutation({
@@ -42,6 +44,7 @@ export function AdminDepositsTab() {
       );
       queryClient.invalidateQueries({ queryKey: ["admin-deposits"] });
       queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setRejectModalOpen(false);
       setRejectNote("");
       setSelectedDepositId(null);
@@ -95,14 +98,23 @@ export function AdminDepositsTab() {
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>تحديث</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            تحديث تلقائي (5ث)
+          </span>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground active:scale-95"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-cyan-glow" : ""}`}
+            />
+            <span>تحديث</span>
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -202,7 +214,7 @@ export function AdminDepositsTab() {
                     >
                       <img
                         src={dep.screenshotUrl}
-                        alt="Screenshot"
+                        alt="لقطة شاشة التحويل"
                         className="h-full w-full object-cover"
                       />
                     </button>
@@ -329,7 +341,7 @@ export function AdminDepositsTab() {
             <div className="p-3 w-full flex-1 flex items-center justify-center overflow-auto max-h-[75vh]">
               <img
                 src={previewScreenshotUrl}
-                alt="Deposit Proof"
+                alt="إثبات الإيداع"
                 className="max-w-full max-h-[72vh] object-contain rounded-xl border border-[#14325e]"
               />
             </div>

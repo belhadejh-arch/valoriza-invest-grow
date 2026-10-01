@@ -55,7 +55,7 @@ function TasksPage() {
   const [secondsRemaining, setSecondsRemaining] = useState(10);
   const [watchedSeconds, setWatchedSeconds] = useState(0);
 
-  const { data } = useQuery<TasksPageData>({
+  const { data, isLoading } = useQuery<TasksPageData>({
     queryKey: ["tasks-data"],
     queryFn: () => getTasksData(),
   });
@@ -232,7 +232,7 @@ function TasksPage() {
                   {t("invest.duration")}
                 </p>
                 <p className="mt-0.5 text-sm font-black text-primary-foreground">
-                  {durationSec} {isRTL ? "ثوانٍ" : "s"}
+                  {durationSec} ثوانٍ
                 </p>
               </div>
             </div>
@@ -242,17 +242,18 @@ function TasksPage() {
           <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-gold/20 blur-3xl pointer-events-none" />
         </div>
 
-        {/* Task Cards List (Bento-Grid 1-3 Columns) */}
+        {/* Task Cards List or Disabled Message */}
         {data?.tasksEnabled === false || tasksList.length === 0 ? (
-          <div className="surface-card glow-border p-12 rounded-3xl text-center space-y-3">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-glow/15 text-cyan-glow border border-cyan-glow/30 mb-2">
-              <Video className="h-8 w-8" />
+          <div className="surface-card glow-border p-12 text-center rounded-3xl space-y-4 my-6 animate-in fade-in">
+            <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-surface border border-border text-muted-foreground shadow-inner">
+              <Video className="h-8 w-8 text-cyan-glow" />
             </div>
-            <h2 className="text-xl sm:text-2xl font-black text-foreground">لا توجد مهام اليوم</h2>
-            <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto">
-              المهام اليومية معطلة حالياً من قبل الإدارة. يرجى المتابعة لاحقاً لمشاهدة الفيديوهات
-              الجديدة وكسب العمولات.
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-xl sm:text-2xl font-black text-foreground">لا توجد مهام اليوم</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
+                {data?.message || "لا توجد مهام اليوم"}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -280,7 +281,7 @@ function TasksPage() {
                       type="button"
                       onClick={() => handleStartTask(task)}
                       disabled={task.isCompletedToday || remaining <= 0}
-                      aria-label={`Watch ${task.title}`}
+                      aria-label={`مشاهدة ${task.title}`}
                       className={`absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full transition-all duration-300 active:scale-95 ${
                         task.isCompletedToday
                           ? "bg-emerald-500/80 text-white cursor-default"
@@ -309,7 +310,7 @@ function TasksPage() {
                     <div className="absolute bottom-3 inset-x-3 flex items-center justify-between">
                       <span className="flex items-center gap-1 rounded-lg bg-black/70 backdrop-blur-md px-2 py-1 text-[10px] font-bold text-white/90">
                         <Clock className="h-3 w-3 text-cyan-glow" />
-                        {task.durationSeconds}s
+                        {task.durationSeconds} ثانية
                       </span>
                       <span className="flex items-center gap-1 rounded-lg bg-emerald-500/90 backdrop-blur-md px-2.5 py-1 text-xs font-black text-white shadow">
                         +${commission.toFixed(2)}

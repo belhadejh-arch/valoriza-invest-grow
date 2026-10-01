@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Wallet,
+  AlertTriangle,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
@@ -54,25 +55,20 @@ function WithdrawalPage() {
   const bindAddressFn = useServerFn(bindWithdrawalAddress);
   const submitWithdrawalFn = useServerFn(requestWithdrawal);
 
-  const { data: info = getMockWithdrawalData() } = useQuery({
+  const { data: info } = useQuery({
     queryKey: ["withdrawal-info"],
     queryFn: () => fetchWithdrawalInfo(),
-    initialData: getMockWithdrawalData,
   });
 
-  const { data: recordsData = getMockRecordsData() } = useQuery({
+  const { data: recordsData } = useQuery({
     queryKey: ["financial-records"],
     queryFn: () => fetchRecords(),
-    initialData: getMockRecordsData,
   });
 
   const balance = info?.balance ?? 0;
   const boundAddress = info?.boundAddress;
   const isAddressLocked = Boolean(boundAddress?.locked && boundAddress?.address);
-  const globalWithdrawalsEnabled =
-    info?.globalWithdrawalsEnabled !== false && info?.settings?.withdrawalsEnabled !== false;
-  const userWithdrawalEnabled = info?.userWithdrawalEnabled !== false;
-  const isWithdrawalAllowed = globalWithdrawalsEnabled && userWithdrawalEnabled;
+  const isWithdrawalAllowed = info?.canWithdraw !== false;
 
   useEffect(() => {
     if (boundAddress?.address) {
@@ -119,7 +115,14 @@ function WithdrawalPage() {
         qc.invalidateQueries({ queryKey: ["financial-records"] });
         qc.invalidateQueries({ queryKey: ["account"] });
       } else {
-        if (res.reason === "INSUFFICIENT_BALANCE") {
+        if (res.message) {
+          toast.error(res.message);
+        } else if (
+          res.reason === "GLOBAL_WITHDRAWALS_DISABLED" ||
+          res.reason === "USER_WITHDRAWALS_DISABLED"
+        ) {
+          toast.error(res.message || "السحب معطل حالياً بقرار من إدارة المنصة");
+        } else if (res.reason === "INSUFFICIENT_BALANCE") {
           toast.error(t("common.error"));
         } else if (res.reason === "BELOW_MIN_WITHDRAWAL") {
           toast.error(`${t("withdraw.minNotice")} (${minWithdrawal}$)`);
@@ -130,7 +133,7 @@ function WithdrawalPage() {
         }
       }
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (err: any) => toast.error(err.message || t("common.error")),
   });
 
   const handleBind = (e: React.FormEvent) => {
@@ -144,6 +147,10 @@ function WithdrawalPage() {
 
   const handleSubmitWithdraw = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isWithdrawalAllowed) {
+      toast.error(info?.disabledReason || "السحب معطل حالياً بقرار من إدارة المنصة");
+      return;
+    }
     if (!addressInput.trim()) {
       toast.error(t("withdraw.addressPlaceholder"));
       return;
@@ -190,28 +197,28 @@ function WithdrawalPage() {
           </div>
         </div>
 
+        {/* Requirement 4: Prominent clear message when withdrawal is disabled */}
+        {!isWithdrawalAllowed && (
+          <div className="rounded-3xl border border-danger/50 bg-danger/10 p-5 text-start flex items-start gap-4 shadow-xl animate-in fade-in">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-danger/20 text-danger border border-danger/30">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm sm:text-base font-black text-danger">
+                عمليات السحب معطلة حالياً
+              </h3>
+              <p className="text-xs sm:text-sm text-foreground/90 font-medium leading-relaxed">
+                {info?.disabledReason ||
+                  "تم إيقاف ميزة السحب مؤقتاً. يرجى التواصل مع خدمة العملاء والدعم الفني للمزيد من التفاصيل."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Bento Grid: Form on Left (7 cols), Info & History on Right (5 cols) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Form Column */}
           <div className="lg:col-span-7 space-y-5 text-start">
-            {/* Status alerts if withdrawals disabled */}
-            {!globalWithdrawalsEnabled ? (
-              <div className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-xs text-danger font-bold flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 shrink-0" />
-                <span>
-                  عمليات السحب معطلة حالياً من قبل إدارة المنصة لجميع المستخدمين. يرجى المحاولة
-                  لاحقاً.
-                </span>
-              </div>
-            ) : !userWithdrawalEnabled ? (
-              <div className="rounded-2xl border border-danger/40 bg-danger/10 p-4 text-xs text-danger font-bold flex items-center gap-2">
-                <ShieldAlert className="h-5 w-5 shrink-0" />
-                <span>
-                  تم إيقاف ميزة السحب لحسابك الخاص من قبل الإدارة. يرجى مراجعة الدعم الفني.
-                </span>
-              </div>
-            ) : null}
-
             {/* Network Selector */}
             <div className="surface-card glow-border p-5 rounded-3xl space-y-3">
               <label className="block text-xs font-black text-foreground">
@@ -368,11 +375,9 @@ function WithdrawalPage() {
               >
                 {withdrawMutation.isPending
                   ? t("withdraw.submitting")
-                  : !globalWithdrawalsEnabled
-                    ? "السحب معطل حالياً من قبل الإدارة"
-                    : !userWithdrawalEnabled
-                      ? "تم إيقاف السحب لحسابك"
-                      : t("withdraw.submit")}
+                  : !isWithdrawalAllowed
+                    ? "السحب معطل حالياً"
+                    : t("withdraw.submit")}
               </button>
             </form>
           </div>

@@ -11,21 +11,43 @@ import {
   Play,
   Clock,
   Crown,
-  ShieldCheck,
-  ShieldAlert,
+  Power,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAdminTasks,
   saveAdminTask,
   getAdminSettings,
-  toggleGlobalTasks,
+  saveAdminSettings,
 } from "@/lib/valoriza-admin.functions";
 
 export function AdminTasksTab() {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<any | null>(null);
+
+  const { data: settings = {}, refetch: refetchSettings } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: () => getAdminSettings(),
+  });
+
+  const toggleGlobalTasks = useMutation({
+    mutationFn: (newVal: boolean) =>
+      saveAdminSettings({ tasks_enabled: newVal ? "true" : "false" }),
+    onSuccess: (_, newVal) => {
+      toast.success(
+        newVal
+          ? "تم تفعيل المهام اليومية لجميع المستخدمين بنجاح ✅"
+          : "تم إيقاف وتعطيل المهام اليومية ⛔ (ستظهر رسالة: لا توجد مهام اليوم)",
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const isGlobalTasksEnabled = settings["tasks_enabled"] !== "false";
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -36,27 +58,6 @@ export function AdminTasksTab() {
   const [minVipLevel, setMinVipLevel] = useState(1);
   const [taskNumber, setTaskNumber] = useState(1);
   const [isActive, setIsActive] = useState(true);
-
-  const { data: settings } = useQuery({
-    queryKey: ["admin-settings"],
-    queryFn: () => getAdminSettings(),
-  });
-
-  const globalTasksEnabled = (settings?.tasks_enabled ?? "true") !== "false";
-
-  const toggleGlobalTasksMutation = useMutation({
-    mutationFn: toggleGlobalTasks,
-    onSuccess: (res) => {
-      toast.success(
-        res.tasksEnabled
-          ? "تم تفعيل المهام اليومية لجميع المستخدمين (ON) بنجاح"
-          : "تم تعطيل المهام اليومية (OFF) وتظهر رسالة 'لا توجد مهام اليوم'",
-      );
-      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
-      queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
 
   const {
     data: tasks = [],
@@ -117,60 +118,55 @@ export function AdminTasksTab() {
 
   return (
     <div className="space-y-4">
-      {/* Global Tasks Switch Card */}
-      <div className="surface-card glow-border p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface/90">
+      {/* Global Tasks Control Switch */}
+      <div
+        className={`rounded-2xl border p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          isGlobalTasksEnabled
+            ? "border-emerald-500/40 bg-emerald-500/10"
+            : "border-danger/40 bg-danger/10"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-              globalTasksEnabled
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-danger/20 text-danger border border-danger/30"
-            }`}
+            className={`p-2.5 rounded-xl ${isGlobalTasksEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-danger/20 text-danger"}`}
           >
-            {globalTasksEnabled ? (
-              <ShieldCheck className="h-5 w-5" />
-            ) : (
-              <ShieldAlert className="h-5 w-5" />
-            )}
+            <Power className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black text-foreground">
-                مفتاح المهام اليومية العام لجميع المستخدمين
-              </h3>
+            <h3 className="text-xs font-black text-foreground flex items-center gap-2">
+              <span>مفتاح المهام اليومية العام (لجميع المستخدمين):</span>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                  globalTasksEnabled
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  isGlobalTasksEnabled
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                     : "bg-danger/20 text-danger border border-danger/30"
                 }`}
               >
-                {globalTasksEnabled ? "مفعل (ON)" : "معطل (OFF)"}
+                {isGlobalTasksEnabled ? "مفعّل (ON) 🟢" : "معطّل ومخفي (OFF) 🔴"}
               </span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {globalTasksEnabled
-                ? "المهام اليومية معروضة ومتاحة لجميع المستخدمين حسب رتبهم."
-                : "المهام مخفية بالكامل، وتظهر للمستخدم رسالة: 'لا توجد مهام اليوم'."}
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isGlobalTasksEnabled
+                ? "المهام اليومية ظاهرة وتعمل لجميع المستخدمين حسب خططهم."
+                : "المهام مخفية حالياً، وتظهر للمستخدم رسالة: 'لا توجد مهام اليوم'."}
             </p>
           </div>
         </div>
 
         <button
           type="button"
-          disabled={toggleGlobalTasksMutation.isPending}
-          onClick={() => toggleGlobalTasksMutation.mutate({ enabled: !globalTasksEnabled })}
-          className={`shrink-0 rounded-xl px-4 py-2 text-xs font-black transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer ${
-            globalTasksEnabled
-              ? "bg-danger text-white hover:bg-danger/90"
-              : "brand-gradient text-primary-foreground shadow-glow"
+          disabled={toggleGlobalTasks.isPending}
+          onClick={() => toggleGlobalTasks.mutate(!isGlobalTasksEnabled)}
+          className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${
+            isGlobalTasksEnabled
+              ? "bg-danger text-white hover:bg-danger/90 shadow-md"
+              : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-md"
           }`}
         >
-          {toggleGlobalTasksMutation.isPending
-            ? "جارٍ التحديث..."
-            : globalTasksEnabled
-              ? "تعطيل المهام للجميع (OFF)"
-              : "تفعيل المهام للجميع (ON)"}
+          <Power className="h-4 w-4" />
+          <span>
+            {isGlobalTasksEnabled ? "تعطيل المهام العامة (OFF)" : "تفعيل المهام العامة (ON)"}
+          </span>
         </button>
       </div>
 

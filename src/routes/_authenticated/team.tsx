@@ -46,10 +46,9 @@ function TeamPage() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | null>(null);
 
   const fetchData = useServerFn(getTeamData);
-  const { data = getMockTeamData() } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["team"],
     queryFn: () => fetchData(),
-    initialData: getMockTeamData,
   });
 
   const referralCode = data?.referralCode || "";
@@ -90,9 +89,23 @@ function TeamPage() {
     }
   }
 
+  // Exact system rates from PostgreSQL platform_settings (no fake numbers)
+  const r1 = data?.rates?.l1 ? `${Math.round(data.rates.l1 * 100)}%` : "8%";
+  const r2 = data?.rates?.l2 ? `${Math.round(data.rates.l2 * 100)}%` : "4%";
+  const r3 = data?.rates?.l3 ? `${Math.round(data.rates.l3 * 100)}%` : "1%";
+  const totalCommissionPercent = data?.rates
+    ? `${Math.round(((data.rates.l1 || 0) + (data.rates.l2 || 0) + (data.rates.l3 || 0)) * 100)}%`
+    : "13%";
+
+  const levelPercentages: Record<number, string> = {
+    1: r1,
+    2: r2,
+    3: r3,
+  };
+
   const filteredMembers =
     data?.members && selectedLevelFilter !== null
-      ? data.members.filter((m) => m.level === selectedLevelFilter)
+      ? data.members.filter((m: any) => m.level === selectedLevelFilter)
       : data?.members || [];
 
   return (
@@ -124,7 +137,9 @@ function TeamPage() {
                   <ShieldCheck className="h-4 w-4 text-success" />3 {t("team.referralLevels")}
                 </span>
                 <span>•</span>
-                <span className="text-gold font-bold">14% Total Commission</span>
+                <span className="text-gold font-bold">
+                  {totalCommissionPercent} إجمالي عمولات الفريق
+                </span>
               </div>
             </div>
 
@@ -137,7 +152,7 @@ function TeamPage() {
                   </span>
                   <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-border bg-background">
                     <span className="text-lg font-black tracking-widest text-gold font-mono select-all">
-                      {referralCode}
+                      {referralCode || "—"}
                     </span>
                     <button
                       id="btn-copy-team-code"
@@ -195,7 +210,7 @@ function TeamPage() {
             <div>
               <p className="text-xs text-muted-foreground font-semibold">{t("team.teamRewards")}</p>
               <p className="text-xl sm:text-2xl font-black text-gold-gradient mt-0.5">
-                {money(data.teamRewards)}
+                {money(data?.teamRewards ?? 0)}
               </p>
             </div>
           </div>
@@ -209,7 +224,7 @@ function TeamPage() {
                 {t("team.totalMembers")}
               </p>
               <p className="text-xl sm:text-2xl font-black text-foreground mt-0.5">
-                {data.totalMembers}{" "}
+                {data?.totalMembers ?? 0}{" "}
                 <span className="text-xs font-normal text-muted-foreground">
                   {t("team.members")}
                 </span>
@@ -224,7 +239,7 @@ function TeamPage() {
             <div>
               <p className="text-xs text-muted-foreground font-semibold">{t("team.teamIncome")}</p>
               <p className="text-xl sm:text-2xl font-black text-success mt-0.5">
-                {money(data.teamIncome)}
+                {money(data?.teamIncome ?? 0)}
               </p>
             </div>
           </div>
@@ -249,11 +264,15 @@ function TeamPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            {data.levels.map((lvl) => {
+            {(
+              data?.levels || [
+                { level: 1, members: 0, earnings: 0, ratePercent: r1 },
+                { level: 2, members: 0, earnings: 0, ratePercent: r2 },
+                { level: 3, members: 0, earnings: 0, ratePercent: r3 },
+              ]
+            ).map((lvl: any) => {
               const isSelected = selectedLevelFilter === lvl.level;
-              const rate = `${lvl.percent ?? 0}%`;
-              const membersCount = lvl.members ?? (lvl as any).count ?? 0;
-              const earningsAmount = lvl.earnings ?? (lvl as any).income ?? 0;
+              const rate = lvl.ratePercent || levelPercentages[lvl.level] || "—";
               return (
                 <button
                   key={lvl.level}
@@ -277,11 +296,11 @@ function TeamPage() {
                   <div className="space-y-1.5 pt-2 border-t border-border/50 text-xs">
                     <div className="flex justify-between text-muted-foreground">
                       <span>{t("team.members")}:</span>
-                      <span className="font-black text-foreground">{membersCount}</span>
+                      <span className="font-black text-foreground">{lvl.members}</span>
                     </div>
                     <div className="flex justify-between text-muted-foreground">
                       <span>{t("team.earnings")}:</span>
-                      <span className="font-black text-success">+{money(earningsAmount)}</span>
+                      <span className="font-black text-success">+{money(lvl.earnings)}</span>
                     </div>
                   </div>
                 </button>

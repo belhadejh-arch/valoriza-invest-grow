@@ -1,6 +1,5 @@
 import { createServerOnlyFn } from "@tanstack/react-start";
-import { buildApiUrl, hasConfiguredBackend } from "./backend-client";
-import { routeFallbackResponse } from "./mock-data";
+import { buildApiUrl } from "./backend-client";
 
 const getIncomingRequest = createServerOnlyFn(async () => {
   const { getRequest } = await import("@tanstack/react-start/server");
@@ -8,11 +7,6 @@ const getIncomingRequest = createServerOnlyFn(async () => {
 });
 
 export async function serverBackendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  // If no external backend configured, immediately return rich fallback data
-  if (!hasConfiguredBackend()) {
-    return routeFallbackResponse(path, init) as T;
-  }
-
   const headers = new Headers(init.headers);
   headers.set("content-type", "application/json");
   const request = await getIncomingRequest();
@@ -23,26 +17,22 @@ export async function serverBackendRequest<T>(path: string, init: RequestInit = 
 
   const url = buildApiUrl(path);
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      credentials: "include",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+  const response = await fetch(url, {
+    ...init,
+    headers,
+    credentials: "include",
+    signal: controller.signal,
+  });
+  clearTimeout(timeoutId);
 
-    if (response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as T;
-      return payload;
-    }
-  } catch {
-    // Backend offline / connection refused — fallback gracefully below
+  const payload = (await response.json().catch(() => ({}))) as T;
+  if (!response.ok) {
+    const errorMsg =
+      (payload as any)?.message || `Server backend request failed: ${response.status}`;
+    throw new Error(errorMsg);
   }
-
-  // Graceful fallback to avoid catastrophic "fetch failed" crashing the app
-  return routeFallbackResponse(path, init) as T;
+  return payload;
 }

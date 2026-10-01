@@ -169,21 +169,19 @@ export function AdminSettingsTab() {
         </div>
       </div>
 
-      {/* Global Platform Toggles */}
+      {/* Platform Global Switches Section */}
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
           <ShieldCheck className="h-4 w-4 text-cyan-glow" />
-          <span>مفاتيح التحكم العامة في المنصة (ON / OFF)</span>
+          <span>المفاتيح العامة للتحكم بالمنصة (ON / OFF)</span>
         </h3>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface">
+          <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface/80">
             <div>
-              <p className="text-xs font-extrabold text-foreground">السحب العام للجميع</p>
-              <p className="text-[10px] text-muted-foreground">
-                {form["withdrawals_enabled"] === "false"
-                  ? "السحب معطل حالياً لجميع المستخدمين"
-                  : "السحب متاح للمستخدمين المصرح لهم"}
+              <p className="text-xs font-black text-foreground">تفعيل السحب لجميع المستخدمين</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                عند التعطيل (OFF) يُقفل السحب عامةً وتظهر رسالة توضيحية للمستخدمين
               </p>
             </div>
             <button
@@ -194,23 +192,25 @@ export function AdminSettingsTab() {
                   form["withdrawals_enabled"] === "false" ? "true" : "false",
                 )
               }
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                form["withdrawals_enabled"] !== "false"
-                  ? "bg-emerald-500 text-white shadow-glow"
-                  : "bg-danger text-white shadow-sm"
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                form["withdrawals_enabled"] !== "false" ? "bg-emerald-500" : "bg-muted"
               }`}
             >
-              {form["withdrawals_enabled"] !== "false" ? "مفعل (ON)" : "معطل (OFF)"}
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  form["withdrawals_enabled"] !== "false"
+                    ? "translate-x-5 rtl:-translate-x-5"
+                    : "translate-x-0"
+                }`}
+              />
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface">
+          <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-surface/80">
             <div>
-              <p className="text-xs font-extrabold text-foreground">المهام اليومية</p>
-              <p className="text-[10px] text-muted-foreground">
-                {form["tasks_enabled"] === "false"
-                  ? "المهام مخفية وتظهر رسالة 'لا توجد مهام اليوم'"
-                  : "المهام متاحة لجميع المستخدمين"}
+              <p className="text-xs font-black text-foreground">تفعيل المهام اليومية</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                عند التعطيل (OFF) تختفي المهام وتظهر للمستخدم رسالة "لا توجد مهام اليوم"
               </p>
             </div>
             <button
@@ -218,13 +218,17 @@ export function AdminSettingsTab() {
               onClick={() =>
                 handleChange("tasks_enabled", form["tasks_enabled"] === "false" ? "true" : "false")
               }
-              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
-                form["tasks_enabled"] !== "false"
-                  ? "bg-emerald-500 text-white shadow-glow"
-                  : "bg-danger text-white shadow-sm"
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                form["tasks_enabled"] !== "false" ? "bg-emerald-500" : "bg-muted"
               }`}
             >
-              {form["tasks_enabled"] !== "false" ? "مفعل (ON)" : "معطل (OFF)"}
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  form["tasks_enabled"] !== "false"
+                    ? "translate-x-5 rtl:-translate-x-5"
+                    : "translate-x-0"
+                }`}
+              />
             </button>
           </div>
         </div>
@@ -234,7 +238,7 @@ export function AdminSettingsTab() {
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
           <Headphones className="h-4 w-4 text-purple-400" />
-          <span>خدمة العملاء والروابط والمجموعات الرسمية</span>
+          <span>خدمة العملاء والروابط الرسمية (مجموعات تيليجرام وواتساب)</span>
         </h3>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -246,7 +250,7 @@ export function AdminSettingsTab() {
               type="text"
               value={form["telegram_group_url"] || ""}
               onChange={(e) => handleChange("telegram_group_url", e.target.value)}
-              placeholder="https://t.me/..."
+              placeholder="https://t.me/your_group"
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
             />
           </div>
@@ -266,26 +270,24 @@ export function AdminSettingsTab() {
 
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              رابط تليجرام للدعم الفني
+              رابط تليجرام للدعم الفني (Support)
             </label>
             <input
               type="text"
               value={form["telegram_support_url"] || ""}
               onChange={(e) => handleChange("telegram_support_url", e.target.value)}
-              placeholder="https://t.me/..."
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
             />
           </div>
 
           <div>
             <label className="text-[10px] text-muted-foreground font-bold">
-              رابط واتساب للدعم الفني
+              رابط واتساب للدعم الفني (Support)
             </label>
             <input
               type="text"
               value={form["whatsapp_support_url"] || ""}
               onChange={(e) => handleChange("whatsapp_support_url", e.target.value)}
-              placeholder="https://wa.me/..."
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono text-[11px]"
             />
           </div>

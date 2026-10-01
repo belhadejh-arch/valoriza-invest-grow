@@ -42,34 +42,35 @@ export function SupportPage() {
     queryFn: () => fetchSettings(),
   });
 
+  const settings = data?.settings || {};
   const links = data?.supportLinks ?? [
     {
       id: "sup-1",
-      label: "موظف الاستقبال",
-      sublabel: "على تيليجرام",
+      label: "خدمة العملاء",
+      sublabel: "على تيليجرام (دعم فني)",
       platform: "telegram",
-      url: "https://t.me/valoriza_support",
+      url: settings.telegram_support_url || "https://t.me/valoriza_support",
     },
     {
       id: "sup-2",
-      label: "موظف الاستقبال",
-      sublabel: "على واتساب",
+      label: "خدمة العملاء",
+      sublabel: "على واتساب (دعم فني)",
       platform: "whatsapp",
-      url: "https://wa.me/34600000000",
+      url: settings.whatsapp_support_url || "https://wa.me/34600000000",
     },
     {
       id: "sup-3",
       label: "المجموعة الرسمية",
-      sublabel: "على تيليجرام",
+      sublabel: "مجموعة تيليجرام الرسمية",
       platform: "telegram",
-      url: "https://t.me/valoriza_official_group",
+      url: settings.telegram_group_url || "https://t.me/valoriza_official",
     },
     {
       id: "sup-4",
       label: "المجموعة الرسمية",
-      sublabel: "على واتساب",
+      sublabel: "مجموعة واتساب الرسمية",
       platform: "whatsapp",
-      url: "https://chat.whatsapp.com/valoriza_vip",
+      url: settings.whatsapp_group_url || "https://chat.whatsapp.com/valoriza",
     },
   ];
 

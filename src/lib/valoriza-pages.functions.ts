@@ -17,7 +17,7 @@ export const getInvestmentData = get("/api/app/investment");
 export const activateTrial = createServerFn({ method: "POST" }).handler(() =>
   serverBackendRequest("/api/app/trial", { method: "POST" }),
 );
-export const purchaseVip = post<{ level: number }>("/api/app/vip/purchase");
+export const purchaseVip = post<{ level?: number; packageId?: string }>("/api/app/vip/purchase");
 export const investInSavingsFund = post<{ fundId: string; amount: number }>("/api/app/invest");
 
 export const getTeamData = get("/api/app/team");
@@ -47,10 +47,6 @@ export const createDepositRequest = post<{
 }>("/api/app/deposit");
 
 export const changeUserPassword = post<{
-  newPassword?: string;
-  password?: string;
-}>("/api/auth/password");
-
-export const logoutUser = createServerFn({ method: "POST" }).handler(() =>
-  serverBackendRequest("/api/auth/logout", { method: "POST" }),
-);
+  newPassword: string;
+  currentPassword?: string;
+}>("/api/auth/change-password");

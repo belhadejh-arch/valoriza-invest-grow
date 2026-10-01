@@ -275,7 +275,7 @@ export function AppHeader({
               {/* Drawer Theme & Language bar */}
               <div className="mt-3 flex items-center justify-between rounded-xl bg-surface/60 p-2 border border-border/60">
                 <span className="text-xs font-bold text-muted-foreground">
-                  {t("common.language")} / {t("common.theme")}:
+                  {t("common.language")} والمظهر:
                 </span>
                 <div className="flex items-center gap-2">
                   <LanguageSwitcher />

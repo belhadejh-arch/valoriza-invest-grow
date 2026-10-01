@@ -8,15 +8,15 @@ import {
   Copy,
   X,
   RefreshCw,
-  ShieldAlert,
   ShieldCheck,
+  Power,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   getAdminWithdrawals,
   reviewWithdrawal,
   getAdminSettings,
-  toggleGlobalWithdrawals,
+  saveAdminSettings,
 } from "@/lib/valoriza-admin.functions";
 
 export function AdminWithdrawalsTab() {
@@ -26,20 +26,19 @@ export function AdminWithdrawalsTab() {
   const [selectedWithdrawalId, setSelectedWithdrawalId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
 
-  const { data: settings } = useQuery({
+  const { data: settings = {}, refetch: refetchSettings } = useQuery({
     queryKey: ["admin-settings"],
     queryFn: () => getAdminSettings(),
   });
 
-  const globalWithdrawalsEnabled = (settings?.withdrawals_enabled ?? "true") !== "false";
-
-  const toggleGlobalMutation = useMutation({
-    mutationFn: toggleGlobalWithdrawals,
-    onSuccess: (res) => {
+  const toggleGlobalWithdrawals = useMutation({
+    mutationFn: (newVal: boolean) =>
+      saveAdminSettings({ withdrawals_enabled: newVal ? "true" : "false" }),
+    onSuccess: (_, newVal) => {
       toast.success(
-        res.withdrawalsEnabled
-          ? "تم تفعيل السحب العام لجميع المستخدمين (ON) بنجاح"
-          : "تم تعطيل السحب العام لجميع المستخدمين (OFF) بنجاح",
+        newVal
+          ? "تم تفعيل السحب لجميع المستخدمين بنجاح ✅"
+          : "تم إيقاف وتعطيل السحب لجميع المستخدمين ⛔",
       );
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
       queryClient.invalidateQueries({ queryKey: ["withdrawal-info"] });
@@ -47,14 +46,18 @@ export function AdminWithdrawalsTab() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const isGlobalWithdrawalsEnabled = settings["withdrawals_enabled"] !== "false";
+
   const {
     data: withdrawals = [],
     isLoading,
+    isFetching,
     refetch,
   } = useQuery({
     queryKey: ["admin-withdrawals"],
     queryFn: () => getAdminWithdrawals(),
-    refetchInterval: 15000,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   const reviewMutation = useMutation({
@@ -67,6 +70,7 @@ export function AdminWithdrawalsTab() {
       );
       queryClient.invalidateQueries({ queryKey: ["admin-withdrawals"] });
       queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setRejectModalOpen(false);
       setRejectNote("");
       setSelectedWithdrawalId(null);
@@ -86,60 +90,55 @@ export function AdminWithdrawalsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Global Withdrawals Switch Card */}
-      <div className="surface-card glow-border p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface/90">
+      {/* Global Withdrawal Control Switch */}
+      <div
+        className={`rounded-2xl border p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+          isGlobalWithdrawalsEnabled
+            ? "border-emerald-500/40 bg-emerald-500/10"
+            : "border-danger/40 bg-danger/10"
+        }`}
+      >
         <div className="flex items-center gap-3">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-              globalWithdrawalsEnabled
-                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                : "bg-danger/20 text-danger border border-danger/30"
-            }`}
+            className={`p-2.5 rounded-xl ${isGlobalWithdrawalsEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-danger/20 text-danger"}`}
           >
-            {globalWithdrawalsEnabled ? (
-              <ShieldCheck className="h-5 w-5" />
-            ) : (
-              <ShieldAlert className="h-5 w-5" />
-            )}
+            <Power className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-xs font-black text-foreground">
-                مفتاح السحب العام لجميع المستخدمين
-              </h3>
+            <h3 className="text-xs font-black text-foreground flex items-center gap-2">
+              <span>مفتاح السحب العام (لجميع المستخدمين):</span>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
-                  globalWithdrawalsEnabled
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                  isGlobalWithdrawalsEnabled
                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                     : "bg-danger/20 text-danger border border-danger/30"
                 }`}
               >
-                {globalWithdrawalsEnabled ? "مفعل (ON)" : "معطل (OFF)"}
+                {isGlobalWithdrawalsEnabled ? "مفعّل (ON) 🟢" : "معطّل ومغلق (OFF) 🔴"}
               </span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {globalWithdrawalsEnabled
-                ? "عمليات السحب مفعلة حالياً لجميع المستخدمين المصرح لهم."
-                : "السحب متوقف بالكامل لجميع المستخدمين، وتظهر لهم رسالة توضيحية."}
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {isGlobalWithdrawalsEnabled
+                ? "السحب متاح للمستخدمين الذين تم تفعيل السحب في حساباتهم الفردية."
+                : "السحب متوقف ومغلق حالياً لجميع المستخدمين، وتظهر لهم رسالة توضيحية."}
             </p>
           </div>
         </div>
 
         <button
           type="button"
-          disabled={toggleGlobalMutation.isPending}
-          onClick={() => toggleGlobalMutation.mutate({ enabled: !globalWithdrawalsEnabled })}
-          className={`shrink-0 rounded-xl px-4 py-2 text-xs font-black transition-all shadow-sm active:scale-95 disabled:opacity-50 cursor-pointer ${
-            globalWithdrawalsEnabled
-              ? "bg-danger text-white hover:bg-danger/90"
-              : "brand-gradient text-primary-foreground shadow-glow"
+          disabled={toggleGlobalWithdrawals.isPending}
+          onClick={() => toggleGlobalWithdrawals.mutate(!isGlobalWithdrawalsEnabled)}
+          className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${
+            isGlobalWithdrawalsEnabled
+              ? "bg-danger text-white hover:bg-danger/90 shadow-md"
+              : "bg-emerald-500 text-white hover:bg-emerald-600 shadow-md"
           }`}
         >
-          {toggleGlobalMutation.isPending
-            ? "جارٍ التحديث..."
-            : globalWithdrawalsEnabled
-              ? "تعطيل السحب للجميع (OFF)"
-              : "تفعيل السحب للجميع (ON)"}
+          <Power className="h-4 w-4" />
+          <span>
+            {isGlobalWithdrawalsEnabled ? "تعطيل السحب العام (OFF)" : "تفعيل السحب العام (ON)"}
+          </span>
         </button>
       </div>
 
@@ -177,14 +176,23 @@ export function AdminWithdrawalsTab() {
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          <span>تحديث</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            تحديث تلقائي (5ث)
+          </span>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground active:scale-95"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-cyan-glow" : ""}`}
+            />
+            <span>تحديث</span>
+          </button>
+        </div>
       </div>
 
       {isLoading ? (

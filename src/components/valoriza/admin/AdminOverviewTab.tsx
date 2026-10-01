@@ -18,10 +18,11 @@ interface AdminOverviewTabProps {
 }
 
 export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
-    refetchInterval: 15000,
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 
   if (isLoading) {
@@ -36,7 +37,7 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
   const statCards = [
     {
       title: "إجمالي المستخدمين",
-      value: data?.totalUsers ?? 0,
+      value: data?.totalUsers ?? data?.usersCount ?? 0,
       sub: "مستثمر مسجل",
       icon: Users,
       color: "text-cyan-glow",
@@ -55,16 +56,16 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
     {
       title: "إجمالي الإيداعات المؤكدة",
       value: `$${(data?.totalDeposited ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-      sub: "سيولة داخلة",
+      sub: "سيولة داخلة (مقبولة)",
       icon: ArrowDownLeft,
       color: "text-emerald-400",
       border: "border-emerald-500/40",
       tab: "deposits",
     },
     {
-      title: "إجمالي السحوبات المصروفة",
+      title: "إجمالي الرصيد المسحوب",
       value: `$${(data?.totalWithdrawn ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
-      sub: "سيولة خارجة",
+      sub: "سحوبات مقبولة ومكتملة فقط",
       icon: ArrowUpRight,
       color: "text-amber-400",
       border: "border-amber-500/40",
@@ -114,6 +115,27 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
 
   return (
     <div className="space-y-5">
+      {/* Auto-refresh status bar & Manual refresh button */}
+      <div className="flex items-center justify-between rounded-2xl border border-border/80 bg-surface/60 px-4 py-2.5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span className="text-xs font-bold text-foreground">
+            تحديث تلقائي مستمر من PostgreSQL (كل 5 ثوانٍ)
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 rounded-xl border border-border bg-surface px-3 py-1.5 text-xs font-bold text-muted-foreground hover:text-foreground active:scale-95 transition-all"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-cyan-glow" : ""}`} />
+          <span>تحديث يدوي الآن</span>
+        </button>
+      </div>
       {/* Alert if pending transactions */}
       {((data?.pendingDepositsCount ?? 0) > 0 || (data?.pendingWithdrawalsCount ?? 0) > 0) && (
         <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-4 text-amber-200 flex items-start gap-3 shadow-lg">

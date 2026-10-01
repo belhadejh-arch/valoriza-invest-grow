@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -16,9 +15,9 @@ import {
   Shield,
   ArrowRight,
   ShieldCheck,
-  HelpCircle,
   RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AdminOverviewTab } from "@/components/valoriza/admin/AdminOverviewTab";
 import { AdminUsersTab } from "@/components/valoriza/admin/AdminUsersTab";
 import { AdminDepositsTab } from "@/components/valoriza/admin/AdminDepositsTab";
@@ -34,25 +33,23 @@ import { AdminAuditLogsTab } from "@/components/valoriza/admin/AdminAuditLogsTab
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
     meta: [
-      { title: "لوحة تحكم الإدارة — Valoriza Admin" },
-      { name: "description", content: "لوحة التحكم الإدارية لمنصة Valoriza." },
+      { title: "لوحة تحكم الإدارة — فالوريزا" },
+      { name: "description", content: "لوحة التحكم الإدارية لمنصة فالوريزا." },
     ],
   }),
   component: AdminDashboardPage,
 });
 
 function AdminDashboardPage() {
-  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("overview");
-  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const queryClient = useQueryClient();
+  const [isRefreshingGlobal, setIsRefreshingGlobal] = useState(false);
 
-  const handleRefreshAll = async () => {
-    setIsRefreshingAll(true);
+  const handleGlobalRefresh = async () => {
+    setIsRefreshingGlobal(true);
     await queryClient.invalidateQueries();
-    setTimeout(() => {
-      setIsRefreshingAll(false);
-      toast.success("تم تحديث جميع بيانات لوحة التحكم من PostgreSQL بنجاح ✅");
-    }, 400);
+    toast.success("تم تحديث جميع بيانات لوحة التحكم من PostgreSQL بنجاح");
+    setTimeout(() => setIsRefreshingGlobal(false), 500);
   };
 
   const tabs = [
@@ -88,17 +85,27 @@ function AdminDashboardPage() {
                 <ShieldCheck className="h-4 w-4" />
               </span>
               <div>
-                <h1 className="text-xs font-black text-foreground">لوحة إدارة Valoriza</h1>
-                <p className="text-[10px] text-amber-400 font-bold">Admin Console</p>
+                <h1 className="text-xs font-black text-foreground">لوحة إدارة فالوريزا</h1>
+                <p className="text-[10px] text-amber-400 font-bold">وحدة تحكم الإدارة</p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              النظام نشط
+            <span className="hidden sm:flex rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-[11px] font-bold text-emerald-400 items-center gap-1.5 shadow-sm">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              تحديث تلقائي نشط (5ث)
             </span>
+            <button
+              type="button"
+              onClick={handleGlobalRefresh}
+              disabled={isRefreshingGlobal}
+              title="تحديث فوري لجميع أقسام لوحة التحكم"
+              className="flex items-center gap-1.5 rounded-xl border border-cyan-glow/40 bg-cyan-glow/10 px-3 py-1.5 text-xs font-bold text-cyan-glow hover:bg-cyan-glow/20 active:scale-95 transition-all"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshingGlobal ? "animate-spin" : ""}`} />
+              <span>تحديث شامل</span>
+            </button>
           </div>
         </div>
 

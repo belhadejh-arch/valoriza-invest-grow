@@ -18,7 +18,7 @@ import {
 } from "./auth.js";
 
 const app = express();
-const port = Number(process.env.BACKEND_PORT ?? 4000);
+const port = Number(process.env.BACKEND_PORT ?? (process.env.PORT === "3000" ? 4000 : 4000));
 const allowedOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "")
   .split(",")
   .map((value) => value.trim())
@@ -123,12 +123,12 @@ async function changeBalance(
 
 async function distributeReferralCommissions(
   client: import("pg").PoolClient,
-  buyerUserId: string,
-  purchaseAmount: number,
-  sourceDescription: string,
-  sourceTxId?: string,
+  userId: string,
+  baseAmount: number,
+  sourceTransactionId?: string,
+  sourceDesc = "عمولة إحالة",
 ) {
-  if (purchaseAmount <= 0) return;
+  if (baseAmount <= 0) return;
   const settings = await getSettings();
   const rates: Record<number, number> = {
     1: number(settings.referral_rate_l1 ?? 0.08),
@@ -138,48 +138,54 @@ async function distributeReferralCommissions(
 
   const refs = await client.query<{ referrer_id: string; level: number }>(
     "SELECT referrer_id, level FROM referrals WHERE referred_id = $1 ORDER BY level ASC",
-    [buyerUserId],
+    [userId],
   );
 
-  for (const ref of refs.rows) {
-    const rate = rates[ref.level] ?? 0;
-    const commission = Math.round(purchaseAmount * rate * 100) / 100;
-    if (commission > 0) {
-      await changeBalance(
-        client,
-        ref.referrer_id,
-        commission,
-        "referral_commission",
-        `${sourceDescription} (مستوى ${ref.level})`,
-        sourceTxId,
-      );
-      await client.query(
-        "UPDATE wallets SET team_income = team_income + $1, updated_at = now() WHERE user_id = $2",
-        [commission, ref.referrer_id],
-      );
-      await client.query(
-        `INSERT INTO referral_commissions (referrer_id, referred_id, source_transaction_id, level, amount)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [ref.referrer_id, buyerUserId, sourceTxId ?? null, ref.level, commission],
-      );
-      await client.query(
-        `INSERT INTO rewards (user_id, source, amount, description_ar, reference_id)
-         VALUES ($1, 'referral', $2, $3, $4)`,
-        [
-          ref.referrer_id,
+  const userProfile = await client.query<{ username: string }>(
+    "SELECT username FROM profiles WHERE id = $1",
+    [userId],
+  );
+  const referredUsername = userProfile.rows[0]?.username || "عضو في فريقك";
+
+  for (const row of refs.rows) {
+    const rate = rates[row.level] ?? 0;
+    if (rate > 0) {
+      const commission = Math.round(baseAmount * rate * 100) / 100;
+      if (commission > 0) {
+        await changeBalance(
+          client,
+          row.referrer_id,
           commission,
-          `عمولة إحالة مستوى ${ref.level}: $${commission.toFixed(2)}`,
-          sourceTxId ?? null,
-        ],
-      );
-      await client.query(
-        `INSERT INTO notifications (user_id, title_ar, body_ar)
-         VALUES ($1, 'عمولة فريق جديدة 👥', $2)`,
-        [
-          ref.referrer_id,
-          `حصلت على عمولة بقيمة $${commission.toFixed(2)} من عضو في المستوى ${ref.level}!`,
-        ],
-      );
+          "referral_commission",
+          `${sourceDesc} - المستوى ${row.level} (من ${referredUsername})`,
+          sourceTransactionId,
+        );
+        await client.query("UPDATE wallets SET team_income = team_income + $1 WHERE user_id = $2", [
+          commission,
+          row.referrer_id,
+        ]);
+        await client.query(
+          "INSERT INTO referral_commissions (referrer_id, referred_id, source_transaction_id, level, amount) VALUES ($1,$2,$3,$4,$5)",
+          [row.referrer_id, userId, sourceTransactionId || null, row.level, commission],
+        );
+        await client.query(
+          "INSERT INTO rewards (user_id, source, amount, description_ar, reference_id) VALUES ($1, 'referral', $2, $3, $4)",
+          [
+            row.referrer_id,
+            commission,
+            `عمولة إحالة مستوى ${row.level} من ${referredUsername}`,
+            sourceTransactionId || null,
+          ],
+        );
+        await client.query(
+          "INSERT INTO notifications (user_id, title_ar, body_ar) VALUES ($1, $2, $3)",
+          [
+            row.referrer_id,
+            "عمولة إحالة جديدة 💰",
+            `حصلت على مكافأة إحالة بقيمة ${commission.toFixed(2)} من نشاط العضو ${referredUsername} (المستوى ${row.level}).`,
+          ],
+        );
+      }
     }
   }
 }
@@ -211,8 +217,7 @@ app.post("/api/auth/register", async (request, response, next) => {
               referralCode.trim().toUpperCase(),
             ])
           : { rows: [] };
-
-      const l1Id = referral.rows[0]?.id ?? null;
+      const referrerL1Id = referral.rows[0]?.id ?? null;
       await client.query(
         `INSERT INTO profiles (id, username, email, phone, referral_code, referred_by)
          VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -222,35 +227,37 @@ app.post("/api/auth/register", async (request, response, next) => {
           emailValue,
           phone?.trim() || null,
           `VZ${userId.slice(0, 8).toUpperCase()}`,
-          l1Id,
+          referrerL1Id,
         ],
       );
 
-      // Build 3-level referral relationships
-      if (l1Id) {
+      if (referrerL1Id) {
+        // Level 1
         await client.query(
-          "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1, $2, 1) ON CONFLICT DO NOTHING",
-          [l1Id, userId],
+          "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,1) ON CONFLICT (referrer_id, referred_id) DO NOTHING",
+          [referrerL1Id, userId],
         );
-        const l1Profile = await client.query<{ referred_by: string | null }>(
+        // Level 2
+        const l2 = await client.query<{ referred_by: string }>(
           "SELECT referred_by FROM profiles WHERE id = $1",
-          [l1Id],
+          [referrerL1Id],
         );
-        const l2Id = l1Profile.rows[0]?.referred_by;
-        if (l2Id) {
+        const referrerL2Id = l2.rows[0]?.referred_by;
+        if (referrerL2Id) {
           await client.query(
-            "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1, $2, 2) ON CONFLICT DO NOTHING",
-            [l2Id, userId],
+            "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,2) ON CONFLICT (referrer_id, referred_id) DO NOTHING",
+            [referrerL2Id, userId],
           );
-          const l2Profile = await client.query<{ referred_by: string | null }>(
+          // Level 3
+          const l3 = await client.query<{ referred_by: string }>(
             "SELECT referred_by FROM profiles WHERE id = $1",
-            [l2Id],
+            [referrerL2Id],
           );
-          const l3Id = l2Profile.rows[0]?.referred_by;
-          if (l3Id) {
+          const referrerL3Id = l3.rows[0]?.referred_by;
+          if (referrerL3Id) {
             await client.query(
-              "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1, $2, 3) ON CONFLICT DO NOTHING",
-              [l3Id, userId],
+              "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,3) ON CONFLICT (referrer_id, referred_id) DO NOTHING",
+              [referrerL3Id, userId],
             );
           }
         }
@@ -275,6 +282,23 @@ app.post("/api/auth/register", async (request, response, next) => {
     if ((error as { code?: string }).code === "23505")
       return response.status(409).json({ message: "ACCOUNT_EXISTS" });
     return next(error);
+  }
+});
+
+app.post("/api/auth/change-password", async (request, response, next) => {
+  try {
+    const user = await requireAuth(request);
+    const { newPassword } = request.body ?? {};
+    if (!newPassword || typeof newPassword !== "string" || newPassword.length < 6) {
+      return response
+        .status(400)
+        .json({ ok: false, message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل." });
+    }
+    const newHash = await hashPassword(newPassword);
+    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, user.id]);
+    response.json({ ok: true, message: "تم تغيير كلمة المرور بنجاح." });
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -333,13 +357,13 @@ app.post("/api/auth/logout", async (request, response, next) => {
 app.post("/api/auth/password", async (request, response, next) => {
   try {
     const user = await requireAuth(request);
-    const password = String(request.body?.newPassword ?? request.body?.password ?? "");
-    if (password.length < 6) {
-      return response.status(400).json({ ok: false, message: "PASSWORD_TOO_SHORT" });
-    }
-    const passwordHash = await hashPassword(password);
-    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [passwordHash, user.id]);
-    response.json({ ok: true, message: "PASSWORD_CHANGED_SUCCESS" });
+    const password = String(request.body?.password ?? "");
+    if (password.length < 8) return response.status(400).json({ message: "PASSWORD_TOO_SHORT" });
+    await query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+      await hashPassword(password),
+      user.id,
+    ]);
+    response.json({ user });
   } catch (error) {
     next(error);
   }
@@ -375,7 +399,7 @@ app.get("/api/app/home", async (request, response, next) => {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const [profile, wallet, settings, prizes, daily] = await Promise.all([
       query(
-        "SELECT id, username, email, vip_level, referral_code, trial_active, trial_expires_at, can_withdraw, wheel_spins_available FROM profiles WHERE id = $1",
+        "SELECT id, username, email, vip_level, referral_code, trial_active, trial_expires_at, wheel_spins_available, can_withdraw FROM profiles WHERE id = $1",
         [user.id],
       ),
       query(
@@ -384,14 +408,13 @@ app.get("/api/app/home", async (request, response, next) => {
       ),
       getSettings(true),
       query(
-        "SELECT id, label_ar, prize_type, prize_value, probability, icon, accent FROM lucky_wheel_configs WHERE is_active = true ORDER BY sort_order",
+        "SELECT id, label_ar, prize_type, prize_value, icon, accent, probability FROM lucky_wheel_configs WHERE is_active = true ORDER BY sort_order",
       ),
       query(
         "SELECT id FROM daily_login_rewards WHERE user_id = $1 AND reward_date = current_date",
         [user.id],
       ),
     ]);
-    const spinsAvailable = Math.max(0, number(profile.rows[0]?.wheel_spins_available ?? 0));
     response.json({
       profile: profile.rows[0],
       wallet: {
@@ -410,7 +433,7 @@ app.get("/api/app/home", async (request, response, next) => {
           icon: p.icon,
           accent: p.accent,
         })),
-        spinsLeft: spinsAvailable,
+        spinsLeft: Math.max(0, number(profile.rows[0]?.wheel_spins_available ?? 0)),
       },
       dailyReward: {
         amount: number(settings.daily_login_reward ?? 0),
@@ -460,9 +483,13 @@ app.post("/api/app/spin", async (request, response, next) => {
         "SELECT wheel_spins_available FROM profiles WHERE id=$1 FOR UPDATE",
         [user.id],
       );
-      const spinsAvailable = number(prof.rows[0]?.wheel_spins_available ?? 0);
-      if (spinsAvailable <= 0) {
-        return { ok: false, reason: "NO_SPINS_LEFT", spinsLeft: 0 };
+      const currentSpins = number(prof.rows[0]?.wheel_spins_available ?? 0);
+      if (currentSpins <= 0) {
+        return {
+          ok: false,
+          reason: "NO_SPINS_LEFT",
+          message: "لا توجد لديك فرص متاحة لعجلة الحظ.",
+        };
       }
 
       const prizes = await client.query<{
@@ -474,70 +501,64 @@ app.post("/api/app/spin", async (request, response, next) => {
         icon: string | null;
         accent: string;
       }>(
-        "SELECT id, label_ar, prize_type, prize_value, probability, icon, accent FROM lucky_wheel_configs WHERE is_active=true ORDER BY sort_order",
+        "SELECT id,label_ar,prize_type,prize_value,probability,icon,accent FROM lucky_wheel_configs WHERE is_active=true ORDER BY sort_order",
       );
       if (!prizes.rowCount) return { ok: false, reason: "NO_PRIZES_CONFIGURED" };
 
-      // Strictly validate probabilities - sum of configured weights (e.g. 85%)
-      const totalWeight = prizes.rows.reduce(
-        (sum, p) => sum + Math.max(0, number(p.probability)),
-        0,
-      );
-      if (totalWeight <= 0) return { ok: false, reason: "INVALID_WHEEL_WEIGHTS" };
-
-      // Sample using weighted probabilities without inventing extra prizes
-      let randomVal = Math.random() * totalWeight;
-      let selectedPrize = prizes.rows[0];
-      for (const p of prizes.rows) {
-        const weight = Math.max(0, number(p.probability));
-        if (weight <= 0) continue;
-        if (randomVal <= weight) {
-          selectedPrize = p;
-          break;
-        }
-        randomVal -= weight;
+      const totalWeight = prizes.rows.reduce((sum, p) => sum + Number(p.probability), 0);
+      if (totalWeight <= 0 || totalWeight > 100) {
+        return {
+          ok: false,
+          reason: "INVALID_WHEEL_CONFIG",
+          message: "إعدادات أوزان عجلة الحظ غير صالحة.",
+        };
       }
 
-      // Decrement available spin in PostgreSQL
+      // Exact weights selection without inventing missing percentage or extra prizes
+      const rand = Math.random() * totalWeight;
+      let cumulative = 0;
+      let prize = prizes.rows[0];
+      for (const p of prizes.rows) {
+        cumulative += Number(p.probability);
+        if (rand < cumulative) {
+          prize = p;
+          break;
+        }
+      }
+
+      // Decrement spin chance in database
       await client.query(
         "UPDATE profiles SET wheel_spins_available = wheel_spins_available - 1, updated_at = now() WHERE id = $1",
         [user.id],
       );
 
-      // Record result in PostgreSQL with user, timestamp, prize to prevent manipulation or reuse
-      const prizeVal = number(selectedPrize.prize_value);
-      const spinRecord = await client.query<{ id: string }>(
-        "INSERT INTO lucky_wheel_spins (user_id, config_id, spin_date, prize_value, created_at) VALUES ($1, $2, current_date, $3, now()) RETURNING id",
-        [user.id, selectedPrize.id, prizeVal],
+      // Record result in PostgreSQL with user, date/time, and prize
+      await client.query(
+        "INSERT INTO lucky_wheel_spins (user_id, config_id, spin_date, prize_value) VALUES ($1,$2,current_date,$3)",
+        [user.id, prize.id, prize.prize_value],
       );
 
+      const prizeVal = number(prize.prize_value);
       if (prizeVal > 0) {
-        await changeBalance(
-          client,
-          user.id,
-          prizeVal,
-          "lucky_wheel_reward",
-          `مكافأة عجلة الحظ: ${selectedPrize.label_ar}`,
-          spinRecord.rows[0]?.id,
-        );
+        await changeBalance(client, user.id, prizeVal, "lucky_wheel_reward", "مكافأة عجلة الحظ");
         await client.query(
-          "INSERT INTO rewards (user_id, source, amount, description_ar, reference_id) VALUES ($1, 'lucky_wheel', $2, $3, $4)",
-          [user.id, prizeVal, selectedPrize.label_ar, spinRecord.rows[0]?.id],
+          "INSERT INTO rewards (user_id, source, amount, description_ar) VALUES ($1,'lucky_wheel',$2,$3)",
+          [user.id, prizeVal, prize.label_ar],
         );
       }
 
       return {
         ok: true,
-        id: selectedPrize.id,
-        prizeId: selectedPrize.id,
-        label: selectedPrize.label_ar,
-        prizeType: selectedPrize.prize_type,
+        id: prize.id,
+        prizeId: prize.id,
+        label: prize.label_ar,
+        prizeType: prize.prize_type,
         prizeValue: prizeVal,
         value: prizeVal,
-        cash: prizeVal > 0,
-        icon: selectedPrize.icon,
-        accent: selectedPrize.accent,
-        spinsLeft: spinsAvailable - 1,
+        cash: prize.prize_type === "cash",
+        icon: prize.icon,
+        accent: prize.accent,
+        spinsLeft: currentSpins - 1,
       };
     });
     response.json(result);
@@ -703,22 +724,18 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
         [user.id, plan.rows[0].id, expires],
       );
       await client.query(
-        "UPDATE profiles SET vip_level=$1,vip_expires_at=$2,wheel_spins_available=COALESCE(wheel_spins_available, 0) + 1,updated_at=now() WHERE id=$3",
+        "UPDATE profiles SET vip_level=$1,vip_expires_at=$2, wheel_spins_available = COALESCE(wheel_spins_available, 0) + 1, updated_at = now() WHERE id=$3",
         [level, expires, user.id],
       );
       await distributeReferralCommissions(
         client,
         user.id,
         number(plan.rows[0].price),
-        `عمولة إحالة من تفعيل ${plan.rows[0].name}`,
+        plan.rows[0].id,
+        `عمولة تفعيل ${plan.rows[0].name}`,
       );
       const wallet = await client.query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]);
-      return {
-        ok: true,
-        vipLevel: level,
-        newBalance: number(wallet.rows[0]?.balance),
-        spinsAdded: 1,
-      };
+      return { ok: true, vipLevel: level, newBalance: number(wallet.rows[0]?.balance) };
     });
     response.json(result);
   } catch (error) {
@@ -805,7 +822,7 @@ app.post("/api/app/invest", async (request, response, next) => {
 app.get("/api/app/withdrawal", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const [wallet, address, settings, profile] = await Promise.all([
+    const [wallet, address, settings, prof] = await Promise.all([
       query("SELECT balance FROM wallets WHERE user_id = $1", [user.id]),
       query("SELECT network,address,locked FROM withdrawal_addresses WHERE user_id = $1", [
         user.id,
@@ -813,20 +830,27 @@ app.get("/api/app/withdrawal", async (request, response, next) => {
       getSettings(true),
       query("SELECT can_withdraw FROM profiles WHERE id = $1", [user.id]),
     ]);
-    const globalWithdrawalsEnabled =
-      (settings.withdrawals_enabled ?? "true").toLowerCase() === "true";
-    const userWithdrawalEnabled = profile.rows[0]?.can_withdraw !== false;
+
+    const globalEnabled = settings.withdrawals_enabled !== "false";
+    const userEnabled = prof.rows[0]?.can_withdraw !== false;
+    const canWithdraw = globalEnabled && userEnabled;
+    let disabledReason: string | null = null;
+    if (!globalEnabled) {
+      disabledReason = "السحب معطل حالياً لجميع المستخدمين بقرار من إدارة المنصة.";
+    } else if (!userEnabled) {
+      disabledReason = "تم تعطيل ميزة السحب لحسابك. يرجى التواصل مع الدعم الفني.";
+    }
+
     response.json({
       balance: number(wallet.rows[0]?.balance),
       boundAddress: address.rows[0] ?? null,
-      globalWithdrawalsEnabled,
-      userWithdrawalEnabled,
+      canWithdraw,
+      disabledReason,
       settings: {
         minWithdrawal: number(settings.min_withdrawal ?? 6),
         feePercent: number(settings.withdrawal_fee_percent ?? 10),
         startHour: settings.withdrawal_start_hour ?? "09:00",
         endHour: settings.withdrawal_end_hour ?? "16:00",
-        withdrawalsEnabled: globalWithdrawalsEnabled,
       },
     });
   } catch (error) {
@@ -866,18 +890,16 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
     const value = Number(amount);
     const settings = await getSettings();
 
-    // Check Global Withdrawals Switch
-    const globalWithdrawalsEnabled =
-      (settings.withdrawals_enabled ?? "true").toLowerCase() === "true";
-    if (!globalWithdrawalsEnabled) {
+    // Check global withdrawal switch
+    if (settings.withdrawals_enabled === "false") {
       return response.status(403).json({
         ok: false,
-        reason: "WITHDRAWALS_DISABLED_GLOBAL",
-        message: "عمليات السحب معطلة حالياً من قبل إدارة المنصة لجميع المستخدمين.",
+        reason: "GLOBAL_WITHDRAWALS_DISABLED",
+        message: "السحب معطل حالياً لجميع المستخدمين بقرار من إدارة المنصة.",
       });
     }
 
-    // Check User-Specific Withdrawal Switch
+    // Check per-user withdrawal switch
     const userProf = await query<{ can_withdraw: boolean }>(
       "SELECT can_withdraw FROM profiles WHERE id = $1",
       [user.id],
@@ -885,8 +907,8 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
     if (userProf.rows[0]?.can_withdraw === false) {
       return response.status(403).json({
         ok: false,
-        reason: "USER_WITHDRAWAL_DISABLED",
-        message: "تم إيقاف ميزة السحب لحسابك الخاص من قبل الإدارة. يرجى التواصل مع الدعم الفني.",
+        reason: "USER_WITHDRAWALS_DISABLED",
+        message: "تم تعطيل ميزة السحب لحسابك. يرجى التواصل مع الدعم الفني.",
       });
     }
 
@@ -925,54 +947,44 @@ app.get("/api/app/tasks", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const settings = await getSettings();
-    const tasksEnabled = (settings.tasks_enabled ?? "true").toLowerCase() === "true";
+    const walletRes = await query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]);
+    const currentBalance = number(walletRes.rows[0]?.balance);
 
-    const [profile, wallet, plans] = await Promise.all([
-      query("SELECT vip_level,trial_active,trial_expires_at FROM profiles WHERE id=$1", [user.id]),
-      query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]),
-      query("SELECT * FROM vip_packages WHERE level=(SELECT vip_level FROM profiles WHERE id=$1)", [
-        user.id,
-      ]),
-    ]);
-
-    const plan = plans.rows[0];
-    const vipLevel = number(profile.rows[0]?.vip_level);
-    const reward = vipLevel ? number(plan?.task_reward) : profile.rows[0]?.trial_active ? 0.5 : 0;
-    const limit = vipLevel ? number(plan?.daily_tasks) : profile.rows[0]?.trial_active ? 3 : 0;
-
-    if (!tasksEnabled) {
+    if (settings.tasks_enabled === "false") {
       return response.json({
-        tasksEnabled: false,
-        message: "لا توجد مهام اليوم",
-        vipLevel,
-        vipName: vipLevel
-          ? `VIP ${vipLevel}`
-          : profile.rows[0]?.trial_active
-            ? "الفترة التجريبية"
-            : "VIP",
-        isTrial: Boolean(profile.rows[0]?.trial_active),
-        trialExpiresAt: profile.rows[0]?.trial_expires_at,
-        videoCommission: reward,
+        vipLevel: 0,
+        vipName: "VIP",
+        isTrial: false,
+        videoCommission: 0,
         dailyLimit: 0,
         completedCount: 0,
         remainingTasks: 0,
         videoDuration: 10,
-        userBalance: number(wallet.rows[0]?.balance),
-        allDailyTasksCompleted: false,
+        userBalance: currentBalance,
+        allDailyTasksCompleted: true,
+        tasksEnabled: false,
+        message: "لا توجد مهام اليوم",
         tasks: [],
       });
     }
 
-    const [tasks, completions] = await Promise.all([
+    const [tasks, completions, profile, plans] = await Promise.all([
       query("SELECT * FROM tasks WHERE is_active=true ORDER BY sort_order"),
       query(
         "SELECT task_id FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
         [user.id],
       ),
+      query("SELECT vip_level,trial_active,trial_expires_at FROM profiles WHERE id=$1", [user.id]),
+      query("SELECT * FROM vip_packages WHERE level=(SELECT vip_level FROM profiles WHERE id=$1)", [
+        user.id,
+      ]),
     ]);
     const completed = new Set(completions.rows.map((row) => row.task_id));
+    const plan = plans.rows[0];
+    const vipLevel = number(profile.rows[0]?.vip_level);
+    const reward = vipLevel ? number(plan?.task_reward) : profile.rows[0]?.trial_active ? 0.5 : 0;
+    const limit = vipLevel ? number(plan?.daily_tasks) : profile.rows[0]?.trial_active ? 3 : 0;
     response.json({
-      tasksEnabled: true,
       vipLevel,
       vipName: vipLevel
         ? `VIP ${vipLevel}`
@@ -986,8 +998,9 @@ app.get("/api/app/tasks", async (request, response, next) => {
       completedCount: completed.size,
       remainingTasks: Math.max(0, limit - completed.size),
       videoDuration: 10,
-      userBalance: number(wallet.rows[0]?.balance),
+      userBalance: currentBalance,
       allDailyTasksCompleted: completed.size >= limit,
+      tasksEnabled: true,
       tasks: tasks.rows.map((task) => ({
         id: task.id,
         taskNumber: task.task_number,
@@ -1015,6 +1028,10 @@ app.get("/api/app/tasks", async (request, response, next) => {
 app.post("/api/app/tasks/complete", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
+    const settings = await getSettings();
+    if (settings.tasks_enabled === "false") {
+      return response.json({ ok: false, reason: "TASKS_DISABLED", message: "لا توجد مهام اليوم" });
+    }
     const { taskId, watchedSeconds } = request.body ?? {};
     const result = await withTransaction(async (client) => {
       const task = await client.query("SELECT id FROM tasks WHERE id=$1 AND is_active=true", [
@@ -1091,115 +1108,80 @@ app.get("/api/app/rewards", async (request, response, next) => {
 app.get("/api/app/team", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const [profile, wallet, settings] = await Promise.all([
+    const [profile, referrals, wallet, settings, commissions] = await Promise.all([
       query("SELECT id,username,email,referral_code FROM profiles WHERE id=$1", [user.id]),
+      query(
+        `SELECT p.id, p.username, p.email, p.vip_level, p.created_at, r.level
+         FROM referrals r
+         JOIN profiles p ON p.id = r.referred_id
+         WHERE r.referrer_id = $1
+         ORDER BY r.created_at DESC`,
+        [user.id],
+      ),
       query("SELECT team_income FROM wallets WHERE user_id=$1", [user.id]),
-      getSettings(true),
+      getSettings(),
+      query(
+        `SELECT rc.id, rc.level, rc.amount, rc.created_at, p.username AS referred_username
+         FROM referral_commissions rc
+         JOIN profiles p ON p.id = rc.referred_id
+         WHERE rc.referrer_id = $1
+         ORDER BY rc.created_at DESC LIMIT 50`,
+        [user.id],
+      ),
     ]);
 
-    const userProfile = profile.rows[0];
-    const referralCode = userProfile?.referral_code ?? "";
+    const l1Members = referrals.rows.filter((r) => r.level === 1);
+    const l2Members = referrals.rows.filter((r) => r.level === 2);
+    const l3Members = referrals.rows.filter((r) => r.level === 3);
 
-    const referrals = await query<{
-      id: string;
-      username: string;
-      email: string;
-      level: number;
-      vip_level: number;
-      created_at: string;
-    }>(
-      `SELECT p.id, p.username, p.email, p.vip_level, p.created_at, r.level
-       FROM referrals r
-       JOIN profiles p ON p.id = r.referred_id
-       WHERE r.referrer_id = $1
-       ORDER BY r.created_at DESC`,
-      [user.id],
-    );
+    const l1Earnings = commissions.rows
+      .filter((c) => c.level === 1)
+      .reduce((sum, c) => sum + number(c.amount), 0);
+    const l2Earnings = commissions.rows
+      .filter((c) => c.level === 2)
+      .reduce((sum, c) => sum + number(c.amount), 0);
+    const l3Earnings = commissions.rows
+      .filter((c) => c.level === 3)
+      .reduce((sum, c) => sum + number(c.amount), 0);
 
-    const commissions = await query<{
-      level: number;
-      total_commission: string;
-    }>(
-      `SELECT level, coalesce(sum(amount), 0) AS total_commission
-       FROM referral_commissions
-       WHERE referrer_id = $1
-       GROUP BY level`,
-      [user.id],
-    );
-
-    const levelComms: Record<number, number> = { 1: 0, 2: 0, 3: 0 };
-    for (const c of commissions.rows) {
-      levelComms[c.level] = number(c.total_commission);
-    }
-
-    const l1Count = referrals.rows.filter((r) => r.level === 1).length;
-    const l2Count = referrals.rows.filter((r) => r.level === 2).length;
-    const l3Count = referrals.rows.filter((r) => r.level === 3).length;
-
-    const rateL1 = Math.round(number(settings.referral_rate_l1 ?? 0.08) * 100);
-    const rateL2 = Math.round(number(settings.referral_rate_l2 ?? 0.04) * 100);
-    const rateL3 = Math.round(number(settings.referral_rate_l3 ?? 0.01) * 100);
-
-    const teamIncome = number(wallet.rows[0]?.team_income);
-    const totalMembers = referrals.rows.length;
-
-    const membersList = await Promise.all(
-      referrals.rows.map(async (m) => {
-        const userWallet = await query<{ total_deposited: string }>(
-          "SELECT total_deposited FROM wallets WHERE user_id = $1",
-          [m.id],
-        );
-        const userComm = await query<{ amount: string }>(
-          "SELECT coalesce(sum(amount), 0) as amount FROM referral_commissions WHERE referrer_id = $1 AND referred_id = $2",
-          [user.id, m.id],
-        );
-        return {
-          id: m.id,
-          username: m.username,
-          email: m.email,
-          level: m.level,
-          vipLevel: m.vip_level,
-          deposit: number(userWallet.rows[0]?.total_deposited),
-          commission: number(userComm.rows[0]?.amount),
-          date: m.created_at,
-        };
-      }),
-    );
+    const r1 = number(settings.referral_rate_l1 ?? 0.08);
+    const r2 = number(settings.referral_rate_l2 ?? 0.04);
+    const r3 = number(settings.referral_rate_l3 ?? 0.01);
 
     response.json({
-      profile: userProfile,
-      referralCode,
-      referralLink: "",
-      totalMembers,
-      teamIncome,
-      teamRewards: teamIncome,
+      referralCode: profile.rows[0]?.referral_code || "",
+      totalMembers: referrals.rows.length,
+      teamRewards: number(wallet.rows[0]?.team_income),
+      teamIncome: number(wallet.rows[0]?.team_income),
+      rates: { l1: r1, l2: r2, l3: r3 },
       levels: [
         {
           level: 1,
-          percent: rateL1,
-          count: l1Count,
-          members: l1Count,
-          income: levelComms[1],
-          earnings: levelComms[1],
+          members: l1Members.length,
+          earnings: l1Earnings,
+          ratePercent: `${Math.round(r1 * 100)}%`,
         },
         {
           level: 2,
-          percent: rateL2,
-          count: l2Count,
-          members: l2Count,
-          income: levelComms[2],
-          earnings: levelComms[2],
+          members: l2Members.length,
+          earnings: l2Earnings,
+          ratePercent: `${Math.round(r2 * 100)}%`,
         },
         {
           level: 3,
-          percent: rateL3,
-          count: l3Count,
-          members: l3Count,
-          income: levelComms[3],
-          earnings: levelComms[3],
+          members: l3Members.length,
+          earnings: l3Earnings,
+          ratePercent: `${Math.round(r3 * 100)}%`,
         },
       ],
-      members: membersList,
+      members: referrals.rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        level: row.level,
+        vipLevel: row.vip_level,
+        createdAt: row.created_at,
+      })),
       commissions: commissions.rows,
     });
   } catch (error) {
@@ -1262,50 +1244,55 @@ app.get("/api/admin/overview", async (request, response, next) => {
     await requireAdmin(request);
     const [
       users,
-      totalBalances,
-      confirmedDeposits,
-      confirmedWithdrawals,
       pendingDeposits,
       pendingWithdrawals,
+      approvedWithdrawals,
+      approvedDeposits,
+      walletsBalance,
       investments,
       tasks,
     ] = await Promise.all([
       query("SELECT count(*)::int AS count FROM users"),
-      query("SELECT coalesce(sum(balance), 0)::numeric AS amount FROM wallets"),
       query(
-        "SELECT coalesce(sum(amount), 0)::numeric AS amount FROM deposits WHERE status IN ('approved', 'completed')",
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM deposits WHERE status='pending'",
       ),
       query(
-        "SELECT coalesce(sum(amount), 0)::numeric AS amount FROM withdrawals WHERE status IN ('approved', 'completed')",
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM withdrawals WHERE status='pending'",
       ),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0)::numeric AS amount FROM deposits WHERE status='pending'",
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM withdrawals WHERE status IN ('approved', 'completed')",
       ),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0)::numeric AS amount FROM withdrawals WHERE status='pending'",
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM deposits WHERE status IN ('approved', 'completed')",
       ),
+      query("SELECT coalesce(sum(balance),0) AS total_balance FROM wallets"),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0)::numeric AS amount FROM investments WHERE status='active'",
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM investments WHERE status='active'",
       ),
       query("SELECT count(*)::int AS count FROM task_completions"),
     ]);
 
-    const totalWithdrawnVal = number(confirmedWithdrawals.rows[0]?.amount);
+    const totalWithdrawnAmount = number(approvedWithdrawals.rows[0]?.amount);
+    const totalDepositedAmount = number(approvedDeposits.rows[0]?.amount);
+    const totalBalanceAmount = number(walletsBalance.rows[0]?.total_balance);
+    const usersCountNum = number(users.rows[0]?.count);
+
     response.json({
-      totalUsers: number(users.rows[0]?.count),
-      usersCount: number(users.rows[0]?.count),
-      totalBalance: number(totalBalances.rows[0]?.amount),
-      totalDeposited: number(confirmedDeposits.rows[0]?.amount),
-      totalWithdrawn: totalWithdrawnVal,
-      totalWithdrawnAmount: totalWithdrawnVal,
+      usersCount: usersCountNum,
+      totalUsers: usersCountNum,
+      totalBalance: totalBalanceAmount,
+      totalDeposited: totalDepositedAmount,
+      totalWithdrawn: totalWithdrawnAmount,
       pendingDepositsCount: number(pendingDeposits.rows[0]?.count),
       pendingDepositsAmount: number(pendingDeposits.rows[0]?.amount),
       pendingWithdrawalsCount: number(pendingWithdrawals.rows[0]?.count),
       pendingWithdrawalsAmount: number(pendingWithdrawals.rows[0]?.amount),
+      approvedWithdrawalsCount: number(approvedWithdrawals.rows[0]?.count),
+      approvedWithdrawalsAmount: totalWithdrawnAmount,
       activeInvestmentsCount: number(investments.rows[0]?.count),
       activeInvestmentsVolume: number(investments.rows[0]?.amount),
-      totalTasksCompleted: number(tasks.rows[0]?.count),
       taskCompletionsCount: number(tasks.rows[0]?.count),
+      totalTasksCompleted: number(tasks.rows[0]?.count),
     });
   } catch (error) {
     next(error);
@@ -1315,170 +1302,75 @@ app.get("/api/admin/overview", async (request, response, next) => {
 app.get("/api/admin/users", async (_request, response, next) => {
   try {
     const result = await query(
-      `SELECT p.id, p.username, p.email, p.phone, p.referral_code, p.vip_level, p.trial_active, p.is_blocked,
-        COALESCE(p.can_withdraw, true) AS can_withdraw,
-        COALESCE(p.wheel_spins_available, 0) AS wheel_spins_available,
-        p.created_at,
-        w.balance, w.total_deposited, w.invested_balance, w.team_income,
-        -- Count only team members who have active VIP strictly from VIP1 to VIP7
-        (
-          SELECT count(DISTINCT tm.member_id)::int
-          FROM (
-            SELECT r.referred_id AS member_id
-            FROM referrals r
-            WHERE r.referrer_id = p.id
-            UNION
-            SELECT p_dir.id AS member_id
-            FROM profiles p_dir
-            WHERE p_dir.referred_by = p.id
-          ) tm
-          JOIN profiles p_sub ON p_sub.id = tm.member_id
-          WHERE p_sub.vip_level >= 1 AND p_sub.vip_level <= 7
-            AND (p_sub.vip_expires_at IS NULL OR p_sub.vip_expires_at > now())
-        ) AS team_vip_count,
-        -- Total referrals count
-        (
-          SELECT count(DISTINCT tm.member_id)::int
-          FROM (
-            SELECT r.referred_id AS member_id
-            FROM referrals r
-            WHERE r.referrer_id = p.id
-            UNION
-            SELECT p_dir.id AS member_id
-            FROM profiles p_dir
-            WHERE p_dir.referred_by = p.id
-          ) tm
-        ) AS team_total_count,
-        -- Team members total approved/completed withdrawals strictly from PostgreSQL withdrawals table
-        (
-          SELECT coalesce(sum(w_sub.amount), 0)::numeric
-          FROM withdrawals w_sub
-          WHERE w_sub.status IN ('approved', 'completed')
-            AND w_sub.user_id IN (
-              SELECT r.referred_id FROM referrals r WHERE r.referrer_id = p.id
-              UNION
-              SELECT p_dir.id FROM profiles p_dir WHERE p_dir.referred_by = p.id
-            )
-        ) AS team_withdrawn,
-        -- User own approved/completed withdrawals
-        (
-          SELECT coalesce(sum(w_self.amount), 0)::numeric
-          FROM withdrawals w_self
-          WHERE w_self.user_id = p.id
-            AND w_self.status IN ('approved', 'completed')
-        ) AS user_withdrawn,
-        (SELECT address FROM withdrawal_addresses WHERE user_id = p.id) AS withdrawal_address,
-        (SELECT network FROM withdrawal_addresses WHERE user_id = p.id) AS withdrawal_network
+      `SELECT p.id, p.username, p.email, p.phone, p.referral_code, p.vip_level, p.trial_active,
+              p.is_blocked, p.can_withdraw, p.wheel_spins_available, p.created_at,
+              w.balance, w.total_deposited, w.total_withdrawn, w.invested_balance, w.team_income,
+              wa.address AS withdrawal_address, wa.network AS withdrawal_network,
+              (
+                SELECT count(DISTINCT member_id)::int
+                FROM (
+                  SELECT r.referred_id AS member_id
+                  FROM referrals r
+                  WHERE r.referrer_id = p.id
+                  UNION
+                  SELECT p_sub.id AS member_id
+                  FROM profiles p_sub
+                  WHERE p_sub.referred_by = p.id
+                ) all_refs
+                JOIN profiles pr ON pr.id = all_refs.member_id
+                WHERE pr.vip_level >= 1 AND pr.vip_level <= 7
+              ) AS team_vip_count,
+              COALESCE((
+                SELECT sum(w_sub.amount)
+                FROM withdrawals w_sub
+                WHERE w_sub.user_id IN (
+                  SELECT r.referred_id
+                  FROM referrals r
+                  WHERE r.referrer_id = p.id
+                  UNION
+                  SELECT p_sub.id
+                  FROM profiles p_sub
+                  WHERE p_sub.referred_by = p.id
+                )
+                AND w_sub.status IN ('approved', 'completed')
+              ), 0) AS team_withdrawn,
+              COALESCE((
+                SELECT sum(w_own.amount)
+                FROM withdrawals w_own
+                WHERE w_own.user_id = p.id
+                  AND w_own.status IN ('approved', 'completed')
+              ), 0) AS user_approved_withdrawn
        FROM profiles p
        LEFT JOIN wallets w ON w.user_id = p.id
-       ORDER BY p.created_at DESC LIMIT 100`,
+       LEFT JOIN withdrawal_addresses wa ON wa.user_id = p.id
+       ORDER BY p.created_at DESC LIMIT 200`,
     );
-
     response.json(
-      result.rows.map((row) => {
-        const teamWithdrawnVal = number(row.team_withdrawn);
-        const userWithdrawnVal = number(row.user_withdrawn);
-        const teamVipCountVal = number(row.team_vip_count);
-        return {
-          id: row.id,
-          username: row.username,
-          email: row.email,
-          phone: row.phone,
-          referralCode: row.referral_code,
-          vipLevel: row.vip_level,
-          trialActive: row.trial_active,
-          isBlocked: row.is_blocked,
-          canWithdraw: row.can_withdraw,
-          wheelSpinsAvailable: row.wheel_spins_available,
-          withdrawalAddress: row.withdrawal_address ?? null,
-          withdrawalNetwork: row.withdrawal_network ?? null,
-          createdAt: row.created_at,
-          balance: number(row.balance),
-          totalDeposited: number(row.total_deposited),
-          totalWithdrawn: teamWithdrawnVal, // team withdrawal total for display
-          teamWithdrawn: teamWithdrawnVal,
-          userWithdrawn: userWithdrawnVal,
-          investedBalance: number(row.invested_balance),
-          teamIncome: number(row.team_income),
-          teamCount: teamVipCountVal, // strictly VIP 1-7 members
-          teamVipCount: teamVipCountVal,
-          teamTotalCount: number(row.team_total_count),
-        };
-      }),
+      result.rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        phone: row.phone,
+        referralCode: row.referral_code,
+        vipLevel: row.vip_level,
+        trialActive: row.trial_active,
+        isBlocked: row.is_blocked,
+        canWithdraw: row.can_withdraw !== false,
+        wheelSpins: number(row.wheel_spins_available ?? 0),
+        withdrawalAddress: row.withdrawal_address || null,
+        withdrawalNetwork: row.withdrawal_network || null,
+        createdAt: row.created_at,
+        balance: number(row.balance),
+        totalDeposited: number(row.total_deposited),
+        totalWithdrawn: number(row.user_approved_withdrawn),
+        userWithdrawn: number(row.user_approved_withdrawn),
+        teamWithdrawn: number(row.team_withdrawn),
+        teamVipCount: number(row.team_vip_count),
+        teamCount: number(row.team_vip_count),
+        investedBalance: number(row.invested_balance),
+        teamIncome: number(row.team_income),
+      })),
     );
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/admin/users/withdrawal-address", async (request, response, next) => {
-  try {
-    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { userId, network, address } = request.body ?? {};
-    if (!userId || !address) {
-      return response.status(400).json({ ok: false, message: "INVALID_PARAMETERS" });
-    }
-    const cleanNetwork = ["TRC20", "BEP20", "ERC20"].includes(network) ? network : "TRC20";
-    const cleanAddress = String(address).trim();
-    await query(
-      `INSERT INTO withdrawal_addresses (user_id, network, address, locked) VALUES ($1, $2, $3, true)
-       ON CONFLICT (user_id) DO UPDATE SET network = EXCLUDED.network, address = EXCLUDED.address, locked = true`,
-      [userId, cleanNetwork, cleanAddress],
-    );
-    await query(
-      "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, 'UPDATE_WITHDRAWAL_ADDRESS', $2, $3)",
-      [admin.id, userId, JSON.stringify({ network: cleanNetwork, address: cleanAddress })],
-    );
-    response.json({ ok: true, address: cleanAddress, network: cleanNetwork });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/admin/users/withdrawal-status", async (request, response, next) => {
-  try {
-    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { userId, canWithdraw } = request.body ?? {};
-    const enabled = Boolean(canWithdraw);
-    await query("UPDATE profiles SET can_withdraw = $1, updated_at = now() WHERE id = $2", [
-      enabled,
-      userId,
-    ]);
-    await query(
-      "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, 'SET_WITHDRAWAL_STATUS', $2, $3)",
-      [admin.id, userId, JSON.stringify({ canWithdraw: enabled })],
-    );
-    response.json({ ok: true, canWithdraw: enabled });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/admin/wheel/grant-spin", async (request, response, next) => {
-  try {
-    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { userId, count = 1 } = request.body ?? {};
-    if (!userId) return response.status(400).json({ ok: false, message: "USER_REQUIRED" });
-    const spinsCount = Math.max(1, Number(count) || 1);
-    const result = await query(
-      "UPDATE profiles SET wheel_spins_available = COALESCE(wheel_spins_available, 0) + $1, updated_at = now() WHERE id = $2 RETURNING wheel_spins_available, username",
-      [spinsCount, userId],
-    );
-    if (!result.rowCount)
-      return response.status(404).json({ ok: false, message: "USER_NOT_FOUND" });
-    await query(
-      "INSERT INTO notifications (user_id, title_ar, body_ar) VALUES ($1, 'فرصة مجانية في عجلة الحظ 🎁', $2)",
-      [userId, `تم منحك ${spinsCount} فرصة مجانية في عجلة الحظ من قبل إدارة المنصة!`],
-    );
-    await query(
-      "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, 'GRANT_FREE_SPIN', $2, $3)",
-      [admin.id, userId, JSON.stringify({ spinsCount })],
-    );
-    response.json({
-      ok: true,
-      wheelSpinsAvailable: result.rows[0].wheel_spins_available,
-      username: result.rows[0].username,
-    });
   } catch (error) {
     next(error);
   }
@@ -1507,18 +1399,100 @@ app.post("/api/admin/users/block", async (request, response, next) => {
   }
 });
 
+app.post("/api/admin/users/toggle-withdrawal", async (request, response, next) => {
+  try {
+    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
+    const { userId, canWithdraw } = request.body ?? {};
+    await query("UPDATE profiles SET can_withdraw = $1, updated_at = now() WHERE id = $2", [
+      Boolean(canWithdraw),
+      userId,
+    ]);
+    await query(
+      "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, $2, $3, $4)",
+      [
+        admin.id,
+        "TOGGLE_USER_WITHDRAWAL",
+        userId,
+        JSON.stringify({ canWithdraw: Boolean(canWithdraw) }),
+      ],
+    );
+    response.json({ ok: true, canWithdraw: Boolean(canWithdraw) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/users/withdrawal-address", async (request, response, next) => {
+  try {
+    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
+    const { userId, address, network } = request.body ?? {};
+    const net = network || "TRC20";
+    const addr = String(address ?? "").trim();
+    if (!addr) {
+      return response.status(400).json({ ok: false, message: "عنوان المحفظة مطلوب" });
+    }
+    await query(
+      `INSERT INTO withdrawal_addresses (user_id, network, address, locked)
+       VALUES ($1, $2, $3, false)
+       ON CONFLICT (user_id) DO UPDATE SET address = $3, network = $2, locked = false`,
+      [userId, net, addr],
+    );
+    await query(
+      "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, $2, $3, $4)",
+      [
+        admin.id,
+        "UPDATE_USER_WITHDRAWAL_ADDRESS",
+        userId,
+        JSON.stringify({ address: addr, network: net }),
+      ],
+    );
+    response.json({ ok: true, address: addr, network: net });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/admin/users/add-wheel-spin", async (request, response, next) => {
+  try {
+    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
+    const { userId, count } = request.body ?? {};
+    const addCount = Math.max(1, Number(count) || 1);
+    const updated = await query<{ wheel_spins_available: number }>(
+      `UPDATE profiles
+       SET wheel_spins_available = COALESCE(wheel_spins_available, 0) + $1, updated_at = now()
+       WHERE id = $2 RETURNING wheel_spins_available`,
+      [addCount, userId],
+    );
+    await query("INSERT INTO notifications (user_id, title_ar, body_ar) VALUES ($1, $2, $3)", [
+      userId,
+      "فرصة مجانية لعجلة الحظ! 🎟️",
+      `منحتك إدارة المنصة ${addCount} فرصة مجانية إضافية في عجلة الحظ. جرب حظك الآن!`,
+    ]);
+    await query(
+      "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, $2, $3, $4)",
+      [admin.id, "ADD_FREE_WHEEL_SPIN", userId, JSON.stringify({ count: addCount })],
+    );
+    response.json({ ok: true, newSpins: updated.rows[0]?.wheel_spins_available ?? addCount });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/admin/users/vip", async (request, response, next) => {
   try {
     const admin = (request as express.Request & { authUser: { id: string } }).authUser;
     const targetUserId = request.body?.targetUserId;
     const vipLevel = Number(request.body?.vipLevel);
-    await query("UPDATE profiles SET vip_level=$1, updated_at=now() WHERE id=$2", [
-      vipLevel,
-      targetUserId,
-    ]);
+    await query(
+      "UPDATE profiles SET vip_level=$1, wheel_spins_available = COALESCE(wheel_spins_available, 0) + 1, updated_at=now() WHERE id=$2",
+      [vipLevel, targetUserId],
+    );
     await query(
       "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,'ترقية مستوى VIP',$2)",
-      [targetUserId, `تم تحديث رتبتك إلى VIP ${vipLevel} من قبل إدارة المنصة.`],
+      [
+        targetUserId,
+        `تم تحديث رتبتك إلى VIP ${vipLevel} من قبل إدارة المنصة وحصلت على فرصة واحدة في عجلة الحظ.`,
+      ],
     );
     await query(
       "INSERT INTO admin_actions (admin_id,action,target_user_id,details) VALUES ($1,'SET_VIP_LEVEL',$2,$3)",
@@ -1594,13 +1568,21 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
         throw Object.assign(new Error("ALREADY_PROCESSED"), { status: 409 });
       const status = action === "approve" ? "approved" : "rejected";
       if (status === "approved") {
+        const depAmount = number(deposit.rows[0].amount);
         await changeBalance(
           client,
           deposit.rows[0].user_id,
-          number(deposit.rows[0].amount),
+          depAmount,
           "deposit",
           "اعتماد طلب الإيداع",
           depositId,
+        );
+        await distributeReferralCommissions(
+          client,
+          deposit.rows[0].user_id,
+          depAmount,
+          depositId,
+          "عمولة إيداع إحالة",
         );
       }
       await client.query(
@@ -1911,44 +1893,6 @@ app.post("/api/admin/settings/save", async (request, response, next) => {
   }
 });
 
-app.post("/api/admin/withdrawals/toggle-global", async (request, response, next) => {
-  try {
-    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { enabled } = request.body ?? {};
-    const val = enabled ? "true" : "false";
-    await query(
-      "INSERT INTO platform_settings (key, value, is_public) VALUES ('withdrawals_enabled', $1, true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
-      [val],
-    );
-    await query(
-      "INSERT INTO admin_actions (admin_id, action, details) VALUES ($1, 'TOGGLE_GLOBAL_WITHDRAWALS', $2)",
-      [admin.id, JSON.stringify({ enabled: Boolean(enabled) })],
-    );
-    response.json({ ok: true, withdrawalsEnabled: Boolean(enabled) });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/admin/tasks/toggle-global", async (request, response, next) => {
-  try {
-    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
-    const { enabled } = request.body ?? {};
-    const val = enabled ? "true" : "false";
-    await query(
-      "INSERT INTO platform_settings (key, value, is_public) VALUES ('tasks_enabled', $1, true) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
-      [val],
-    );
-    await query(
-      "INSERT INTO admin_actions (admin_id, action, details) VALUES ($1, 'TOGGLE_GLOBAL_TASKS', $2)",
-      [admin.id, JSON.stringify({ enabled: Boolean(enabled) })],
-    );
-    response.json({ ok: true, tasksEnabled: Boolean(enabled) });
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.post("/api/admin/notifications", async (request, response, next) => {
   try {
     const data = request.body ?? {};
@@ -2024,8 +1968,7 @@ async function initDatabase() {
     if (!adminId) {
       const adminHash = await hashPassword(adminPassword);
       const res = await query<{ id: string }>(
-        `INSERT INTO users (email, password_hash) VALUES ($1, $2)
-         ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash RETURNING id`,
+        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
         [adminEmail, adminHash],
       );
       adminId = res.rows[0].id;
@@ -2034,9 +1977,7 @@ async function initDatabase() {
          VALUES ($1, 'admin', $2, 'ADMIN')
          ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
         [adminId, adminEmail],
-      ).catch(async () => {
-        await query("UPDATE profiles SET email = $1 WHERE username = 'admin'", [adminEmail]);
-      });
+      );
       await query(
         "INSERT INTO wallets (user_id, balance) VALUES ($1, 1000) ON CONFLICT (user_id) DO NOTHING",
         [adminId],
@@ -2065,14 +2006,11 @@ async function initDatabase() {
     // Ensure default user exists
     const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();
     const userPassword = process.env.USER_PASSWORD || "ValorizaUser2025!";
-    const userCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
-      userEmail,
-    ]);
+    const userCheck = await query("SELECT id FROM users WHERE email = $1", [userEmail]);
     if (!userCheck.rowCount) {
       const userHash = await hashPassword(userPassword);
       const res = await query<{ id: string }>(
-        `INSERT INTO users (email, password_hash) VALUES ($1, $2)
-         ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash RETURNING id`,
+        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
         [userEmail, userHash],
       );
       const uId = res.rows[0].id;
@@ -2081,9 +2019,7 @@ async function initDatabase() {
          VALUES ($1, 'valoriza_user', $2, 'VALORIZAUSER')
          ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
         [uId, userEmail],
-      ).catch(async () => {
-        await query("UPDATE profiles SET email = $1 WHERE username = 'valoriza_user'", [userEmail]);
-      });
+      );
       await query(
         "INSERT INTO wallets (user_id, balance) VALUES ($1, 100) ON CONFLICT (user_id) DO NOTHING",
         [uId],
@@ -2164,140 +2100,77 @@ async function initDatabase() {
       }
     }
 
-    // Seed default platform settings if empty
-    const settingsCount = await query("SELECT count(*)::int as count FROM platform_settings");
-    if ((settingsCount.rows[0]?.count ?? 0) === 0) {
-      const settings: [string, string, string, boolean][] = [
-        ["min_deposit", "10", "الحد الأدنى للإيداع بالدولار", true],
-        ["min_withdrawal", "6", "الحد الأدنى للسحب بالدولار", true],
-        ["withdrawal_fee_percent", "10", "نسبة رسوم السحب", true],
-        ["withdrawal_start_hour", "09:00", "بداية وقت السحب", true],
-        ["withdrawal_end_hour", "16:00", "نهاية وقت السحب", true],
-        ["withdrawals_enabled", "true", "تفعيل السحب", true],
-        ["tasks_enabled", "true", "تفعيل المهام", true],
-        ["telegram_group_url", "https://t.me/valoriza_official", "رابط مجموعة Telegram", true],
-        ["whatsapp_group_url", "https://chat.whatsapp.com/valoriza", "رابط مجموعة WhatsApp", true],
-        ["min_investment", "5", "الحد الأدنى للاستثمار", true],
-        ["daily_login_reward", "0.11", "مكافأة تسجيل الدخول اليومية", true],
-        ["referral_rate_l1", "0.08", "عمولة المستوى الأول", true],
-        ["referral_rate_l2", "0.04", "عمولة المستوى الثاني", true],
-        ["referral_rate_l3", "0.01", "عمولة المستوى الثالث", true],
-        ["daily_spins", "1", "فرص عجلة الحظ اليومية", true],
-      ];
-      for (const setting of settings) {
-        await query(
-          `INSERT INTO platform_settings (key, value, description_ar, is_public)
-           VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,
-          setting,
-        );
-      }
+    // Seed default platform settings if empty or missing new settings
+    const settings: [string, string, string, boolean][] = [
+      ["min_deposit", "10", "الحد الأدنى للإيداع بالدولار", true],
+      ["min_withdrawal", "6", "الحد الأدنى للسحب بالدولار", true],
+      ["withdrawal_fee_percent", "10", "نسبة رسوم السحب", true],
+      ["withdrawal_start_hour", "09:00", "بداية وقت السحب", true],
+      ["withdrawal_end_hour", "16:00", "نهاية وقت السحب", true],
+      ["withdrawals_enabled", "true", "تفعيل السحب", true],
+      ["tasks_enabled", "true", "تفعيل المهام اليومية", true],
+      ["telegram_group_url", "https://t.me/valoriza_official", "رابط مجموعة Telegram", true],
+      ["whatsapp_group_url", "https://chat.whatsapp.com/valoriza", "رابط مجموعة WhatsApp", true],
+      ["min_investment", "5", "الحد الأدنى للاستثمار", true],
+      ["daily_login_reward", "0.11", "مكافأة تسجيل الدخول اليومية", true],
+      ["referral_rate_l1", "0.08", "عمولة المستوى الأول", true],
+      ["referral_rate_l2", "0.04", "عمولة المستوى الثاني", true],
+      ["referral_rate_l3", "0.01", "عمولة المستوى الثالث", true],
+      ["daily_spins", "1", "فرص عجلة الحظ", true],
+    ];
+    for (const setting of settings) {
+      await query(
+        `INSERT INTO platform_settings (key, value, description_ar, is_public)
+         VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,
+        setting,
+      );
     }
 
     // Ensure columns exist on profiles
     await query(
-      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_withdraw boolean NOT NULL DEFAULT true",
-    );
-    await query(
       "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS wheel_spins_available integer NOT NULL DEFAULT 0",
     );
+    await query(
+      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_withdraw boolean NOT NULL DEFAULT true",
+    );
 
-    // Ensure multi-level referral hierarchy is linked for existing profiles
-    await query(`
-      INSERT INTO referrals (referrer_id, referred_id, level)
-      SELECT p.referred_by, p.id, 1
-      FROM profiles p
-      WHERE p.referred_by IS NOT NULL
-      ON CONFLICT DO NOTHING
-    `);
-    await query(`
-      INSERT INTO referrals (referrer_id, referred_id, level)
-      SELECT p2.referred_by, p.id, 2
-      FROM profiles p
-      JOIN profiles p2 ON p.referred_by = p2.id
-      WHERE p2.referred_by IS NOT NULL
-      ON CONFLICT DO NOTHING
-    `);
-    await query(`
-      INSERT INTO referrals (referrer_id, referred_id, level)
-      SELECT p3.referred_by, p.id, 3
-      FROM profiles p
-      JOIN profiles p2 ON p.referred_by = p2.id
-      JOIN profiles p3 ON p2.referred_by = p3.id
-      WHERE p3.referred_by IS NOT NULL
-      ON CONFLICT DO NOTHING
-    `);
-
-    // Ensure all 14 official YouTube tasks exist in PostgreSQL
-    const officialTasks = [
-      { no: 1, id: "66Z_Rgwrh7E", title: "مهمة إعلانية 1" },
-      { no: 2, id: "-RuSqMYcQK0", title: "مهمة إعلانية 2" },
-      { no: 3, id: "z4LaVLItrKc", title: "مهمة إعلانية 3" },
-      { no: 4, id: "eaPCE8XqaRA", title: "مهمة إعلانية 4" },
-      { no: 5, id: "DhRKKs71xP8", title: "مهمة إعلانية 5" },
-      { no: 6, id: "ygLLiNT2AIQ", title: "مهمة إعلانية 6" },
-      { no: 7, id: "Tlnl6w8OtQs", title: "مهمة إعلانية 7" },
-      { no: 8, id: "SfXQw0hu73Y", title: "مهمة إعلانية 8" },
-      { no: 9, id: "ELF0AM4Jrm0", title: "مهمة إعلانية 9" },
-      { no: 10, id: "3cQ-9D8ofHw", title: "مهمة إعلانية 10" },
-      { no: 11, id: "L8EZdwAbjQA", title: "مهمة إعلانية 11" },
-      { no: 12, id: "I3-lMkyTsc8", title: "مهمة إعلانية 12" },
-      { no: 13, id: "39f20_0tgz0", title: "مهمة إعلانية 13" },
-      { no: 14, id: "hmSxy2JKTPw", title: "مهمة إعلانية 14" },
-    ];
-    for (const t of officialTasks) {
-      await query(
-        `INSERT INTO tasks (task_number, title, description, youtube_id, duration_seconds, sort_order, is_active)
-         VALUES ($1, $2, 'شاهد الفيديو واكسب عمولتك فوراً', $3, 10, $1, true)
-         ON CONFLICT DO NOTHING`,
-        [t.no, t.title, t.id],
-      );
+    // Ensure 9 lucky wheel configs
+    const wheelCount = await query("SELECT count(*)::int as count FROM lucky_wheel_configs");
+    if ((wheelCount.rows[0]?.count ?? 0) === 0) {
+      await query(`
+        INSERT INTO lucky_wheel_configs (label_ar, prize_type, prize_value, probability, icon, accent, sort_order, is_active) VALUES
+          ('حظ سعيد', 'none', 0, 25, '🍀', 'blue', 1, true),
+          ('حظ سعيد', 'none', 0, 25, '🎯', 'blue', 2, true),
+          ('0.5 دولار', 'cash', 0.5, 10, '💵', 'green', 3, true),
+          ('1 دولار', 'cash', 1.0, 10, '💰', 'green', 4, true),
+          ('2 دولار', 'cash', 2.0, 5, '🪙', 'purple', 5, true),
+          ('هاتف نقال', 'item', 0, 0, '📱', 'red', 6, true),
+          ('48 دولار', 'cash', 48.0, 0, '💎', 'gold', 7, true),
+          ('4 دولار', 'cash', 4.0, 0, '🎁', 'purple', 8, true),
+          ('مستوى VIP', 'vip', 0, 0, '👑', 'gold', 9, true)
+      `);
     }
 
-    // Ensure the 9 lucky wheel prize configurations with exact weights exist
-    const defaultWheelConfigs = [
-      { label: "حظ سعيد", type: "none", val: 0, prob: 25, icon: "🍀", accent: "blue", order: 1 },
-      { label: "حظ سعيد", type: "none", val: 0, prob: 25, icon: "🎯", accent: "blue", order: 2 },
-      {
-        label: "0.5 دولار",
-        type: "cash",
-        val: 0.5,
-        prob: 10,
-        icon: "💵",
-        accent: "green",
-        order: 3,
-      },
-      { label: "1 دولار", type: "cash", val: 1.0, prob: 10, icon: "💰", accent: "green", order: 4 },
-      { label: "2 دولار", type: "cash", val: 2.0, prob: 5, icon: "🪙", accent: "purple", order: 5 },
-      { label: "هاتف نقال", type: "item", val: 0, prob: 0, icon: "📱", accent: "red", order: 6 },
-      { label: "48 دولار", type: "cash", val: 48, prob: 0, icon: "💎", accent: "gold", order: 7 },
-      { label: "4 دولار", type: "cash", val: 4, prob: 0, icon: "🎁", accent: "purple", order: 8 },
-      { label: "مستوى VIP", type: "vip", val: 0, prob: 0, icon: "👑", accent: "gold", order: 9 },
-    ];
-    const wheelCheck = await query("SELECT count(*)::int as count FROM lucky_wheel_configs");
-    if (number(wheelCheck.rows[0]?.count) < 9) {
-      await query("DELETE FROM lucky_wheel_configs");
-      for (const w of defaultWheelConfigs) {
-        await query(
-          `INSERT INTO lucky_wheel_configs (label_ar, prize_type, prize_value, probability, icon, accent, sort_order, is_active)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
-          [w.label, w.type, w.val, w.prob, w.icon, w.accent, w.order],
-        );
-      }
-    }
-
-    // Ensure telegram and whatsapp group settings exist
-    const extraSettings: [string, string, string, boolean][] = [
-      ["telegram_group_url", "https://t.me/valoriza_official", "رابط مجموعة Telegram", true],
-      ["whatsapp_group_url", "https://chat.whatsapp.com/valoriza", "رابط مجموعة WhatsApp", true],
-      ["tasks_enabled", "true", "تفعيل المهام", true],
-      ["withdrawals_enabled", "true", "تفعيل السحب", true],
-    ];
-    for (const [k, v, desc, pub] of extraSettings) {
-      await query(
-        `INSERT INTO platform_settings (key, value, description_ar, is_public)
-         VALUES ($1, $2, $3, $4) ON CONFLICT (key) DO NOTHING`,
-        [k, v, desc, pub],
-      );
+    // Ensure 14 YouTube tasks
+    const taskCount = await query("SELECT count(*)::int as count FROM tasks");
+    if ((taskCount.rows[0]?.count ?? 0) === 0) {
+      await query(`
+        INSERT INTO tasks (task_number, title, description, youtube_id, duration_seconds, sort_order, is_active) VALUES
+          (1, 'مهمة إعلانية 1', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', '66Z_Rgwrh7E', 10, 1, true),
+          (2, 'مهمة إعلانية 2', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', '-RuSqMYcQK0', 10, 2, true),
+          (3, 'مهمة إعلانية 3', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'z4LaVLItrKc', 10, 3, true),
+          (4, 'مهمة إعلانية 4', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'eaPCE8XqaRA', 10, 4, true),
+          (5, 'مهمة إعلانية 5', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'DhRKKs71xP8', 10, 5, true),
+          (6, 'مهمة إعلانية 6', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'ygLLiNT2AIQ', 10, 6, true),
+          (7, 'مهمة إعلانية 7', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'Tlnl6w8OtQs', 10, 7, true),
+          (8, 'مهمة إعلانية 8', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'SfXQw0hu73Y', 10, 8, true),
+          (9, 'مهمة إعلانية 9', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'ELF0AM4Jrm0', 10, 9, true),
+          (10, 'مهمة إعلانية 10', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', '3cQ-9D8ofHw', 10, 10, true),
+          (11, 'مهمة إعلانية 11', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'L8EZdwAbjQA', 10, 11, true),
+          (12, 'مهمة إعلانية 12', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'I3-lMkyTsc8', 10, 12, true),
+          (13, 'مهمة إعلانية 13', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', '39f20_0tgz0', 10, 13, true),
+          (14, 'مهمة إعلانية 14', 'شاهد مقطع الفيديو الترويجي لإكمال المهمة وكسب المكافأة', 'hmSxy2JKTPw', 10, 14, true)
+      `);
     }
   } catch (err) {
     console.error("❌ initDatabase error:", err);
@@ -2316,3 +2189,5 @@ async function shutdown() {
 }
 process.on("SIGTERM", shutdown);
 process.on("SIGINT", shutdown);
+
+export { app, initDatabase };

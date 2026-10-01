@@ -226,9 +226,10 @@ CREATE TABLE IF NOT EXISTS rewards (
 CREATE TABLE IF NOT EXISTS referrals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   referrer_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  referred_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  referred_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   level integer NOT NULL DEFAULT 1,
-  created_at timestamptz NOT NULL DEFAULT now()
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (referrer_id, referred_id)
 );
 
 CREATE TABLE IF NOT EXISTS referral_commissions (

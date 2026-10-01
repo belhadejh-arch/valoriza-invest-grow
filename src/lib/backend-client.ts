@@ -3,26 +3,13 @@ export function hasConfiguredBackend(): boolean {
 }
 
 export function backendBaseUrl(): string {
-  const configured =
-    (typeof import.meta !== "undefined" && import.meta.env?.VITE_BACKEND_URL) ||
-    (typeof process !== "undefined"
-      ? process.env?.BACKEND_URL || process.env?.VITE_BACKEND_URL
-      : undefined);
-
-  if (configured && typeof configured === "string" && hasConfiguredBackend()) {
-    // Strip trailing slash and trailing /api if present so URL building is deterministic
-    return String(configured)
-      .replace(/\/+$/, "")
-      .replace(/\/api$/, "");
-  }
-
-  // In browser, relative to current host
+  // In browser, relative to current origin (Vite proxies /api to port 4000)
   if (typeof window !== "undefined") {
     return "";
   }
 
   // In Node/SSR server default to local express port
-  return "http://localhost:4000";
+  return process.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
 }
 
 export function buildApiUrl(path: string): string {
@@ -59,14 +46,7 @@ export function setStoredToken(token: string | null): void {
   }
 }
 
-import { routeFallbackResponse } from "./mock-data";
-
 export async function backendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  // If no external backend configured, immediately return rich fallback response with zero network latency
-  if (!hasConfiguredBackend()) {
-    return routeFallbackResponse(path, init) as T;
-  }
-
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");
@@ -79,27 +59,23 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}): P
 
   const url = buildApiUrl(path);
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      credentials: "include",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+  const response = await fetch(url, {
+    ...init,
+    headers,
+    credentials: "include",
+    signal: controller.signal,
+  });
+  clearTimeout(timeoutId);
 
-    if (response.ok) {
-      const payload = (await response.json().catch(() => ({}))) as T;
-      return payload;
-    }
-  } catch {
-    // Network failure / offline backend fallback
+  const data = (await response.json().catch(() => ({}))) as T;
+  if (!response.ok) {
+    const errorMsg = (data as any)?.message || `Request failed with status ${response.status}`;
+    throw new Error(errorMsg);
   }
-
-  return routeFallbackResponse(path, init) as T;
+  return data;
 }
 
 export function browserBackendUrl() {
