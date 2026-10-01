@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   Users,
@@ -15,6 +17,7 @@ import {
   ArrowRight,
   ShieldCheck,
   HelpCircle,
+  RefreshCw,
 } from "lucide-react";
 import { AdminOverviewTab } from "@/components/valoriza/admin/AdminOverviewTab";
 import { AdminUsersTab } from "@/components/valoriza/admin/AdminUsersTab";
@@ -39,7 +42,18 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 function AdminDashboardPage() {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("overview");
+  const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+
+  const handleRefreshAll = async () => {
+    setIsRefreshingAll(true);
+    await queryClient.invalidateQueries();
+    setTimeout(() => {
+      setIsRefreshingAll(false);
+      toast.success("تم تحديث جميع بيانات لوحة التحكم من PostgreSQL بنجاح ✅");
+    }, 400);
+  };
 
   const tabs = [
     { id: "overview", label: "نظرة عامة", icon: LayoutDashboard },

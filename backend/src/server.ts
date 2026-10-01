@@ -1260,27 +1260,51 @@ app.use("/api/admin", async (request, _response, next) => {
 app.get("/api/admin/overview", async (request, response, next) => {
   try {
     await requireAdmin(request);
-    const [users, deposits, withdrawals, investments, tasks] = await Promise.all([
+    const [
+      users,
+      totalBalances,
+      confirmedDeposits,
+      confirmedWithdrawals,
+      pendingDeposits,
+      pendingWithdrawals,
+      investments,
+      tasks,
+    ] = await Promise.all([
       query("SELECT count(*)::int AS count FROM users"),
+      query("SELECT coalesce(sum(balance), 0)::numeric AS amount FROM wallets"),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM deposits WHERE status='pending'",
+        "SELECT coalesce(sum(amount), 0)::numeric AS amount FROM deposits WHERE status IN ('approved', 'completed')",
       ),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM withdrawals WHERE status='pending'",
+        "SELECT coalesce(sum(amount), 0)::numeric AS amount FROM withdrawals WHERE status IN ('approved', 'completed')",
       ),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM investments WHERE status='active'",
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0)::numeric AS amount FROM deposits WHERE status='pending'",
+      ),
+      query(
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0)::numeric AS amount FROM withdrawals WHERE status='pending'",
+      ),
+      query(
+        "SELECT count(*)::int AS count, coalesce(sum(amount),0)::numeric AS amount FROM investments WHERE status='active'",
       ),
       query("SELECT count(*)::int AS count FROM task_completions"),
     ]);
+
+    const totalWithdrawnVal = number(confirmedWithdrawals.rows[0]?.amount);
     response.json({
+      totalUsers: number(users.rows[0]?.count),
       usersCount: number(users.rows[0]?.count),
-      pendingDepositsCount: number(deposits.rows[0]?.count),
-      pendingDepositsAmount: number(deposits.rows[0]?.amount),
-      pendingWithdrawalsCount: number(withdrawals.rows[0]?.count),
-      pendingWithdrawalsAmount: number(withdrawals.rows[0]?.amount),
+      totalBalance: number(totalBalances.rows[0]?.amount),
+      totalDeposited: number(confirmedDeposits.rows[0]?.amount),
+      totalWithdrawn: totalWithdrawnVal,
+      totalWithdrawnAmount: totalWithdrawnVal,
+      pendingDepositsCount: number(pendingDeposits.rows[0]?.count),
+      pendingDepositsAmount: number(pendingDeposits.rows[0]?.amount),
+      pendingWithdrawalsCount: number(pendingWithdrawals.rows[0]?.count),
+      pendingWithdrawalsAmount: number(pendingWithdrawals.rows[0]?.amount),
       activeInvestmentsCount: number(investments.rows[0]?.count),
       activeInvestmentsVolume: number(investments.rows[0]?.amount),
+      totalTasksCompleted: number(tasks.rows[0]?.count),
       taskCompletionsCount: number(tasks.rows[0]?.count),
     });
   } catch (error) {
@@ -1291,38 +1315,96 @@ app.get("/api/admin/overview", async (request, response, next) => {
 app.get("/api/admin/users", async (_request, response, next) => {
   try {
     const result = await query(
-      `SELECT p.id,p.username,p.email,p.phone,p.referral_code,p.vip_level,p.trial_active,p.is_blocked,
+      `SELECT p.id, p.username, p.email, p.phone, p.referral_code, p.vip_level, p.trial_active, p.is_blocked,
         COALESCE(p.can_withdraw, true) AS can_withdraw,
         COALESCE(p.wheel_spins_available, 0) AS wheel_spins_available,
         p.created_at,
-        w.balance,w.total_deposited,w.total_withdrawn,w.invested_balance,w.team_income,
-        (SELECT count(*)::int FROM referrals r WHERE r.referrer_id=p.id) AS team_count,
-        (SELECT address FROM withdrawal_addresses WHERE user_id=p.id) AS withdrawal_address,
-        (SELECT network FROM withdrawal_addresses WHERE user_id=p.id) AS withdrawal_network
-       FROM profiles p LEFT JOIN wallets w ON w.user_id=p.id ORDER BY p.created_at DESC LIMIT 100`,
+        w.balance, w.total_deposited, w.invested_balance, w.team_income,
+        -- Count only team members who have active VIP strictly from VIP1 to VIP7
+        (
+          SELECT count(DISTINCT tm.member_id)::int
+          FROM (
+            SELECT r.referred_id AS member_id
+            FROM referrals r
+            WHERE r.referrer_id = p.id
+            UNION
+            SELECT p_dir.id AS member_id
+            FROM profiles p_dir
+            WHERE p_dir.referred_by = p.id
+          ) tm
+          JOIN profiles p_sub ON p_sub.id = tm.member_id
+          WHERE p_sub.vip_level >= 1 AND p_sub.vip_level <= 7
+            AND (p_sub.vip_expires_at IS NULL OR p_sub.vip_expires_at > now())
+        ) AS team_vip_count,
+        -- Total referrals count
+        (
+          SELECT count(DISTINCT tm.member_id)::int
+          FROM (
+            SELECT r.referred_id AS member_id
+            FROM referrals r
+            WHERE r.referrer_id = p.id
+            UNION
+            SELECT p_dir.id AS member_id
+            FROM profiles p_dir
+            WHERE p_dir.referred_by = p.id
+          ) tm
+        ) AS team_total_count,
+        -- Team members total approved/completed withdrawals strictly from PostgreSQL withdrawals table
+        (
+          SELECT coalesce(sum(w_sub.amount), 0)::numeric
+          FROM withdrawals w_sub
+          WHERE w_sub.status IN ('approved', 'completed')
+            AND w_sub.user_id IN (
+              SELECT r.referred_id FROM referrals r WHERE r.referrer_id = p.id
+              UNION
+              SELECT p_dir.id FROM profiles p_dir WHERE p_dir.referred_by = p.id
+            )
+        ) AS team_withdrawn,
+        -- User own approved/completed withdrawals
+        (
+          SELECT coalesce(sum(w_self.amount), 0)::numeric
+          FROM withdrawals w_self
+          WHERE w_self.user_id = p.id
+            AND w_self.status IN ('approved', 'completed')
+        ) AS user_withdrawn,
+        (SELECT address FROM withdrawal_addresses WHERE user_id = p.id) AS withdrawal_address,
+        (SELECT network FROM withdrawal_addresses WHERE user_id = p.id) AS withdrawal_network
+       FROM profiles p
+       LEFT JOIN wallets w ON w.user_id = p.id
+       ORDER BY p.created_at DESC LIMIT 100`,
     );
+
     response.json(
-      result.rows.map((row) => ({
-        id: row.id,
-        username: row.username,
-        email: row.email,
-        phone: row.phone,
-        referralCode: row.referral_code,
-        vipLevel: row.vip_level,
-        trialActive: row.trial_active,
-        isBlocked: row.is_blocked,
-        canWithdraw: row.can_withdraw,
-        wheelSpinsAvailable: row.wheel_spins_available,
-        withdrawalAddress: row.withdrawal_address ?? null,
-        withdrawalNetwork: row.withdrawal_network ?? null,
-        createdAt: row.created_at,
-        balance: number(row.balance),
-        totalDeposited: number(row.total_deposited),
-        totalWithdrawn: number(row.total_withdrawn),
-        investedBalance: number(row.invested_balance),
-        teamIncome: number(row.team_income),
-        teamCount: number(row.team_count),
-      })),
+      result.rows.map((row) => {
+        const teamWithdrawnVal = number(row.team_withdrawn);
+        const userWithdrawnVal = number(row.user_withdrawn);
+        const teamVipCountVal = number(row.team_vip_count);
+        return {
+          id: row.id,
+          username: row.username,
+          email: row.email,
+          phone: row.phone,
+          referralCode: row.referral_code,
+          vipLevel: row.vip_level,
+          trialActive: row.trial_active,
+          isBlocked: row.is_blocked,
+          canWithdraw: row.can_withdraw,
+          wheelSpinsAvailable: row.wheel_spins_available,
+          withdrawalAddress: row.withdrawal_address ?? null,
+          withdrawalNetwork: row.withdrawal_network ?? null,
+          createdAt: row.created_at,
+          balance: number(row.balance),
+          totalDeposited: number(row.total_deposited),
+          totalWithdrawn: teamWithdrawnVal, // team withdrawal total for display
+          teamWithdrawn: teamWithdrawnVal,
+          userWithdrawn: userWithdrawnVal,
+          investedBalance: number(row.invested_balance),
+          teamIncome: number(row.team_income),
+          teamCount: teamVipCountVal, // strictly VIP 1-7 members
+          teamVipCount: teamVipCountVal,
+          teamTotalCount: number(row.team_total_count),
+        };
+      }),
     );
   } catch (error) {
     next(error);
