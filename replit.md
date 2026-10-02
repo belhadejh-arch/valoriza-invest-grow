@@ -9,7 +9,7 @@ Valoriza backend services and a component-preview workspace for the investment a
 - `pnpm install --frozen-lockfile` — install workspace dependencies
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `npm run vercel-build` — Vercel build for the Valoriza frontend in `.migration-backup`; copies static output to `.output/public`
+- `npm run vercel-build` — build the Valoriza TanStack Start app with Nitro's Vercel preset
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - Required env: `DATABASE_URL` — Postgres connection string
 
@@ -46,7 +46,7 @@ _No additional project-wide preferences recorded._
 
 ## Gotchas
 
-- Vercel's static output directory is `.output/public`; the root Vercel command must build the saved Valoriza app, not the component-preview artifact.
+- For Vercel, set the project Root Directory to `.migration-backup`, use the TanStack Start framework preset (or leave framework auto-detection enabled), and do not set a static Output Directory. The app needs Nitro server functions, not static hosting.
 - Do not run the legacy migration batch unreviewed: migration `002` deletes and reseeds task and wheel-configuration rows.
 
 ## Pointers

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 3000",
     "build": "vite build",
-    "build:vercel": "rm -rf .output && vite build && node ../scripts/copy-valoriza-public.mjs",
+    "build:vercel": "rm -rf .vercel .output dist && vite build",
+    "vercel-build": "pnpm run build:vercel",
     "build:frontend": "vite build",
     "build:backend": "tsc -p backend/tsconfig.json",
     "start:backend": "node backend/dist/server.js",
