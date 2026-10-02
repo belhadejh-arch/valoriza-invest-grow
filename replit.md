@@ -9,7 +9,7 @@ Valoriza backend services and a component-preview workspace for the investment a
 - `pnpm install --frozen-lockfile` — install workspace dependencies
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `npm run vercel-build` — Vercel build; writes static files to `.output/public`
+- `npm run vercel-build` — Vercel build for the Valoriza frontend in `.migration-backup`; copies static output to `.output/public`
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - Required env: `DATABASE_URL` — Postgres connection string
 
@@ -46,7 +46,7 @@ _No additional project-wide preferences recorded._
 
 ## Gotchas
 
-- Vercel's static output directory must remain `.output/public`; `npm run vercel-build` sets the production Vite base path and output directory.
+- Vercel's static output directory is `.output/public`; the root Vercel command must build the saved Valoriza app, not the component-preview artifact.
 - Do not run the legacy migration batch unreviewed: migration `002` deletes and reseeds task and wheel-configuration rows.
 
 ## Pointers
