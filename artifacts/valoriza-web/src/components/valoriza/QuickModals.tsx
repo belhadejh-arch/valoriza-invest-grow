@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -8,17 +10,24 @@ import {
   Coins,
   Copy,
   Info,
+  Image as ImageIcon,
   Lock,
   QrCode,
   ShieldCheck,
   Sparkles,
   TrendingUp,
+  Trash2,
   Vault,
   Wallet,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  bindWithdrawalAddress,
+  createDepositRequest,
+  getWithdrawalInfo,
+  requestWithdrawal,
+} from "@/lib/valoriza-pages.functions";
 
 /* =========================================================================
    1. Deposit Modal (Matching PDF Page 6)
@@ -28,59 +37,99 @@ interface DepositModalProps {
   isOpen: boolean;
   onClose: () => void;
   addresses?: Record<string, string>;
+  minDeposit?: number;
 }
 
-export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) {
+export function DepositModal({ isOpen, onClose, addresses, minDeposit = 10 }: DepositModalProps) {
+  const submitDeposit = useServerFn(createDepositRequest);
   const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
   const [amount, setAmount] = useState<string>("");
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const defaultAddresses: Record<string, string> = {
-    ERC20: "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b",
-    BEP20: "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b",
-    TRC20: "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
-    ...addresses,
-  };
-
-  const currentAddress = defaultAddresses[network] || defaultAddresses.ERC20;
+  const currentAddress = addresses?.[network]?.trim() ?? "";
 
   const handleCopy = () => {
+    if (!currentAddress) {
+      toast.error("عنوان الإيداع غير مضبوط لهذه الشبكة، يرجى التواصل مع الإدارة");
+      return;
+    }
     navigator.clipboard.writeText(currentAddress);
     setCopied(true);
     toast.success("تم نسخ عنوان الإيداع بنجاح");
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleScreenshotChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("يرجى اختيار صورة لإثبات الإيداع");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("حجم الصورة يجب ألا يتجاوز 5 ميجابايت");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setScreenshotPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const removeScreenshot = () => {
+    setScreenshotPreview(null);
+    if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = parseFloat(amount);
-    if (isNaN(num) || num < 10) {
-      toast.error("الحد الأدنى للإيداع هو 10 دولارات");
+    if (isNaN(num) || num < minDeposit) {
+      toast.error(`الحد الأدنى للإيداع هو ${minDeposit} دولار`);
+      return;
+    }
+    if (!currentAddress) {
+      toast.error("عنوان الإيداع غير مضبوط لهذه الشبكة، يرجى التواصل مع الإدارة");
+      return;
+    }
+    if (!screenshotPreview) {
+      toast.error("يرجى إرفاق صورة إثبات الإيداع");
       return;
     }
 
     setSubmitting(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("deposits").insert({
-          user_id: user.id,
-          network,
+      const result = await submitDeposit({
+        data: {
+          network: `USDT-${network}` as "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20",
           amount: num,
-          deposit_address: currentAddress,
-          status: "pending",
-        });
+          screenshotUrl: screenshotPreview,
+        },
+      });
+      if (!result.ok) {
+        const message =
+          result.reason === "SCREENSHOT_REQUIRED"
+            ? "يرجى إرفاق صورة إثبات الإيداع"
+            : result.reason === "BELOW_MIN_DEPOSIT"
+              ? `الحد الأدنى للإيداع هو ${minDeposit} دولار`
+              : result.reason === "DEPOSIT_ADDRESS_UNAVAILABLE"
+                ? "عنوان الإيداع غير مضبوط لهذه الشبكة، يرجى التواصل مع الإدارة"
+                : result.message || "تعذر تقديم طلب الإيداع";
+        toast.error(message);
+        return;
       }
       toast.success("تم تقديم طلب الإيداع بنجاح، سيتم التأكيد تلقائياً بعد الفحص");
       setAmount("");
+      removeScreenshot();
       onClose();
-    } catch {
-      toast.error("حدث خطأ أثناء تقديم طلب الإيداع");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "حدث خطأ أثناء تقديم طلب الإيداع");
     } finally {
       setSubmitting(false);
     }
@@ -157,13 +206,14 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
           </div>
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-navy-deep border border-border/70 p-2.5">
             <code className="text-[11px] text-foreground font-mono truncate select-all" dir="ltr">
-              {currentAddress}
+              {currentAddress || "عنوان الإيداع غير متوفر حالياً"}
             </code>
             <button
               id="copy-deposit-addr-btn"
               type="button"
               onClick={handleCopy}
-              className="flex shrink-0 items-center gap-1 rounded-lg brand-gradient px-2.5 py-1.5 text-[11px] font-bold text-primary-foreground shadow-glow"
+              disabled={!currentAddress}
+              className="flex shrink-0 items-center gap-1 rounded-lg brand-gradient px-2.5 py-1.5 text-[11px] font-bold text-primary-foreground shadow-glow disabled:opacity-50"
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
               <span>{copied ? "تم النسخ" : "نسخ العنوان"}</span>
@@ -184,7 +234,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
               <input
                 id="deposit-amount-input"
                 type="number"
-                min="10"
+                min={minDeposit}
                 step="0.01"
                 placeholder="أدخل المبلغ بالدولار"
                 value={amount}
@@ -198,10 +248,49 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
             </div>
           </div>
 
+          <div>
+            <label className="block text-xs font-bold text-foreground mb-1" htmlFor="quick-deposit-proof">
+              صورة إثبات الإيداع
+            </label>
+            <input
+              ref={screenshotInputRef}
+              id="quick-deposit-proof"
+              type="file"
+              accept="image/*"
+              onChange={handleScreenshotChange}
+              className="hidden"
+            />
+            {screenshotPreview ? (
+              <div className="relative rounded-xl border border-border bg-navy-deep p-2">
+                <img
+                  src={screenshotPreview}
+                  alt="معاينة إثبات الإيداع"
+                  className="mx-auto max-h-32 rounded-lg object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={removeScreenshot}
+                  aria-label="إزالة صورة الإثبات"
+                  className="absolute left-3 top-3 rounded-full bg-danger p-2 text-white"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <label
+                htmlFor="quick-deposit-proof"
+                className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-navy-deep p-3 text-xs font-semibold text-muted-foreground hover:border-cyan-glow"
+              >
+                <ImageIcon className="h-4 w-4" />
+                إرفاق صورة (حد أقصى 5 ميجابايت)
+              </label>
+            )}
+          </div>
+
           <button
             id="submit-deposit-btn"
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !currentAddress || !screenshotPreview}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
             {submitting ? "جاري التقديم..." : "تقديم طلب الإيداع ✈"}
@@ -220,7 +309,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            الحد الأدنى للإيداع هو 10 دولارات.
+            الحد الأدنى للإيداع هو {minDeposit} دولار.
           </p>
         </div>
       </div>
@@ -247,27 +336,62 @@ export function WithdrawalModal({
   existingAddress,
   onSuccess,
 }: WithdrawalModalProps) {
+  const queryClient = useQueryClient();
+  const fetchWithdrawalInfo = useServerFn(getWithdrawalInfo);
+  const bindAddress = useServerFn(bindWithdrawalAddress);
+  const submitWithdrawal = useServerFn(requestWithdrawal);
+  const { data: withdrawalInfo } = useQuery({
+    queryKey: ["withdrawal-info"],
+    queryFn: () => fetchWithdrawalInfo(),
+    enabled: isOpen,
+  });
+  const boundAddress = withdrawalInfo?.boundAddress ?? existingAddress;
   const [network, setNetwork] = useState<"ERC20" | "BEP20" | "TRC20">("ERC20");
   const [addressInput, setAddressInput] = useState(existingAddress?.address || "");
   const [isLocked, setIsLocked] = useState(Boolean(existingAddress?.address));
   const [amount, setAmount] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (!boundAddress?.address) return;
+    setAddressInput(boundAddress.address);
+    setIsLocked(Boolean(boundAddress.locked));
+    if (boundAddress.network === "ERC20" || boundAddress.network === "BEP20" || boundAddress.network === "TRC20") {
+      setNetwork(boundAddress.network);
+    }
+  }, [boundAddress]);
+
   if (!isOpen) return null;
 
-  const feePercent = 10;
+  const minWithdrawal = withdrawalInfo?.settings?.minWithdrawal ?? 6;
+  const feePercent = withdrawalInfo?.settings?.feePercent ?? 10;
   const numAmount = parseFloat(amount) || 0;
   const feeAmount = (numAmount * feePercent) / 100;
   const netAmount = Math.max(0, numAmount - feeAmount);
 
-  const handleBindAddress = (e: React.FormEvent) => {
+  const handleBindAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addressInput.trim() || addressInput.trim().length < 15) {
       toast.error("يرجى إدخال عنوان محفظة صحيح");
       return;
     }
-    setIsLocked(true);
-    toast.success("تم ربط وقفل عنوان السحب بحسابك بنجاح");
+    setSubmitting(true);
+    try {
+      const result = await bindAddress({
+        data: { network, address: addressInput.trim() },
+      });
+      if (!result.ok) {
+        toast.error(result.message || "تعذر ربط عنوان المحفظة");
+        return;
+      }
+      setIsLocked(true);
+      toast.success("تم ربط وقفل عنوان السحب بحسابك بنجاح");
+      void queryClient.invalidateQueries({ queryKey: ["withdrawal-info"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر ربط عنوان المحفظة");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -276,8 +400,8 @@ export function WithdrawalModal({
       toast.error("يرجى ربط عنوان السحب أولاً");
       return;
     }
-    if (numAmount < 6) {
-      toast.error("الحد الأدنى للسحب هو 6 دولارات");
+    if (numAmount < minWithdrawal) {
+      toast.error(`الحد الأدنى للسحب هو ${minWithdrawal} دولار`);
       return;
     }
     if (numAmount > balance) {
@@ -285,32 +409,24 @@ export function WithdrawalModal({
       return;
     }
 
-    // Check withdrawal hours 09:00 - 16:00
-    const now = new Date();
-    const hours = now.getHours();
-    // Allow demo submission with notice if outside window
     setSubmitting(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("withdrawals").insert({
-          user_id: user.id,
-          network,
-          address: addressInput.trim(),
-          amount: numAmount,
-          fee: feeAmount,
-          net_amount: netAmount,
-          status: "pending",
-        });
+      const result = await submitWithdrawal({
+        data: { network, address: addressInput.trim(), amount: numAmount },
+      });
+      if (!result.ok) {
+        toast.error(result.message || "تعذر تقديم طلب السحب");
+        return;
       }
-      toast.success(`تم تقديم طلب السحب بمبلغ $${netAmount.toFixed(2)} (بعد خصم الرسوم 10%) بنجاح`);
+      toast.success(
+        `تم تقديم طلب السحب بمبلغ $${Number(result.netAmount ?? netAmount).toFixed(2)} (بعد خصم الرسوم ${feePercent}%) بنجاح`,
+      );
       setAmount("");
       onClose();
       onSuccess?.();
-    } catch {
-      toast.error("تعذر تقديم طلب السحب حالياً");
+      void queryClient.invalidateQueries({ queryKey: ["withdrawal-info"] });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر تقديم طلب السحب حالياً");
     } finally {
       setSubmitting(false);
     }
@@ -414,6 +530,7 @@ export function WithdrawalModal({
                 id="bind-address-btn"
                 type="button"
                 onClick={handleBindAddress}
+                disabled={submitting}
                 className="shrink-0 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow"
               >
                 ربط 🔗
@@ -438,7 +555,7 @@ export function WithdrawalModal({
               <input
                 id="withdraw-amount-input"
                 type="number"
-                min="6"
+                min={minWithdrawal}
                 max={balance}
                 step="0.01"
                 placeholder="أدخل مبلغ السحب"
@@ -461,7 +578,7 @@ export function WithdrawalModal({
                 <span>${numAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-danger">
-                <span>رسوم السحب (10%):</span>
+                <span>رسوم السحب ({feePercent}%):</span>
                 <span>-${feeAmount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-success border-t border-border/40 pt-1">
@@ -489,7 +606,7 @@ export function WithdrawalModal({
           </div>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            الحد الأدنى للسحب هو 6 دولارات.
+            الحد الأدنى للسحب هو {minWithdrawal} دولار.
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
@@ -497,7 +614,7 @@ export function WithdrawalModal({
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Coins className="h-3.5 w-3.5 text-cyan-glow shrink-0" />
-            رسوم السحب هي 10%.
+            رسوم السحب هي {feePercent}%.
           </p>
         </div>
       </div>

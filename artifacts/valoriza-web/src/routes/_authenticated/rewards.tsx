@@ -20,7 +20,6 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getRewardsData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
-import { getMockRewardsData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
@@ -38,6 +37,20 @@ export const Route = createFileRoute("/_authenticated/rewards")({
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 type RewardSource = "all" | "daily_login" | "task_reward" | "lucky_wheel" | "referral" | "vip";
+type RewardRecord = {
+  id: string;
+  source: string;
+  amount: number;
+  description?: string | null;
+  createdAt: string;
+};
+type RewardsData = {
+  rewards: RewardRecord[];
+  balance: number;
+  totalEarned: number;
+  dailyRewardClaimed: boolean;
+  dailyRewardAmount: number;
+};
 
 function RewardsPage() {
   const { t, isRTL } = useI18n();
@@ -46,10 +59,9 @@ function RewardsPage() {
   const claim = useServerFn(claimDailyLoginReward);
   const [filter, setFilter] = useState<RewardSource>("all");
 
-  const { data = getMockRewardsData() } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery<RewardsData>({
     queryKey: ["rewards"],
     queryFn: () => fetchData(),
-    initialData: getMockRewardsData,
   });
 
   const claimMutation = useMutation({
@@ -75,6 +87,7 @@ function RewardsPage() {
           badgeColor: "border-cyan-glow/40 bg-cyan-glow/10 text-cyan-glow",
         };
       case "task_reward":
+      case "task":
         return {
           label: t("rewards.filterTasks"),
           icon: <Video className="h-4 w-4 text-purple-400" />,
@@ -115,7 +128,7 @@ function RewardsPage() {
       ? rewardsList
       : rewardsList.filter((r) => {
           if (filter === "daily_login") return r.source === "daily_login";
-          if (filter === "task_reward") return r.source === "task_reward";
+          if (filter === "task_reward") return r.source === "task_reward" || r.source === "task";
           if (filter === "lucky_wheel") return r.source === "lucky_wheel";
           if (filter === "referral") return r.source.includes("referral");
           if (filter === "vip") return r.source.includes("vip");
@@ -144,12 +157,12 @@ function RewardsPage() {
               </div>
 
               <p className="text-3xl sm:text-4xl font-black text-gold-gradient tracking-tight">
-                {money(data.totalRewards)}
+                {money(data?.totalEarned ?? 0)}
               </p>
 
               <p className="text-xs text-muted-foreground">
                 {t("rewards.totalWalletBalance")}:{" "}
-                <span className="font-extrabold text-foreground">{money(data.balance)}</span>
+                <span className="font-extrabold text-foreground">{money(data?.balance ?? 0)}</span>
               </p>
             </div>
 
@@ -157,11 +170,11 @@ function RewardsPage() {
               <button
                 type="button"
                 id="claim-daily-reward-btn"
-                disabled={data.dailyRewardClaimed || claimMutation.isPending}
+                disabled={!data || data.dailyRewardClaimed || claimMutation.isPending}
                 onClick={() => claimMutation.mutate()}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl brand-gradient py-3.5 px-4 text-sm font-black text-primary-foreground shadow-glow hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {data.dailyRewardClaimed ? (
+                {data?.dailyRewardClaimed ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                     <span>{t("rewards.claimedToday")}</span>
@@ -170,7 +183,7 @@ function RewardsPage() {
                   <>
                     <Gift className="h-4 w-4 text-gold" />
                     <span>
-                      {t("rewards.claimToday")} ({money(data.dailyRewardAmount)})
+                      {t("rewards.claimToday")} ({money(data?.dailyRewardAmount ?? 0)})
                     </span>
                   </>
                 )}
@@ -247,7 +260,22 @@ function RewardsPage() {
             </span>
           </div>
 
-          {filteredRewards.length === 0 ? (
+          {isLoading ? (
+            <div className="surface-card p-10 text-center rounded-2xl text-sm text-muted-foreground">
+              {t("common.loading")}
+            </div>
+          ) : isError || !data ? (
+            <div className="surface-card p-10 text-center rounded-2xl space-y-3">
+              <p className="text-sm font-bold text-foreground">{t("common.error")}</p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="rounded-xl brand-gradient px-4 py-2 text-xs font-bold text-primary-foreground"
+              >
+                {t("common.retry")}
+              </button>
+            </div>
+          ) : filteredRewards.length === 0 ? (
             <div className="surface-card p-10 sm:p-14 text-center rounded-2xl">
               <Gift className="mx-auto h-10 w-10 text-muted-foreground/40 mb-2" />
               <p className="text-sm font-bold text-foreground">{t("rewards.noHistory")}</p>

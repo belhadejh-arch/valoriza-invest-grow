@@ -63,20 +63,19 @@ function DepositPage() {
   });
 
   const depositAddresses: Record<NetworkType, string> = {
-    "USDT-ERC20":
-      configData?.settings?.["deposit_address_ERC20"] ||
-      "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
-    "USDT-BEP20":
-      configData?.settings?.["deposit_address_BEP20"] ||
-      "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
-    "USDT-TRC20":
-      configData?.settings?.["deposit_address_TRC20"] || "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+    "USDT-ERC20": configData?.settings?.["deposit_address_ERC20"] || "",
+    "USDT-BEP20": configData?.settings?.["deposit_address_BEP20"] || "",
+    "USDT-TRC20": configData?.settings?.["deposit_address_TRC20"] || "",
   };
 
   const currentAddress = depositAddresses[network];
   const minDeposit = Number(configData?.settings?.["min_deposit"] ?? "10");
 
   const copyAddress = async () => {
+    if (!currentAddress) {
+      toast.error(t("deposit.addressNotConfigured"));
+      return;
+    }
     try {
       await navigator.clipboard.writeText(currentAddress);
       setCopied(true);
@@ -135,6 +134,8 @@ function DepositPage() {
         toast.error(t("deposit.uploadHint"));
       } else if (res.reason === "BELOW_MIN_DEPOSIT") {
         toast.error(`${t("deposit.minNotice")} (${minDeposit}$)`);
+      } else if (res.reason === "DEPOSIT_ADDRESS_UNAVAILABLE") {
+        toast.error(t("deposit.addressNotConfigured"));
       } else {
         toast.error(t("common.error"));
       }
@@ -153,6 +154,10 @@ function DepositPage() {
 
     if (!screenshotPreview) {
       toast.error(t("deposit.uploadHint"));
+      return;
+    }
+    if (!currentAddress) {
+      toast.error(t("deposit.addressNotConfigured"));
       return;
     }
 
@@ -252,13 +257,14 @@ function DepositPage() {
                     className="truncate text-xs font-mono text-foreground text-start px-2"
                     dir="ltr"
                   >
-                    {currentAddress}
+                    {currentAddress || t("deposit.addressNotConfigured")}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={copyAddress}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-black shadow-glow active:scale-95 transition-all whitespace-nowrap cursor-pointer"
+                  disabled={!currentAddress}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-black shadow-glow active:scale-95 transition-all whitespace-nowrap cursor-pointer disabled:opacity-50"
                 >
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                   <span>{copied ? t("deposit.copied") : t("deposit.copyAddress")}</span>
@@ -268,7 +274,8 @@ function DepositPage() {
               <button
                 type="button"
                 onClick={() => setShowQrModal(!showQrModal)}
-                className="flex items-center justify-center gap-2 w-full text-center text-xs font-bold text-cyan-glow hover:underline cursor-pointer pt-1"
+                disabled={!currentAddress}
+                className="flex items-center justify-center gap-2 w-full text-center text-xs font-bold text-cyan-glow hover:underline cursor-pointer pt-1 disabled:opacity-50 disabled:no-underline"
               >
                 <QrCode className="h-4 w-4" />
                 <span>{t("deposit.scanQr")}</span>

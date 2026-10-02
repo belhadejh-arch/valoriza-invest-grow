@@ -227,9 +227,9 @@ async function changeBalance(
   const after = before + amount;
   if (after < 0) throw Object.assign(new Error("INSUFFICIENT_BALANCE"), { status: 400 });
   await client.query(
-    `UPDATE wallets SET balance = $1, total_earned = total_earned + CASE WHEN $2 > 0 AND $3 <> 'deposit' THEN $2 ELSE 0 END,
-      total_deposited = total_deposited + CASE WHEN $3 = 'deposit' THEN $2 ELSE 0 END,
-      total_withdrawn = total_withdrawn + CASE WHEN $3 = 'withdrawal' THEN -$2 ELSE 0 END,
+    `UPDATE wallets SET balance = $1, total_earned = total_earned + CASE WHEN $2::numeric > 0 AND $3 <> 'deposit' THEN $2::numeric ELSE 0::numeric END,
+      total_deposited = total_deposited + CASE WHEN $3 = 'deposit' THEN $2::numeric ELSE 0::numeric END,
+      total_withdrawn = total_withdrawn + CASE WHEN $3 = 'withdrawal' THEN -$2::numeric ELSE 0::numeric END,
       updated_at = now() WHERE user_id = $4`,
     [after, amount, type, userId],
   );
@@ -873,6 +873,13 @@ app.post("/api/app/deposit", async (request, response, next) => {
     if (value < number(settings.min_deposit ?? 10))
       return response.json({ ok: false, reason: "BELOW_MIN_DEPOSIT" });
     const address = settings[`deposit_address_${network}`] ?? "";
+    if (!String(address).trim()) {
+      return response.json({
+        ok: false,
+        reason: "DEPOSIT_ADDRESS_UNAVAILABLE",
+        message: "عنوان الإيداع غير متوفر لهذه الشبكة حالياً، يرجى التواصل مع الإدارة.",
+      });
+    }
     const result = await query(
       "INSERT INTO deposits (user_id,amount,network,deposit_address,screenshot_url,tx_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
       [user.id, value, String(address), String(screenshotUrl ?? ""), txHash ?? null],
@@ -1212,12 +1219,16 @@ app.post("/api/app/tasks/complete", async (request, response, next) => {
 app.get("/api/app/rewards", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const result = await query(
-      "SELECT id,source,amount,description_ar,created_at FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50",
-      [user.id],
-    );
-    const wallet = await query("SELECT balance,total_earned FROM wallets WHERE user_id=$1", [
-      user.id,
+    const [result, wallet, daily, settings] = await Promise.all([
+      query(
+        "SELECT id,source,amount,description_ar,created_at FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50",
+        [user.id],
+      ),
+      query("SELECT balance,total_earned FROM wallets WHERE user_id=$1", [user.id]),
+      query("SELECT id FROM daily_login_rewards WHERE user_id=$1 AND reward_date=current_date", [
+        user.id,
+      ]),
+      getSettings(),
     ]);
     response.json({
       rewards: result.rows.map((row) => ({
@@ -1229,6 +1240,8 @@ app.get("/api/app/rewards", async (request, response, next) => {
       })),
       balance: number(wallet.rows[0]?.balance),
       totalEarned: number(wallet.rows[0]?.total_earned),
+      dailyRewardClaimed: Boolean(daily.rowCount),
+      dailyRewardAmount: number(settings.daily_login_reward ?? 0),
     });
   } catch (error) {
     next(error);

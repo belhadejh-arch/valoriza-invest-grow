@@ -1,5 +1,6 @@
 export function hasConfiguredBackend(): boolean {
-  return Boolean(import.meta.env.VITE_BACKEND_URL);
+  // The Replit API service is mounted on the same origin under /api.
+  return typeof window !== "undefined" || Boolean(import.meta.env.VITE_BACKEND_URL);
 }
 
 export function backendBaseUrl(): string {
@@ -9,7 +10,7 @@ export function backendBaseUrl(): string {
   }
 
   // In Node/SSR server default to local express port
-  return process.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
+  return process.env.VITE_BACKEND_URL || "http://127.0.0.1:8080";
 }
 
 export function buildApiUrl(path: string): string {

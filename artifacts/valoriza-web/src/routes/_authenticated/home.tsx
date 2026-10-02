@@ -284,7 +284,7 @@ function HomePage() {
                   {t("home.withdraw")}
                 </span>
                 <span className="block text-[10px] sm:text-[11px] text-sky-200 font-semibold mt-0.5">
-                  {t("home.minWithdraw")}
+                  {t("home.minWithdraw")} ({settings.min_withdrawal || "6"}$)
                 </span>
               </div>
             </button>
@@ -309,7 +309,7 @@ function HomePage() {
                   {t("home.deposit")}
                 </span>
                 <span className="block text-[10px] sm:text-[11px] text-amber-200 font-semibold mt-0.5">
-                  {t("home.minDeposit")}
+                  {t("home.minDeposit")} ({settings.min_deposit || "10"}$)
                 </span>
               </div>
             </button>
@@ -477,6 +477,7 @@ function HomePage() {
           BEP20: settings.deposit_address_BEP20,
           TRC20: settings.deposit_address_TRC20,
         }}
+        minDeposit={Number(settings.min_deposit || 10)}
       />
 
       <WithdrawalModal

@@ -69,6 +69,8 @@ function TasksPage() {
         queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
         queryClient.invalidateQueries({ queryKey: ["investment-data"] });
         queryClient.invalidateQueries({ queryKey: ["account-data"] });
+        queryClient.invalidateQueries({ queryKey: ["rewards"] });
+        queryClient.invalidateQueries({ queryKey: ["home"] });
         setActiveWatchTask(null);
       } else {
         if (result.reason === "DAILY_LIMIT_REACHED") {
@@ -243,7 +245,23 @@ function TasksPage() {
         </div>
 
         {/* Task Cards List or Disabled Message */}
-        {data?.tasksEnabled === false || tasksList.length === 0 ? (
+        {isLoading ? (
+          <div className="surface-card glow-border p-12 text-center rounded-3xl text-muted-foreground">
+            <RefreshCw className="mx-auto h-8 w-8 animate-spin text-cyan-glow" />
+            <p className="mt-3 text-sm font-bold">{t("common.loading")}</p>
+          </div>
+        ) : !data ? (
+          <div className="surface-card glow-border p-8 text-center rounded-3xl space-y-3">
+            <p className="text-sm font-bold text-foreground">{t("common.error")}</p>
+            <button
+              type="button"
+              onClick={() => void queryClient.invalidateQueries({ queryKey: ["tasks-data"] })}
+              className="rounded-xl brand-gradient px-4 py-2 text-xs font-bold text-primary-foreground"
+            >
+              {t("common.retry")}
+            </button>
+          </div>
+        ) : data.tasksEnabled === false || tasksList.length === 0 ? (
           <div className="surface-card glow-border p-12 text-center rounded-3xl space-y-4 my-6 animate-in fade-in">
             <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-surface border border-border text-muted-foreground shadow-inner">
               <Video className="h-8 w-8 text-cyan-glow" />
