@@ -18,11 +18,12 @@ interface AdminOverviewTabProps {
 }
 
 export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
-  const { data, isLoading, isFetching, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
+    refetchOnMount: "always",
   });
 
   if (isLoading) {
@@ -30,6 +31,28 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
       <div className="py-20 text-center text-xs text-muted-foreground">
         <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
         جارٍ جلب إحصائيات المنصة...
+      </div>
+    );
+  }
+
+  if (isError && !data) {
+    return (
+      <div className="surface-card rounded-2xl border border-danger/40 p-6 text-center">
+        <p className="text-sm font-bold text-danger">
+          تعذر جلب إحصائيات لوحة التحكم من الخادم وقاعدة البيانات.
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {error instanceof Error ? error.message : "تحقق من اتصال الخادم بقاعدة البيانات."}
+        </p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-bold text-foreground disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          إعادة المحاولة
+        </button>
       </div>
     );
   }
@@ -119,11 +142,21 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
       <div className="flex items-center justify-between rounded-2xl border border-border/80 bg-surface/60 px-4 py-2.5 shadow-sm">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            {!isError && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            )}
+            <span
+              className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                isError ? "bg-danger" : "bg-emerald-500"
+              }`}
+            />
           </span>
-          <span className="text-xs font-bold text-foreground">
-            تحديث تلقائي مستمر من PostgreSQL (كل 5 ثوانٍ)
+          <span className={`text-xs font-bold ${isError ? "text-danger" : "text-foreground"}`}>
+            {isError
+              ? "تعذر التحديث من الخادم؛ ستتم إعادة المحاولة تلقائياً"
+              : isFetching
+                ? "جارٍ جلب أحدث البيانات من الخادم وقاعدة PostgreSQL..."
+                : "تحديث تلقائي مستمر من PostgreSQL (كل 5 ثوانٍ)"}
           </span>
         </div>
         <button

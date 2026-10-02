@@ -1390,7 +1390,10 @@ app.get("/api/admin/overview", async (request, response, next) => {
         "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM withdrawals WHERE status='pending'",
       ),
       query(
-        "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM withdrawals WHERE status IN ('approved', 'completed')",
+        `SELECT count(*)::int AS count,
+                coalesce(sum(amount) FILTER (WHERE status IN ('approved', 'completed')), 0) AS amount
+         FROM withdrawals
+         WHERE status IN ('approved', 'completed')`,
       ),
       query(
         "SELECT count(*)::int AS count, coalesce(sum(amount),0) AS amount FROM deposits WHERE status IN ('approved', 'completed')",
@@ -1432,47 +1435,48 @@ app.get("/api/admin/overview", async (request, response, next) => {
 app.get("/api/admin/users", async (_request, response, next) => {
   try {
     const result = await query(
-      `SELECT p.id, p.username, p.email, p.phone, p.referral_code, p.vip_level, p.trial_active,
+      `WITH team_members AS (
+         SELECT r.referrer_id, r.referred_id AS member_id
+         FROM referrals r
+         WHERE r.level BETWEEN 1 AND 3
+         UNION
+         SELECT p_member.referred_by AS referrer_id, p_member.id AS member_id
+         FROM profiles p_member
+         WHERE p_member.referred_by IS NOT NULL
+       ),
+       team_metrics AS (
+         SELECT tm.referrer_id,
+                count(DISTINCT tm.member_id) FILTER (
+                  WHERE member.vip_level BETWEEN 1 AND 7
+                    AND (member.vip_expires_at IS NULL OR member.vip_expires_at > now())
+                )::int AS team_vip_count,
+                coalesce(
+                  sum(w.amount) FILTER (WHERE w.status IN ('approved', 'completed')),
+                  0
+                ) AS team_withdrawn
+         FROM team_members tm
+         JOIN profiles member ON member.id = tm.member_id
+         LEFT JOIN withdrawals w ON w.user_id = tm.member_id
+         GROUP BY tm.referrer_id
+       ),
+       user_withdrawals AS (
+         SELECT user_id, sum(amount) AS user_approved_withdrawn
+         FROM withdrawals
+         WHERE status IN ('approved', 'completed')
+         GROUP BY user_id
+       )
+       SELECT p.id, p.username, p.email, p.phone, p.referral_code, p.vip_level, p.trial_active,
               p.is_blocked, p.can_withdraw, p.wheel_spins_available, p.created_at,
               w.balance, w.total_deposited, w.total_withdrawn, w.invested_balance, w.team_income,
               wa.address AS withdrawal_address, wa.network AS withdrawal_network,
-              (
-                SELECT count(DISTINCT member_id)::int
-                FROM (
-                  SELECT r.referred_id AS member_id
-                  FROM referrals r
-                  WHERE r.referrer_id = p.id
-                  UNION
-                  SELECT p_sub.id AS member_id
-                  FROM profiles p_sub
-                  WHERE p_sub.referred_by = p.id
-                ) all_refs
-                JOIN profiles pr ON pr.id = all_refs.member_id
-                WHERE pr.vip_level >= 1 AND pr.vip_level <= 7
-              ) AS team_vip_count,
-              COALESCE((
-                SELECT sum(w_sub.amount)
-                FROM withdrawals w_sub
-                WHERE w_sub.user_id IN (
-                  SELECT r.referred_id
-                  FROM referrals r
-                  WHERE r.referrer_id = p.id
-                  UNION
-                  SELECT p_sub.id
-                  FROM profiles p_sub
-                  WHERE p_sub.referred_by = p.id
-                )
-                AND w_sub.status IN ('approved', 'completed')
-              ), 0) AS team_withdrawn,
-              COALESCE((
-                SELECT sum(w_own.amount)
-                FROM withdrawals w_own
-                WHERE w_own.user_id = p.id
-                  AND w_own.status IN ('approved', 'completed')
-              ), 0) AS user_approved_withdrawn
+               coalesce(tm.team_vip_count, 0) AS team_vip_count,
+               coalesce(tm.team_withdrawn, 0) AS team_withdrawn,
+               coalesce(uw.user_approved_withdrawn, 0) AS user_approved_withdrawn
        FROM profiles p
        LEFT JOIN wallets w ON w.user_id = p.id
        LEFT JOIN withdrawal_addresses wa ON wa.user_id = p.id
+        LEFT JOIN team_metrics tm ON tm.referrer_id = p.id
+        LEFT JOIN user_withdrawals uw ON uw.user_id = p.id
        ORDER BY p.created_at DESC LIMIT 200`,
     );
     response.json(
@@ -1614,7 +1618,7 @@ app.post("/api/admin/users/vip", async (request, response, next) => {
     const targetUserId = request.body?.targetUserId;
     const vipLevel = Number(request.body?.vipLevel);
     await query(
-      "UPDATE profiles SET vip_level=$1, wheel_spins_available = COALESCE(wheel_spins_available, 0) + 1, updated_at=now() WHERE id=$2",
+      "UPDATE profiles SET vip_level=$1, vip_expires_at=NULL, wheel_spins_available = COALESCE(wheel_spins_available, 0) + 1, updated_at=now() WHERE id=$2",
       [vipLevel, targetUserId],
     );
     await query(

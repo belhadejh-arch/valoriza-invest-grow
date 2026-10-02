@@ -26,9 +26,17 @@ export function AdminWithdrawalsTab() {
   const [selectedWithdrawalId, setSelectedWithdrawalId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState("");
 
-  const { data: settings = {}, refetch: refetchSettings } = useQuery({
+  const {
+    data: settings,
+    isLoading: isLoadingSettings,
+    isError: isSettingsError,
+    error: settingsError,
+  } = useQuery({
     queryKey: ["admin-settings"],
     queryFn: () => getAdminSettings(),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
+    refetchOnMount: "always",
   });
 
   const toggleGlobalWithdrawals = useMutation({
@@ -46,18 +54,25 @@ export function AdminWithdrawalsTab() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const isGlobalWithdrawalsEnabled = settings["withdrawals_enabled"] !== "false";
+  const isGlobalWithdrawalsEnabled = settings?.["withdrawals_enabled"] === "true";
+  const isSettingsReady =
+    !isLoadingSettings &&
+    !isSettingsError &&
+    typeof settings?.["withdrawals_enabled"] === "string";
 
   const {
     data: withdrawals = [],
     isLoading,
     isFetching,
+    isError,
+    error,
     refetch,
   } = useQuery({
     queryKey: ["admin-withdrawals"],
     queryFn: () => getAdminWithdrawals(),
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
+    refetchOnMount: "always",
   });
 
   const reviewMutation = useMutation({
@@ -93,14 +108,22 @@ export function AdminWithdrawalsTab() {
       {/* Global Withdrawal Control Switch */}
       <div
         className={`rounded-2xl border p-4 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-          isGlobalWithdrawalsEnabled
+          !isSettingsReady
+            ? "border-amber-500/40 bg-amber-500/10"
+            : isGlobalWithdrawalsEnabled
             ? "border-emerald-500/40 bg-emerald-500/10"
             : "border-danger/40 bg-danger/10"
         }`}
       >
         <div className="flex items-center gap-3">
           <div
-            className={`p-2.5 rounded-xl ${isGlobalWithdrawalsEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-danger/20 text-danger"}`}
+            className={`p-2.5 rounded-xl ${
+              !isSettingsReady
+                ? "bg-amber-500/20 text-amber-300"
+                : isGlobalWithdrawalsEnabled
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-danger/20 text-danger"
+            }`}
           >
             <Power className="h-5 w-5" />
           </div>
@@ -109,16 +132,24 @@ export function AdminWithdrawalsTab() {
               <span>مفتاح السحب العام (لجميع المستخدمين):</span>
               <span
                 className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                  isGlobalWithdrawalsEnabled
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                    : "bg-danger/20 text-danger border border-danger/30"
+                  !isSettingsReady
+                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                    : isGlobalWithdrawalsEnabled
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "bg-danger/20 text-danger border border-danger/30"
                 }`}
               >
-                {isGlobalWithdrawalsEnabled ? "مفعّل (ON) 🟢" : "معطّل ومغلق (OFF) 🔴"}
+                {!isSettingsReady
+                  ? "جارٍ جلب الحالة"
+                  : isGlobalWithdrawalsEnabled
+                    ? "مفعّل (ON) 🟢"
+                    : "معطّل ومغلق (OFF) 🔴"}
               </span>
             </h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {isGlobalWithdrawalsEnabled
+              {!isSettingsReady
+                ? "يتم جلب الحالة الحالية من الخادم وقاعدة البيانات."
+                : isGlobalWithdrawalsEnabled
                 ? "السحب متاح للمستخدمين الذين تم تفعيل السحب في حساباتهم الفردية."
                 : "السحب متوقف ومغلق حالياً لجميع المستخدمين، وتظهر لهم رسالة توضيحية."}
             </p>
@@ -127,7 +158,12 @@ export function AdminWithdrawalsTab() {
 
         <button
           type="button"
-          disabled={toggleGlobalWithdrawals.isPending}
+          disabled={
+            toggleGlobalWithdrawals.isPending ||
+            isLoadingSettings ||
+            isSettingsError ||
+            settings?.["withdrawals_enabled"] === undefined
+          }
           onClick={() => toggleGlobalWithdrawals.mutate(!isGlobalWithdrawalsEnabled)}
           className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-black transition-all active:scale-95 disabled:opacity-50 ${
             isGlobalWithdrawalsEnabled
@@ -137,10 +173,22 @@ export function AdminWithdrawalsTab() {
         >
           <Power className="h-4 w-4" />
           <span>
-            {isGlobalWithdrawalsEnabled ? "تعطيل السحب العام (OFF)" : "تفعيل السحب العام (ON)"}
+            {isLoadingSettings
+              ? "جارٍ تحميل الإعداد..."
+              : isSettingsError || settings?.["withdrawals_enabled"] === undefined
+                ? "تعذر جلب إعداد السحب"
+                : isGlobalWithdrawalsEnabled
+                  ? "تعطيل السحب العام (OFF)"
+                  : "تفعيل السحب العام (ON)"}
           </span>
         </button>
       </div>
+      {isSettingsError && (
+        <p className="rounded-xl border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+          تعذر جلب إعداد السحب من الخادم:{" "}
+          {settingsError instanceof Error ? settingsError.message : "تحقق من اتصال قاعدة البيانات."}
+        </p>
+      )}
 
       {/* Tabs bar */}
       <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1">
@@ -177,9 +225,19 @@ export function AdminWithdrawalsTab() {
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            تحديث تلقائي (5ث)
+          <span
+            className={`hidden sm:inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-bold ${
+              isError
+                ? "border-danger/40 bg-danger/10 text-danger"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                isError ? "bg-danger" : "bg-emerald-400 animate-pulse"
+              }`}
+            />
+            {isError ? "تعذر الاتصال؛ إعادة المحاولة تلقائياً" : "تحديث تلقائي من PostgreSQL (5ث)"}
           </span>
           <button
             type="button"
@@ -199,6 +257,24 @@ export function AdminWithdrawalsTab() {
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           جارٍ جلب سجل طلبات السحب...
+        </div>
+      ) : isError && withdrawals.length === 0 ? (
+        <div className="surface-card rounded-2xl border border-danger/40 p-6 text-center">
+          <p className="text-sm font-bold text-danger">
+            تعذر جلب السحوبات من الخادم وقاعدة البيانات.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {error instanceof Error ? error.message : "تحقق من اتصال الخادم بقاعدة البيانات."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-bold text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            إعادة المحاولة
+          </button>
         </div>
       ) : filteredWithdrawals.length === 0 ? (
         <div className="surface-card rounded-2xl p-8 text-center text-xs text-muted-foreground">

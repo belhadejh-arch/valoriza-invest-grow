@@ -61,12 +61,15 @@ export function AdminUsersTab() {
     data: users = [],
     isLoading,
     isFetching,
+    isError,
+    error,
     refetch,
   } = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => getAdminUsers(),
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
+    refetchOnMount: "always",
   });
 
   const blockMutation = useMutation({
@@ -190,9 +193,23 @@ export function AdminUsersTab() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-bold text-emerald-400">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            تحديث تلقائي (5 ثوانٍ)
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-bold ${
+              isError
+                ? "border-danger/40 bg-danger/10 text-danger"
+                : "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isError ? "bg-danger" : "bg-emerald-400 animate-pulse"
+              }`}
+            />
+            {isError
+              ? "تعذر الاتصال؛ ستتم إعادة المحاولة تلقائياً"
+              : isFetching
+                ? "جارٍ جلب أحدث البيانات..."
+                : "تحديث تلقائي من PostgreSQL (5 ثوانٍ)"}
           </span>
           <button
             type="button"
@@ -212,6 +229,24 @@ export function AdminUsersTab() {
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           جارٍ جلب حسابات المستخدمين...
+        </div>
+      ) : isError && users.length === 0 ? (
+        <div className="surface-card rounded-2xl border border-danger/40 p-6 text-center">
+          <p className="text-sm font-bold text-danger">
+            تعذر جلب قائمة المستخدمين وبيانات الفريق من الخادم وقاعدة البيانات.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {error instanceof Error ? error.message : "تحقق من اتصال الخادم بقاعدة البيانات."}
+          </p>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-bold text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            إعادة المحاولة
+          </button>
         </div>
       ) : filteredUsers.length === 0 ? (
         <div className="surface-card rounded-2xl p-8 text-center text-xs text-muted-foreground">

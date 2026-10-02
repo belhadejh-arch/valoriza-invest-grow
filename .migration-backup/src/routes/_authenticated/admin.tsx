@@ -47,9 +47,21 @@ function AdminDashboardPage() {
 
   const handleGlobalRefresh = async () => {
     setIsRefreshingGlobal(true);
-    await queryClient.invalidateQueries();
-    toast.success("تم تحديث جميع بيانات لوحة التحكم من PostgreSQL بنجاح");
-    setTimeout(() => setIsRefreshingGlobal(false), 500);
+    try {
+      await queryClient.invalidateQueries(
+        { refetchType: "all" },
+        { throwOnError: true },
+      );
+      toast.success("تم تحديث البيانات المحمّلة من الخادم وقاعدة PostgreSQL");
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? `تعذر تحديث بيانات لوحة التحكم: ${error.message}`
+          : "تعذر تحديث بيانات لوحة التحكم من الخادم.",
+      );
+    } finally {
+      setIsRefreshingGlobal(false);
+    }
   };
 
   const tabs = [
