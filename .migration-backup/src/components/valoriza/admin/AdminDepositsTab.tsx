@@ -32,6 +32,8 @@ export function AdminDepositsTab() {
     queryFn: () => getAdminDeposits(),
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 
   const reviewMutation = useMutation({

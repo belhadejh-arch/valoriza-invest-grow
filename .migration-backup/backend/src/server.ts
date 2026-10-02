@@ -1391,7 +1391,7 @@ app.get("/api/admin/overview", async (request, response, next) => {
       ),
       query(
         `SELECT count(*)::int AS count,
-                coalesce(sum(amount) FILTER (WHERE status IN ('approved', 'completed')), 0) AS amount
+                coalesce(sum(amount), 0) AS amount
          FROM withdrawals
          WHERE status IN ('approved', 'completed')`,
       ),
@@ -1444,26 +1444,27 @@ app.get("/api/admin/users", async (_request, response, next) => {
          FROM profiles p_member
          WHERE p_member.referred_by IS NOT NULL
        ),
+       approved_withdrawals_by_user AS (
+         SELECT user_id, sum(amount) AS withdrawn_amount
+         FROM withdrawals
+         WHERE status IN ('approved', 'completed')
+         GROUP BY user_id
+       ),
        team_metrics AS (
          SELECT tm.referrer_id,
                 count(DISTINCT tm.member_id) FILTER (
                   WHERE member.vip_level BETWEEN 1 AND 7
                     AND (member.vip_expires_at IS NULL OR member.vip_expires_at > now())
                 )::int AS team_vip_count,
-                coalesce(
-                  sum(w.amount) FILTER (WHERE w.status IN ('approved', 'completed')),
-                  0
-                ) AS team_withdrawn
+                coalesce(sum(awu.withdrawn_amount), 0) AS team_withdrawn
          FROM team_members tm
          JOIN profiles member ON member.id = tm.member_id
-         LEFT JOIN withdrawals w ON w.user_id = tm.member_id
+         LEFT JOIN approved_withdrawals_by_user awu ON awu.user_id = tm.member_id
          GROUP BY tm.referrer_id
        ),
        user_withdrawals AS (
-         SELECT user_id, sum(amount) AS user_approved_withdrawn
-         FROM withdrawals
-         WHERE status IN ('approved', 'completed')
-         GROUP BY user_id
+         SELECT user_id, withdrawn_amount AS user_approved_withdrawn
+         FROM approved_withdrawals_by_user
        )
        SELECT p.id, p.username, p.email, p.phone, p.referral_code, p.vip_level, p.trial_active,
               p.is_blocked, p.can_withdraw, p.wheel_spins_available, p.created_at,

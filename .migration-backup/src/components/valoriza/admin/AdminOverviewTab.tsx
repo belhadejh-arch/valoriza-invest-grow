@@ -24,6 +24,7 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
     refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 
   if (isLoading) {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
@@ -70,7 +70,15 @@ export function AdminUsersTab() {
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
     refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
+
+  const selectedUserId = selectedUser?.id;
+  useEffect(() => {
+    if (!selectedUserId) return;
+    const latestUser = users.find((user) => user.id === selectedUserId);
+    if (latestUser) setSelectedUser(latestUser);
+  }, [users, selectedUserId]);
 
   const blockMutation = useMutation({
     mutationFn: toggleUserBlock,

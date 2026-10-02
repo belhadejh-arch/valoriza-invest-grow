@@ -37,6 +37,7 @@ export function AdminWithdrawalsTab() {
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
     refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 
   const toggleGlobalWithdrawals = useMutation({
@@ -73,6 +74,7 @@ export function AdminWithdrawalsTab() {
     refetchInterval: 5000,
     refetchIntervalInBackground: true,
     refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
   });
 
   const reviewMutation = useMutation({
