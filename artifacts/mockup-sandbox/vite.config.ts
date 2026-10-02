@@ -1,14 +1,15 @@
-import { defineConfig } from "vite";
+import { defineConfig, type UserConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { mockupPreviewPlugin } from "./mockupPreviewPlugin";
 
-export default defineConfig(async ({ command }) => {
+export default defineConfig(async ({ command }): Promise<UserConfig> => {
   // Vite does not need a listening port for production builds. Keep the
   // artifact's runtime values as build defaults for CI environments such as Vercel.
   const isBuild = command === "build";
+  const isVercelBuild = isBuild && process.env.VERCEL === "1";
   const rawPort = process.env.PORT ?? (isBuild ? "8081" : undefined);
 
   if (!rawPort) {
@@ -23,8 +24,9 @@ export default defineConfig(async ({ command }) => {
     throw new Error(`Invalid PORT value: "${rawPort}"`);
   }
 
-  const basePath =
-    process.env.BASE_PATH ?? (isBuild ? "/__mockup" : undefined);
+  const basePath = isVercelBuild
+    ? "/"
+    : (process.env.BASE_PATH ?? (isBuild ? "/__mockup" : undefined));
 
   if (!basePath) {
     throw new Error(
@@ -57,7 +59,9 @@ export default defineConfig(async ({ command }) => {
     },
     root: path.resolve(import.meta.dirname),
     build: {
-      outDir: path.resolve(import.meta.dirname, "dist"),
+      outDir: isVercelBuild
+        ? path.resolve(import.meta.dirname, "../../.output/public")
+        : path.resolve(import.meta.dirname, "dist"),
       emptyOutDir: true,
     },
     server: {

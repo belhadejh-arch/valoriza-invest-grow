@@ -1,15 +1,19 @@
-# [Project name]
+# Valoriza Investment Hub
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Valoriza backend services and a component-preview workspace for the investment app.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, routed at `/api`)
+- `pnpm --filter @workspace/mockup-sandbox run dev` — run the component-preview server at `/__mockup`
+- `pnpm install --frozen-lockfile` — install workspace dependencies
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
+- `npm run vercel-build` — Vercel build; writes static files to `.output/public`
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+
+The Replit API health check is available at `/api/healthz`. The current web preview is the component-preview shell, not the full Valoriza frontend.
 
 ## Stack
 
@@ -22,23 +26,28 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server` — API service and build configuration
+- `artifacts/mockup-sandbox` — component-preview frontend
+- `lib` — shared API and database packages
+- `.migration-backup/backend/migrations` — legacy Valoriza PostgreSQL schema
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The workspace uses pnpm; install with pnpm so workspace catalogs and the lockfile stay consistent.
+- The API uses the Replit development database in development. Keep development schema changes separate from the external production database.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The API supports the Valoriza investment app. The active web artifact in this workspace is a component preview rather than the complete user-facing application.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+_No additional project-wide preferences recorded._
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Vercel's static output directory must remain `.output/public`; `npm run vercel-build` sets the production Vite base path and output directory.
+- Do not run the legacy migration batch unreviewed: migration `002` deletes and reseeds task and wheel-configuration rows.
 
 ## Pointers
 
