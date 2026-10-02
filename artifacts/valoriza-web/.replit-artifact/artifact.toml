@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Valoriza Investment Hub"
+description = "The Valoriza investment platform for members to sign in, manage savings and VIP plans, follow deposits and withdrawals, complete tasks, and review rewards and account activity."
+version = "1.0.0"
+id = "artifacts/valoriza-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18785
+
+[services.development]
+run = "pnpm --filter @workspace/valoriza-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/valoriza-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/valoriza-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18785"
+BASE_PATH = "/"
