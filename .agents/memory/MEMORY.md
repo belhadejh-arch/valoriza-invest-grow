@@ -1,0 +1,1 @@
+- [Separate database environments](database-environments.md) — legacy customer investments live in external PostgreSQL; Replit’s development database is separate.
