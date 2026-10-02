@@ -15,12 +15,13 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: [path.resolve(artifactDir, "../../.migration-backup/backend/src/server.ts")],
     platform: "node",
     bundle: true,
     format: "esm",
     outdir: distDir,
     outExtension: { ".js": ".mjs" },
+    nodePaths: [path.resolve(artifactDir, "node_modules")],
     logLevel: "info",
     // Some packages may not be bundleable, so we externalize them, we can add more here as needed.
     // Some of the packages below may not be imported or installed, but we're adding them in case they are in the future.
@@ -29,6 +30,13 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      "bcryptjs",
+      "cookie-parser",
+      "cors",
+      "dotenv",
+      "express",
+      "jsonwebtoken",
+      "pg",
       "sharp",
       "better-sqlite3",
       "sqlite3",

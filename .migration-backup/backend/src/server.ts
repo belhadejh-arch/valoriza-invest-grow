@@ -3,9 +3,6 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { pool, query, withTransaction } from "./db.js";
 import {
   clearSessionCookie,
@@ -18,7 +15,7 @@ import {
 } from "./auth.js";
 
 const app = express();
-const port = Number(process.env.BACKEND_PORT ?? (process.env.PORT === "3000" ? 4000 : 4000));
+const port = Number(process.env.BACKEND_PORT ?? process.env.PORT ?? 4000);
 const allowedOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "")
   .split(",")
   .map((value) => value.trim())
@@ -66,12 +63,135 @@ app.get("/api/health", async (_request, response) => {
   }
 });
 
+app.get("/api/healthz", async (_request, response) => {
+  try {
+    await query("SELECT 1");
+    response.json({ ok: true, service: "valoriza-backend", database: "connected" });
+  } catch {
+    response.status(503).json({ ok: false, service: "valoriza-backend", database: "unavailable" });
+  }
+});
+
 app.get("/api/ping", (_request, response) => {
   response.json({ ok: true, time: new Date().toISOString() });
 });
 
 function number(value: unknown) {
   return Number(value ?? 0);
+}
+
+type MaturedInvestment = {
+  id: string;
+  user_id: string;
+  amount: string;
+  expected_profit: string;
+};
+
+/**
+ * Pays due savings investments atomically. The maturity timestamp is derived
+ * against the PostgreSQL-generated matures_at value. New investments calculate
+ * that timestamp from PostgreSQL's statement_timestamp(), never the client clock.
+ */
+export async function settleMaturedInvestments(batchSize = 100): Promise<number> {
+  return withTransaction(async (client) => {
+    const due = await client.query<MaturedInvestment>(
+      `SELECT id, user_id, amount::text, expected_profit::text
+       FROM investments
+       WHERE status = 'active'
+         AND settled_at IS NULL
+         AND matures_at <= statement_timestamp()
+       ORDER BY user_id, created_at, id
+       LIMIT $1
+       FOR UPDATE SKIP LOCKED`,
+      [batchSize],
+    );
+
+    let settled = 0;
+    for (const investment of due.rows) {
+      // Legacy recovery: if a return ledger row already exists, never credit it
+      // again. This also repairs its completion status without another payout.
+      const priorReturn = await client.query(
+        "SELECT id FROM transactions WHERE type='investment_return' AND reference_id=$1 LIMIT 1",
+        [investment.id],
+      );
+      if (priorReturn.rowCount) {
+        await client.query(
+          `UPDATE investments
+           SET status='completed', settled_at=COALESCE(settled_at, statement_timestamp())
+           WHERE id=$1 AND status='active' AND settled_at IS NULL`,
+          [investment.id],
+        );
+        continue;
+      }
+
+      await client.query(
+        "INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+        [investment.user_id],
+      );
+      const wallet = await client.query<{
+        balance_before: string;
+        balance_after: string;
+      }>(
+        `SELECT balance::text AS balance_before,
+                (balance + $2::numeric + $3::numeric)::text AS balance_after
+         FROM wallets WHERE user_id=$1 FOR UPDATE`,
+        [investment.user_id, investment.amount, investment.expected_profit],
+      );
+      if (!wallet.rowCount) throw new Error(`WALLET_NOT_FOUND_FOR_INVESTMENT:${investment.id}`);
+
+      const transaction = await client.query(
+        `INSERT INTO transactions
+           (user_id,type,status,amount,balance_before,balance_after,reference_id,description)
+         VALUES ($1,'investment_return','completed',$2::numeric+$3::numeric,$4::numeric,$5::numeric,$6,$7)
+         ON CONFLICT (reference_id) WHERE type='investment_return' DO NOTHING
+         RETURNING id`,
+        [
+          investment.user_id,
+          investment.amount,
+          investment.expected_profit,
+          wallet.rows[0].balance_before,
+          wallet.rows[0].balance_after,
+          investment.id,
+          `استحقاق صندوق التوفير — رأس المال ${investment.amount} + الربح ${investment.expected_profit}`,
+        ],
+      );
+      if (!transaction.rowCount) {
+        throw new Error(`DUPLICATE_INVESTMENT_RETURN_BLOCKED:${investment.id}`);
+      }
+
+      await client.query(
+        `UPDATE wallets
+         SET balance = balance + $2::numeric + $3::numeric,
+             total_earned = total_earned + $3::numeric,
+             invested_balance = GREATEST(0, invested_balance - $2::numeric),
+             updated_at = statement_timestamp()
+         WHERE user_id=$1`,
+        [investment.user_id, investment.amount, investment.expected_profit],
+      );
+      const completed = await client.query(
+        `UPDATE investments
+         SET status='completed', settled_at=statement_timestamp()
+         WHERE id=$1 AND status='active' AND settled_at IS NULL
+         RETURNING id`,
+        [investment.id],
+      );
+      if (!completed.rowCount) throw new Error(`INVESTMENT_STATE_CHANGED:${investment.id}`);
+      settled += 1;
+    }
+
+    return settled;
+  });
+}
+
+async function runInvestmentSettlementJob() {
+  try {
+    const count = await settleMaturedInvestments();
+    if (count > 0) {
+      console.info(`Investment settlement completed: ${count} investment(s).`);
+    }
+  } catch (error) {
+    console.error("Investment settlement job failed:", error);
+  }
 }
 
 function settingsMap(rows: { key: string; value: string }[]) {
@@ -783,22 +903,25 @@ app.post("/api/app/invest", async (request, response, next) => {
     const { fundId, amount } = request.body ?? {};
     const value = Number(amount);
     const result = await withTransaction(async (client) => {
-      const fund = await client.query<{
-        duration_days: number;
-        profit_percent: string;
-        min_amount: string;
-      }>(
-        "SELECT duration_days,profit_percent,min_amount FROM investment_funds WHERE id=$1 AND is_active=true",
-        [fundId],
-      );
-      if (!fund.rows[0] || value < number(fund.rows[0].min_amount))
+      if (!Number.isFinite(value) || value <= 0)
         return { ok: false, reason: "BELOW_MIN_INVESTMENT" };
-      const matures = new Date(Date.now() + fund.rows[0].duration_days * 86400000);
-      const expected = (value * number(fund.rows[0].profit_percent)) / 100;
-      const investment = await client.query<{ id: string }>(
-        "INSERT INTO investments (user_id,fund_id,amount,expected_profit,matures_at) VALUES ($1,$2,$3,$4,$5) RETURNING id",
-        [user.id, fundId, value, expected, matures],
+      const investment = await client.query<{
+        id: string;
+        expected_profit: string;
+        created_at: Date;
+        matures_at: Date;
+      }>(
+        `INSERT INTO investments
+           (user_id,fund_id,amount,expected_profit,created_at,matures_at)
+         SELECT $1,$2,$3::numeric,round($3::numeric * f.profit_percent / 100,4),
+                statement_timestamp(),
+                statement_timestamp() + (f.duration_days * interval '1 day')
+         FROM investment_funds f
+         WHERE f.id=$2 AND f.is_active=true AND $3::numeric >= f.min_amount
+         RETURNING id, expected_profit::text, created_at, matures_at`,
+        [user.id, fundId, value],
       );
+      if (!investment.rowCount) return { ok: false, reason: "BELOW_MIN_INVESTMENT" };
       const newBalance = await changeBalance(
         client,
         user.id,
@@ -811,7 +934,14 @@ app.post("/api/app/invest", async (request, response, next) => {
         "UPDATE wallets SET invested_balance = invested_balance + $1 WHERE user_id = $2",
         [value, user.id],
       );
-      return { ok: true, investmentId: investment.rows[0].id, newBalance };
+      return {
+        ok: true,
+        investmentId: investment.rows[0].id,
+        expectedProfit: number(investment.rows[0].expected_profit),
+        createdAt: investment.rows[0].created_at,
+        maturesAt: investment.rows[0].matures_at,
+        newBalance,
+      };
     });
     response.json(result);
   } catch (error) {
@@ -1941,31 +2071,18 @@ app.use(
 async function initDatabase() {
   const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   if (!connectionString) {
-    console.warn(
-      "⚠️ No POSTGRES_URL or DATABASE_URL provided. Database features will be unavailable until configured.",
-    );
-    return;
+    throw new Error("No POSTGRES_URL or DATABASE_URL provided; backend cannot start.");
   }
   try {
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    const sqlPath = path.resolve(here, "../migrations/001_init.sql");
-    try {
-      const sql = await fs.readFile(sqlPath, "utf8");
-      await query(sql);
-      console.log("✅ Database schema initialized from 001_init.sql");
-    } catch (migErr) {
-      console.warn("⚠️ Migration notice:", migErr);
-    }
-
     // Ensure default primary admin user exists and is linked
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@valoriza.com").trim().toLowerCase();
-    const adminPassword = process.env.ADMIN_PASSWORD || "ValorizaAdmin2025!";
+    const adminPassword = process.env.ADMIN_PASSWORD;
     const adminCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
       adminEmail,
     ]);
     let adminId = adminCheck.rows[0]?.id;
 
-    if (!adminId) {
+    if (!adminId && adminPassword) {
       const adminHash = await hashPassword(adminPassword);
       const res = await query<{ id: string }>(
         `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
@@ -1990,7 +2107,9 @@ async function initDatabase() {
         "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
         [adminId],
       );
-      console.log(`👑 Primary admin created: ${adminEmail} (password: ${adminPassword})`);
+      console.log("Primary admin account provisioned.");
+    } else if (!adminId) {
+      console.warn("Primary admin provisioning skipped because ADMIN_PASSWORD is not configured.");
     } else {
       await query(
         "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
@@ -2005,9 +2124,9 @@ async function initDatabase() {
 
     // Ensure default user exists
     const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();
-    const userPassword = process.env.USER_PASSWORD || "ValorizaUser2025!";
+    const userPassword = process.env.USER_PASSWORD;
     const userCheck = await query("SELECT id FROM users WHERE email = $1", [userEmail]);
-    if (!userCheck.rowCount) {
+    if (!userCheck.rowCount && userPassword) {
       const userHash = await hashPassword(userPassword);
       const res = await query<{ id: string }>(
         `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
@@ -2028,7 +2147,7 @@ async function initDatabase() {
         "INSERT INTO user_roles (user_id, role) VALUES ($1, 'user') ON CONFLICT (user_id, role) DO NOTHING",
         [uId],
       );
-      console.log(`👤 Default user created: ${userEmail}`);
+      console.log("Default test user provisioned.");
     }
 
     // Seed default investment funds if empty
@@ -2126,14 +2245,6 @@ async function initDatabase() {
       );
     }
 
-    // Ensure columns exist on profiles
-    await query(
-      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS wheel_spins_available integer NOT NULL DEFAULT 0",
-    );
-    await query(
-      "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS can_withdraw boolean NOT NULL DEFAULT true",
-    );
-
     // Ensure 9 lucky wheel configs
     const wheelCount = await query("SELECT count(*)::int as count FROM lucky_wheel_configs");
     if ((wheelCount.rows[0]?.count ?? 0) === 0) {
@@ -2174,16 +2285,31 @@ async function initDatabase() {
     }
   } catch (err) {
     console.error("❌ initDatabase error:", err);
+    throw err;
   }
 }
 
 const server = createServer(app);
+let settlementTimer: NodeJS.Timeout | undefined;
 server.listen(port, "0.0.0.0", async () => {
   console.log(`Valoriza backend listening on port ${port}`);
-  await initDatabase();
+  try {
+    await initDatabase();
+    await runInvestmentSettlementJob();
+    const intervalMs = Number(process.env.INVESTMENT_SETTLEMENT_INTERVAL_MS ?? 15_000);
+    if (!Number.isFinite(intervalMs) || intervalMs < 1_000) {
+      throw new Error("INVESTMENT_SETTLEMENT_INTERVAL_MS must be at least 1000.");
+    }
+    settlementTimer = setInterval(() => void runInvestmentSettlementJob(), intervalMs);
+    settlementTimer.unref();
+  } catch (error) {
+    console.error("Backend initialization failed:", error);
+    server.close(() => process.exit(1));
+  }
 });
 
 async function shutdown() {
+  if (settlementTimer) clearInterval(settlementTimer);
   server.close();
   await pool.end();
 }
