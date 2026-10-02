@@ -1,1 +1,2 @@
 - [Separate database environments](database-environments.md) — legacy customer investments live in external PostgreSQL; Replit’s development database is separate.
+- [Vercel artifact builds](vercel-artifact-builds.md) — Vercel workspace builds do not inherit environment values from Replit artifact workflows.
