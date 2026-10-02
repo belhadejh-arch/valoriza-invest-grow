@@ -38,7 +38,11 @@ export function clearSessionCookie(response: Response) {
 }
 
 export async function createSession(userId: string, response: Response) {
-  const token = jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: `${SESSION_DAYS}d` });
+  const token = jwt.sign(
+    { sub: userId, jti: crypto.randomUUID() },
+    JWT_SECRET,
+    { expiresIn: `${SESSION_DAYS}d` },
+  );
   await query(
     `INSERT INTO sessions (user_id, token_hash, expires_at)
      VALUES ($1, $2, now() + ($3 || ' days')::interval)`,
