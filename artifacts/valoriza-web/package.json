@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
     "build": "vite build --config vite.config.ts",
+    "vercel-build": "PORT=18785 BASE_PATH=/ vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -76,6 +77,6 @@
   },
   "dependencies": {
     "@tanstack/react-router": "1.170.18",
-    "@tanstack/react-start": "1.168.32"
+    "@tanstack/react-start": "1.168.60"
   }
 }

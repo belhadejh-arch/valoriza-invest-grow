@@ -1,5 +1,20 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm run vercel-build"
+  "buildCommand": "pnpm run vercel-build",
+  "outputDirectory": "artifacts/valoriza-web/dist/public",
+  "rewrites": [
+    { "source": "/about", "destination": "/index.html" },
+    { "source": "/account", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/deposit", "destination": "/index.html" },
+    { "source": "/home", "destination": "/index.html" },
+    { "source": "/investment", "destination": "/index.html" },
+    { "source": "/records", "destination": "/index.html" },
+    { "source": "/rewards", "destination": "/index.html" },
+    { "source": "/support", "destination": "/index.html" },
+    { "source": "/tasks", "destination": "/index.html" },
+    { "source": "/team", "destination": "/index.html" },
+    { "source": "/withdrawal", "destination": "/index.html" }
+  ]
 }
