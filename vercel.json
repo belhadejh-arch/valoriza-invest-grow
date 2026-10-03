@@ -4,6 +4,7 @@
   "buildCommand": "pnpm run vercel-build",
   "outputDirectory": "artifacts/valoriza-web/dist/public",
   "rewrites": [
+    { "source": "/api/:apiPath*", "destination": "/api/index?__api_path=:apiPath*" },
     { "source": "/about", "destination": "/index.html" },
     { "source": "/account", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },

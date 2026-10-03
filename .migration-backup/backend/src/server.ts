@@ -42,7 +42,12 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: "8mb" }));
+const jsonBodyParser = express.json({ limit: "8mb" });
+app.use((request, response, next) => {
+  // Vercel may pass a parsed request body to serverless functions already.
+  if (request.body !== undefined) return next();
+  return jsonBodyParser(request, response, next);
+});
 app.use(cookieParser());
 
 app.get("/health", async (_request, response) => {
@@ -2307,31 +2312,33 @@ async function initDatabase() {
   }
 }
 
-const server = createServer(app);
-let settlementTimer: NodeJS.Timeout | undefined;
-server.listen(port, "0.0.0.0", async () => {
-  console.log(`Valoriza backend listening on port ${port}`);
-  try {
-    await initDatabase();
-    await runInvestmentSettlementJob();
-    const intervalMs = Number(process.env.INVESTMENT_SETTLEMENT_INTERVAL_MS ?? 15_000);
-    if (!Number.isFinite(intervalMs) || intervalMs < 1_000) {
-      throw new Error("INVESTMENT_SETTLEMENT_INTERVAL_MS must be at least 1000.");
+if (!process.env.VERCEL) {
+  const server = createServer(app);
+  let settlementTimer: NodeJS.Timeout | undefined;
+  server.listen(port, "0.0.0.0", async () => {
+    console.log(`Valoriza backend listening on port ${port}`);
+    try {
+      await initDatabase();
+      await runInvestmentSettlementJob();
+      const intervalMs = Number(process.env.INVESTMENT_SETTLEMENT_INTERVAL_MS ?? 15_000);
+      if (!Number.isFinite(intervalMs) || intervalMs < 1_000) {
+        throw new Error("INVESTMENT_SETTLEMENT_INTERVAL_MS must be at least 1000.");
+      }
+      settlementTimer = setInterval(() => void runInvestmentSettlementJob(), intervalMs);
+      settlementTimer.unref();
+    } catch (error) {
+      console.error("Backend initialization failed:", error);
+      server.close(() => process.exit(1));
     }
-    settlementTimer = setInterval(() => void runInvestmentSettlementJob(), intervalMs);
-    settlementTimer.unref();
-  } catch (error) {
-    console.error("Backend initialization failed:", error);
-    server.close(() => process.exit(1));
-  }
-});
+  });
 
-async function shutdown() {
-  if (settlementTimer) clearInterval(settlementTimer);
-  server.close();
-  await pool.end();
+  async function shutdown() {
+    if (settlementTimer) clearInterval(settlementTimer);
+    server.close();
+    await pool.end();
+  }
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
 
 export { app, initDatabase };
