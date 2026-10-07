@@ -1,3 +1,5 @@
+import { URL, URLSearchParams } from "node:url";
+
 // The backend build emits this runtime module using its own TypeScript config.
 // @ts-expect-error the generated JavaScript intentionally has no declaration file.
 import { app, initDatabase } from "../artifacts/api-server/dist/server.mjs";
