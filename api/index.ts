@@ -1,4 +1,18 @@
-import { URL, URLSearchParams } from "node:url";
+type URLSearchParamsApi = {
+  get(name: string): string | null;
+  delete(name: string): void;
+  readonly size: number;
+  toString(): string;
+};
+
+type URLApi = {
+  searchParams: URLSearchParamsApi;
+};
+
+const urlRuntime = globalThis as unknown as {
+  URL: new (input: string, base: string) => URLApi;
+  URLSearchParams: new (init: URLSearchParamsApi) => URLSearchParamsApi;
+};
 
 // The backend build emits this runtime module using its own TypeScript config.
 // @ts-expect-error the generated JavaScript intentionally has no declaration file.
@@ -7,7 +21,7 @@ import { app, initDatabase } from "../artifacts/api-server/dist/server.mjs";
 let databaseInitialization: Promise<void> | undefined;
 
 export default async function handler(request: any, response: any) {
-  const incomingUrl = new URL(
+  const incomingUrl = new urlRuntime.URL(
     request.url ?? "/",
     `http://${request.headers.host ?? "localhost"}`,
   );
@@ -18,7 +32,7 @@ export default async function handler(request: any, response: any) {
     return;
   }
 
-  const query = new URLSearchParams(incomingUrl.searchParams);
+  const query = new urlRuntime.URLSearchParams(incomingUrl.searchParams);
   query.delete("__api_path");
   request.url = `/api/${apiPath.replace(/^\/+/, "")}${query.size ? `?${query}` : ""}`;
 

@@ -1,4 +1,4 @@
 - [Separate database environments](database-environments.md) — legacy customer investments live in external PostgreSQL; Replit’s development database is separate.
 - [Vercel artifact builds](vercel-artifact-builds.md) — Vercel workspace builds do not inherit environment values from Replit artifact workflows.
 - [Valoriza authentication](valoriza-authentication.md) — the browser must use the same-origin API; local-only auth creates sessions the backend cannot accept.
-- [pnpm root dependencies](pnpm-root-dependencies.md) — root-level package installs need explicit workspace-root handling; inspect workspace config rewrites.
+- [Vercel function type checks](pnpm-root-dependencies.md) — root-level Vercel functions may not resolve Node built-in type imports; prefer locally typed runtime globals.
