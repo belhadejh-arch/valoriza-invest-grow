@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm run vercel-build",
-  "outputDirectory": "artifacts/valoriza-web/dist/public",
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": ".output/public",
   "rewrites": [
     { "source": "/api/:apiPath*", "destination": "/api/index?__api_path=:apiPath*" },
     { "source": "/about", "destination": "/index.html" },
