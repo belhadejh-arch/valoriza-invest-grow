@@ -50,15 +50,37 @@ async function request<T>(
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const isRegistrationRequest = /\/auth\/register\/?$/.test(path);
+    const timeoutMs = isRegistrationRequest ? 90_000 : 30_000;
+    let requestTimedOut = false;
+    const timeoutId = setTimeout(() => {
+      requestTimedOut = true;
+      controller.abort();
+    }, timeoutMs);
 
-    const response = await fetch(url, {
-      ...init,
-      headers,
-      credentials: "include",
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...init,
+        headers,
+        credentials: "include",
+        signal: controller.signal,
+      });
+    } catch (networkError) {
+      if (requestTimedOut) {
+        return {
+          data: null,
+          error: new Error(
+            isRegistrationRequest
+              ? "استغرق التسجيل وقتًا أطول من المتوقع. انتظر قليلًا ثم جرّب تسجيل الدخول قبل إعادة التسجيل."
+              : "انتهت مهلة الاتصال بالخادم. يرجى المحاولة مرة أخرى.",
+          ),
+        };
+      }
+      throw networkError;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const data = await response.json().catch(() => ({}));
 
@@ -78,7 +100,10 @@ async function request<T>(
     return { data: data as T, error: null };
   } catch (networkError: unknown) {
     // Return friendly error object rather than crashing with unhandled rejection
-    const msg = networkError instanceof Error ? networkError.message : "NETWORK_ERROR";
+    const msg =
+      networkError instanceof Error && networkError.message
+        ? networkError.message
+        : "تعذر الاتصال بالخادم. يرجى التحقق من الإنترنت والمحاولة مرة أخرى.";
     return { data: null, error: new Error(msg) };
   }
 }
