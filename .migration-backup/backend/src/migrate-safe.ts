@@ -1,8 +1,6 @@
 import "dotenv/config";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { pool } from "./db.js";
+import { applySafeDatabaseSchema } from "./safe-schema.js";
 
 if (
   process.env.NODE_ENV === "production" &&
@@ -13,26 +11,8 @@ if (
   );
 }
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const baselinePath = path.resolve(here, "../migrations/001_init.sql");
-const baselineSql = await fs.readFile(baselinePath, "utf8");
-const client = await pool.connect();
-
 try {
-  await client.query("BEGIN");
-  await client.query(baselineSql);
-  await client.query(`
-    ALTER TABLE profiles
-      ADD COLUMN IF NOT EXISTS wheel_spins_available integer NOT NULL DEFAULT 0;
-    ALTER TABLE profiles
-      ADD COLUMN IF NOT EXISTS can_withdraw boolean NOT NULL DEFAULT true;
-  `);
-  await client.query("COMMIT");
-  console.log("Safe database baseline applied; existing rows were not deleted.");
-} catch (error) {
-  await client.query("ROLLBACK");
-  throw error;
+  await applySafeDatabaseSchema();
 } finally {
-  client.release();
   await pool.end();
 }

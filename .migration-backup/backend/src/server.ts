@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
+import { applySafeDatabaseSchema } from "./safe-schema.js";
 import {
   clearSessionCookie,
   createSession,
@@ -2318,6 +2319,9 @@ if (!process.env.VERCEL) {
   server.listen(port, "0.0.0.0", async () => {
     console.log(`Valoriza backend listening on port ${port}`);
     try {
+      if (process.env.NODE_ENV === "production" && process.env.POSTGRES_URL) {
+        await applySafeDatabaseSchema();
+      }
       await initDatabase();
       await runInvestmentSettlementJob();
       const intervalMs = Number(process.env.INVESTMENT_SETTLEMENT_INTERVAL_MS ?? 15_000);
