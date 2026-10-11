@@ -4,9 +4,11 @@ export function hasConfiguredBackend(): boolean {
 }
 
 export function backendBaseUrl(): string {
-  // In browser, relative to current origin (Vite proxies /api to port 4000)
+  // Browser requests stay same-origin: Vercel rewrites /api to Render, and the
+  // Replit preview routes /api to its API artifact. Do not let a stale VITE URL
+  // bypass those deployment-specific proxies.
   if (typeof window !== "undefined") {
-    return import.meta.env.VITE_BACKEND_URL || "";
+    return "";
   }
 
   // In Node/SSR server default to local express port

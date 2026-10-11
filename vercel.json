@@ -4,7 +4,10 @@
   "buildCommand": "npm run vercel-build",
   "outputDirectory": ".output/public",
   "rewrites": [
-    { "source": "/api/:apiPath*", "destination": "/api/index?__api_path=:apiPath*" },
+    {
+      "source": "/api/:apiPath*",
+      "destination": "https://valoriza-invest-grow-5atm.onrender.com/api/:apiPath*"
+    },
     { "source": "/about", "destination": "/index.html" },
     { "source": "/account", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },

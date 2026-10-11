@@ -9,4 +9,4 @@ The production frontend is hosted on Vercel and the API/backend on Render. Verce
 
 **Why:** A successful test or empty result in the development database does not establish whether production investments were settled.
 
-**How to apply:** Keep development work on the Replit database. For production API issues, verify Vercel's `VITE_BACKEND_URL` points to the Render service and handle Render schema changes separately from Replit. For authorized production reconciliation, inspect the external database read-only first, match rows by user-provided criteria, and use a transaction with idempotency protection for any settlement.
+**How to apply:** Keep development work on the Replit database. Production browser API calls stay same-origin: Vercel rewrites `/api/*` to the Render service, while Replit preview routes `/api/*` to its API artifact. Handle Render schema changes separately from Replit. For authorized production reconciliation, inspect the external database read-only first, match rows by user-provided criteria, and use a transaction with idempotency protection for any settlement.
