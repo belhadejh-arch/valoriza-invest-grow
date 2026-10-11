@@ -13,6 +13,7 @@
     "start:backend": "node backend/dist/server.js",
     "dev:backend": "tsx backend/src/server.ts",
     "db:migrate": "tsx backend/src/migrate.ts",
+    "db:migrate:safe": "tsx backend/src/migrate-safe.ts",
     "db:seed": "tsx backend/src/seed.ts",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

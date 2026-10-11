@@ -5,6 +5,8 @@ description: Which PostgreSQL database contains legacy customer investment recor
 
 Existing customer investments are stored in the external PostgreSQL database supplied through `POSTGRES_URL`; the Replit development database is a separate environment and may contain no customer investment history.
 
+The production frontend is hosted on Vercel and the API/backend on Render. Vercel's frontend environment and Replit's development database are separate from the Render PostgreSQL database.
+
 **Why:** A successful test or empty result in the development database does not establish whether production investments were settled.
 
-**How to apply:** Keep development work on the Replit database. For authorized production reconciliation, inspect the external database read-only first, match rows by user-provided criteria, and use a transaction with idempotency protection for any settlement.
+**How to apply:** Keep development work on the Replit database. For production API issues, verify Vercel's `VITE_BACKEND_URL` points to the Render service and handle Render schema changes separately from Replit. For authorized production reconciliation, inspect the external database read-only first, match rows by user-provided criteria, and use a transaction with idempotency protection for any settlement.
