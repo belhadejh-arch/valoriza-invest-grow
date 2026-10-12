@@ -1,18 +1,30 @@
+const configuredBackendUrl = import.meta.env.VITE_BACKEND_URL?.trim().replace(/\/+$/, "");
+
 export function hasConfiguredBackend(): boolean {
   // The Replit API service is mounted on the same origin under /api.
-  return typeof window !== "undefined" || Boolean(import.meta.env.VITE_BACKEND_URL);
+  return typeof window !== "undefined" || Boolean(configuredBackendUrl);
 }
 
 export function backendBaseUrl(): string {
-  // Browser requests stay same-origin: Vercel rewrites /api to Render, and the
-  // Replit preview routes /api to its API artifact. Do not let a stale VITE URL
-  // bypass those deployment-specific proxies.
+  // When explicitly configured, send browser requests to the chosen API
+  // service. Otherwise use the deployment's same-origin /api proxy.
   if (typeof window !== "undefined") {
-    return "";
+    return configuredBackendUrl || "";
   }
 
   // In Node/SSR server default to local express port
-  return process.env.VITE_BACKEND_URL || "http://127.0.0.1:8080";
+  return configuredBackendUrl || process.env.VITE_BACKEND_URL || "http://127.0.0.1:8080";
+}
+
+function sessionTokenKey(): string {
+  const backendUrl = backendBaseUrl();
+  if (!backendUrl) return "valoriza_session_token";
+
+  try {
+    return `valoriza_session_token:${new URL(backendUrl).origin}`;
+  } catch {
+    return "valoriza_session_token";
+  }
 }
 
 export function buildApiUrl(path: string): string {
@@ -30,7 +42,7 @@ export function buildApiUrl(path: string): string {
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return localStorage.getItem("valoriza_session_token");
+    return localStorage.getItem(sessionTokenKey());
   } catch {
     return null;
   }
@@ -39,10 +51,11 @@ export function getStoredToken(): string | null {
 export function setStoredToken(token: string | null): void {
   if (typeof window === "undefined") return;
   try {
+    const key = sessionTokenKey();
     if (token) {
-      localStorage.setItem("valoriza_session_token", token);
+      localStorage.setItem(key, token);
     } else {
-      localStorage.removeItem("valoriza_session_token");
+      localStorage.removeItem(key);
     }
   } catch {
     // Ignore localStorage access errors
