@@ -15,6 +15,9 @@ export const getAdminUsers = adminGet("/api/admin/users");
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",
 );
+export const adminResetUserPassword = adminPost<{ userId: string; newPassword: string }>(
+  "/api/admin/users/password",
+);
 export const toggleUserWithdrawal = adminPost<{ userId: string; canWithdraw: boolean }>(
   "/api/admin/users/toggle-withdrawal",
 );

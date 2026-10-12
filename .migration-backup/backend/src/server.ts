@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -1550,6 +1551,73 @@ app.post("/api/admin/users/block", async (request, response, next) => {
     response.json({ ok: true });
   } catch (error) {
     next(error);
+  }
+});
+
+app.post("/api/admin/users/password", async (request, response, next) => {
+  try {
+    const admin = (request as express.Request & { authUser: { id: string } }).authUser;
+    const userId = request.body?.userId;
+    const newPassword = request.body?.newPassword;
+
+    if (
+      typeof userId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        userId,
+      )
+    ) {
+      return response.status(400).json({ message: "معرّف المستخدم غير صالح." });
+    }
+    if (
+      typeof newPassword !== "string" ||
+      newPassword.length < 8 ||
+      Buffer.byteLength(newPassword, "utf8") > 72
+    ) {
+      return response
+        .status(400)
+        .json({ message: "كلمة المرور يجب أن تكون 8 أحرف على الأقل وألا تتجاوز 72 بايتًا." });
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    const sessionToken =
+      request.cookies?.valoriza_session ||
+      request.header("authorization")?.replace(/^Bearer /, "");
+    if (!sessionToken) return response.status(401).json({ message: "UNAUTHORIZED" });
+    const currentSessionHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
+
+    const updated = await withTransaction(async (client) => {
+      const target = await client.query<{ id: string }>(
+        "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        [userId],
+      );
+      if (!target.rowCount) return false;
+
+      await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+        passwordHash,
+        userId,
+      ]);
+      // End every other session for this user while preserving the admin's
+      // current session if they are changing their own password.
+      await client.query(
+        "DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2",
+        [userId, currentSessionHash],
+      );
+      await client.query(
+        "INSERT INTO admin_actions (admin_id, action, target_user_id, details) VALUES ($1, $2, $3, $4)",
+        [
+          admin.id,
+          "RESET_USER_PASSWORD",
+          userId,
+          JSON.stringify({ sessionsRevoked: true }),
+        ],
+      );
+      return true;
+    });
+
+    if (!updated) return response.status(404).json({ message: "المستخدم غير موجود." });
+    return response.json({ ok: true });
+  } catch (error) {
+    return next(error);
   }
 });
 
