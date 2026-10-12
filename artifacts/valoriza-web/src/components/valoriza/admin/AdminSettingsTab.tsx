@@ -8,12 +8,33 @@ import {
   Headphones,
   ShieldCheck,
   RefreshCw,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
 import { getAdminSettings, saveAdminSettings } from "@/lib/valoriza-admin.functions";
+
+type AdminPasswordFormValues = {
+  newPassword: string;
+  confirmPassword: string;
+};
 
 export function AdminSettingsTab() {
   const queryClient = useQueryClient();
+  const adminPasswordForm = useForm<AdminPasswordFormValues>({
+    mode: "onChange",
+    defaultValues: { newPassword: "", confirmPassword: "" },
+  });
 
   const {
     data: initialSettings,
@@ -43,6 +64,22 @@ export function AdminSettingsTab() {
     onError: (err: any) => toast.error(err.message),
   });
 
+  const adminPasswordMutation = useMutation({
+    mutationFn: async ({ newPassword }: AdminPasswordFormValues) => {
+      const result = await supabase.auth.updateUser({ password: newPassword });
+      if (result.error) throw result.error;
+      if (!result.data?.ok) {
+        throw new Error(result.data?.message || "تعذر تغيير كلمة المرور.");
+      }
+      return result.data;
+    },
+    onSuccess: (result) => {
+      toast.success(result.message || "تم تغيير كلمة مرور المدير بنجاح.");
+      adminPasswordForm.reset();
+    },
+    onError: (err: any) => toast.error(err.message || "تعذر تغيير كلمة المرور."),
+  });
+
   const handleChange = (key: string, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -62,7 +99,8 @@ export function AdminSettingsTab() {
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-5">
+    <div className="space-y-5">
+      <form onSubmit={handleSave} className="space-y-5">
       {/* Financial Limits Section */}
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">
@@ -326,6 +364,121 @@ export function AdminSettingsTab() {
           )}
         </button>
       </div>
-    </form>
+      </form>
+
+      <section className="rounded-2xl border border-cyan-glow/30 bg-surface/70 p-4 shadow-sm">
+        <div className="flex items-start gap-3 border-b border-border/60 pb-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-glow/10 text-cyan-glow">
+            <KeyRound className="h-4 w-4" />
+          </span>
+          <div>
+            <h3 className="text-xs font-extrabold text-foreground">أمان حساب المدير</h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              غيّر كلمة مرور الحساب الحالي مباشرة. لن يُطلب منك إدخال كلمة المرور القديمة.
+            </p>
+          </div>
+        </div>
+
+        <Form {...adminPasswordForm}>
+          <form
+            onSubmit={adminPasswordForm.handleSubmit((values) =>
+              adminPasswordMutation.mutate(values),
+            )}
+            className="mt-4 space-y-4"
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormField
+                control={adminPasswordForm.control}
+                name="newPassword"
+                rules={{
+                  required: "أدخل كلمة المرور الجديدة.",
+                  minLength: {
+                    value: 6,
+                    message: "كلمة المرور يجب أن تكون 6 أحرف على الأقل.",
+                  },
+                  validate: (value) =>
+                    new TextEncoder().encode(value).length <= 72 ||
+                    "كلمة المرور يجب ألا تتجاوز 72 بايتًا.",
+                }}
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-[10px] font-bold text-muted-foreground">
+                      كلمة المرور الجديدة
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(event) => {
+                          field.onChange(event);
+                          if (adminPasswordForm.getValues("confirmPassword")) {
+                            void adminPasswordForm.trigger("confirmPassword");
+                          }
+                        }}
+                        type="password"
+                        autoComplete="new-password"
+                        maxLength={72}
+                        data-testid="input-admin-new-password"
+                        className="border-border bg-surface text-xs text-foreground focus-visible:ring-cyan-glow"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={adminPasswordForm.control}
+                name="confirmPassword"
+                rules={{
+                  required: "أعد كتابة كلمة المرور الجديدة للتأكيد.",
+                  validate: (value) =>
+                    value === adminPasswordForm.getValues("newPassword") ||
+                    "كلمتا المرور غير متطابقتين.",
+                }}
+                render={({ field }) => (
+                  <FormItem className="space-y-1.5">
+                    <FormLabel className="text-[10px] font-bold text-muted-foreground">
+                      تأكيد كلمة المرور الجديدة
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="password"
+                        autoComplete="new-password"
+                        maxLength={72}
+                        data-testid="input-admin-confirm-password"
+                        className="border-border bg-surface text-xs text-foreground focus-visible:ring-cyan-glow"
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[10px]" />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={
+                !adminPasswordForm.formState.isValid || adminPasswordMutation.isPending
+              }
+              data-testid="button-change-admin-password"
+              className="flex items-center justify-center gap-2 rounded-xl brand-gradient px-5 py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {adminPasswordMutation.isPending ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>جارٍ تغيير كلمة المرور...</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-4 w-4" />
+                  <span>حفظ كلمة المرور الجديدة</span>
+                </>
+              )}
+            </button>
+          </form>
+        </Form>
+      </section>
+    </div>
   );
 }
