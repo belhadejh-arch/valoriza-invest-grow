@@ -132,12 +132,23 @@ export function AdminUsersTab() {
   const addSpinMutation = useMutation({
     mutationFn: addFreeWheelSpin,
     onSuccess: (res, vars) => {
-      toast.success(`تمت إضافة ${vars.count || 1} فرصة مجانية لعجلة الحظ للمستخدم بنجاح 🎟️`);
+      const addedCount = vars.count || 1;
+      const persistedCount = Number(res?.newSpins);
+      if (Number.isFinite(persistedCount)) {
+        queryClient.setQueryData(["admin-users"], (currentUsers: any[] | undefined) =>
+          currentUsers?.map((user) =>
+            user.id === vars.userId ? { ...user, wheelSpins: persistedCount } : user,
+          ),
+        );
+      }
+      toast.success(`تمت إضافة ${addedCount} فرصة مجانية لعجلة الحظ للمستخدم بنجاح 🎟️`);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       if (selectedUser && selectedUser.id === vars.userId) {
         setSelectedUser((prev: any) => ({
           ...prev,
-          wheelSpins: (prev.wheelSpins || 0) + (vars.count || 1),
+          wheelSpins: Number.isFinite(persistedCount)
+            ? persistedCount
+            : (prev.wheelSpins || 0) + addedCount,
         }));
       }
       setAddSpinModalOpen(false);
@@ -383,6 +394,8 @@ export function AdminUsersTab() {
                         type="button"
                         onClick={() => handleOpenAddSpin(user)}
                         title="إضافة فرصة مجانية لعجلة الحظ"
+                        aria-label={`منح فرصة عجلة مجانية إلى ${user.username || user.email}`}
+                        disabled={addSpinMutation.isPending}
                         className="rounded-lg bg-gold/15 text-gold border border-gold/30 p-1 hover:bg-gold/25 transition-all"
                       >
                         <Ticket className="h-3 w-3" />
@@ -411,16 +424,6 @@ export function AdminUsersTab() {
                         className="rounded-lg bg-surface border border-cyan-glow/40 p-1.5 text-cyan-glow hover:bg-cyan-glow/10"
                       >
                         <Eye className="h-3.5 w-3.5" />
-                      </button>
-
-                      {/* Add Free Spin Button */}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenAddSpin(user)}
-                        title="إضافة فرصة مجانية"
-                        className="rounded-lg bg-surface border border-gold/40 p-1.5 text-gold hover:bg-gold/10"
-                      >
-                        <Ticket className="h-3.5 w-3.5" />
                       </button>
 
                       {/* Reset User Password Button */}
@@ -727,17 +730,6 @@ export function AdminUsersTab() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSpinCountInput(1);
-                      setAddSpinModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 rounded-xl gold-gradient px-3 py-1.5 text-xs font-black text-navy-deep shadow-gold-glow active:scale-95"
-                  >
-                    <Ticket className="h-3.5 w-3.5" />
-                    <span>إضافة فرصة مجانية</span>
-                  </button>
                 </div>
               </div>
             </div>
