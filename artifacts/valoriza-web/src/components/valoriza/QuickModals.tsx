@@ -18,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { backendRequest } from "@/lib/backend-client";
 
 /* =========================================================================
    1. Deposit Modal (Matching PDF Page 6)
@@ -64,18 +64,18 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
 
     setSubmitting(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("deposits").insert({
-          user_id: user.id,
-          network,
-          amount: num,
-          deposit_address: currentAddress,
-          status: "pending",
-        });
-      }
+      const result = await backendRequest<{ ok: boolean; message?: string; reason?: string }>(
+        "/api/app/deposit",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            network: `USDT-${network}`,
+            amount: num,
+            screenshotUrl: "",
+          }),
+        },
+      );
+      if (!result.ok) throw new Error(result.message || result.reason || "تعذر تقديم طلب الإيداع");
       toast.success("تم تقديم طلب الإيداع بنجاح، سيتم التأكيد تلقائياً بعد الفحص");
       setAmount("");
       onClose();
@@ -291,26 +291,29 @@ export function WithdrawalModal({
     // Allow demo submission with notice if outside window
     setSubmitting(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await supabase.from("withdrawals").insert({
-          user_id: user.id,
+      const result = await backendRequest<{
+        ok: boolean;
+        netAmount?: number;
+        message?: string;
+        reason?: string;
+      }>("/api/app/withdrawal", {
+        method: "POST",
+        body: JSON.stringify({
           network,
           address: addressInput.trim(),
           amount: numAmount,
-          fee: feeAmount,
-          net_amount: netAmount,
-          status: "pending",
-        });
-      }
-      toast.success(`تم تقديم طلب السحب بمبلغ $${netAmount.toFixed(2)} (بعد خصم الرسوم 10%) بنجاح`);
+        }),
+      });
+      if (!result.ok) throw new Error(result.message || result.reason || "تعذر تقديم طلب السحب");
+      const netReceived = result.netAmount ?? netAmount;
+      toast.success(
+        `تم تقديم طلب السحب بمبلغ $${netReceived.toFixed(2)} (بعد خصم الرسوم ${feePercent}%) بنجاح`,
+      );
       setAmount("");
       onClose();
       onSuccess?.();
-    } catch {
-      toast.error("تعذر تقديم طلب السحب حالياً");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر تقديم طلب السحب حالياً");
     } finally {
       setSubmitting(false);
     }

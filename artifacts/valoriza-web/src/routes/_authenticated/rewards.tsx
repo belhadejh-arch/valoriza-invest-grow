@@ -14,13 +14,14 @@ import {
   CheckCircle2,
   ArrowRight,
   TrendingUp,
+  ChevronRight,
+  CircleCheck,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
-import { getRewardsData } from "@/lib/valoriza-pages.functions";
+import { getRewardsData, getTeamData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
-import { getMockRewardsData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
@@ -38,22 +39,65 @@ export const Route = createFileRoute("/_authenticated/rewards")({
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 type RewardSource = "all" | "daily_login" | "task_reward" | "lucky_wheel" | "referral" | "vip";
+type RewardsData = {
+  rewards: Array<{
+    id: string;
+    source: string;
+    amount: number;
+    description?: string | null;
+    createdAt: string;
+  }>;
+  balance: number;
+  totalEarned: number;
+  dailyRewardClaimed: boolean;
+  dailyRewardAmount: number;
+};
+
+const TEAM_REWARD_TIERS = [
+  { members: 3, reward: "$1", kind: "cash" },
+  { members: 6, reward: "$1.5", kind: "cash" },
+  { members: 10, reward: "$2", kind: "cash" },
+  { members: 25, reward: "$5", kind: "cash" },
+  { members: 50, reward: "$12", kind: "cash" },
+  { members: 100, reward: "$25", kind: "cash" },
+  { members: 250, reward: "VIP", kind: "vip" },
+] as const;
 
 function RewardsPage() {
   const { t, isRTL } = useI18n();
   const qc = useQueryClient();
   const fetchData = useServerFn(getRewardsData);
   const claim = useServerFn(claimDailyLoginReward);
+  const fetchTeam = useServerFn(getTeamData);
   const [filter, setFilter] = useState<RewardSource>("all");
 
-  const { data = getMockRewardsData() } = useQuery({
+  const {
+    data,
+    isLoading: isRewardsLoading,
+    isError: isRewardsError,
+    refetch: refetchRewards,
+  } = useQuery<RewardsData>({
     queryKey: ["rewards"],
-    queryFn: () => fetchData(),
-    initialData: getMockRewardsData,
+    queryFn: async () => (await fetchData()) as RewardsData,
   });
+  const {
+    data: teamData,
+    isLoading: isTeamLoading,
+    isError: isTeamError,
+    refetch: refetchTeam,
+  } = useQuery<{ members?: Array<{ vipLevel?: number | string | null }> }>({
+    queryKey: ["team-reward-progress"],
+    queryFn: async () =>
+      (await fetchTeam()) as { members?: Array<{ vipLevel?: number | string | null }> },
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const qualifiedMembers =
+    teamData?.members?.filter((member) => Number(member.vipLevel ?? 0) > 0).length ?? 0;
 
   const claimMutation = useMutation({
-    mutationFn: () => claim(),
+    mutationFn: async () => (await claim()) as { ok: boolean; amount?: number },
     onSuccess: (res) => {
       toast[res.ok ? "success" : "error"](
         res.ok ? t("rewards.claimSuccess") : t("rewards.alreadyClaimed"),
@@ -144,12 +188,14 @@ function RewardsPage() {
               </div>
 
               <p className="text-3xl sm:text-4xl font-black text-gold-gradient tracking-tight">
-                {money(data.totalRewards)}
+                {isRewardsLoading ? "…" : money(data?.totalEarned ?? 0)}
               </p>
 
               <p className="text-xs text-muted-foreground">
                 {t("rewards.totalWalletBalance")}:{" "}
-                <span className="font-extrabold text-foreground">{money(data.balance)}</span>
+                <span className="font-extrabold text-foreground">
+                  {isRewardsLoading ? "…" : money(data?.balance ?? 0)}
+                </span>
               </p>
             </div>
 
@@ -157,11 +203,11 @@ function RewardsPage() {
               <button
                 type="button"
                 id="claim-daily-reward-btn"
-                disabled={data.dailyRewardClaimed || claimMutation.isPending}
+                disabled={!data || data.dailyRewardClaimed || claimMutation.isPending}
                 onClick={() => claimMutation.mutate()}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl brand-gradient py-3.5 px-4 text-sm font-black text-primary-foreground shadow-glow hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                {data.dailyRewardClaimed ? (
+                {data?.dailyRewardClaimed ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-primary-foreground" />
                     <span>{t("rewards.claimedToday")}</span>
@@ -170,7 +216,9 @@ function RewardsPage() {
                   <>
                     <Gift className="h-4 w-4 text-gold" />
                     <span>
-                      {t("rewards.claimToday")} ({money(data.dailyRewardAmount)})
+                      {isRewardsLoading
+                        ? t("common.loading")
+                        : `${t("rewards.claimToday")} (${money(data?.dailyRewardAmount ?? 0)})`}
                     </span>
                   </>
                 )}
@@ -207,6 +255,145 @@ function RewardsPage() {
             </div>
           </section>
         </div>
+
+        <section className="space-y-3" aria-labelledby="team-rewards-title">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-start">
+              <h2
+                id="team-rewards-title"
+                className="flex items-center gap-2 text-base sm:text-lg font-black text-foreground"
+              >
+                <Users className="h-5 w-5 text-cyan-glow" />
+                {isRTL ? "مكافآت الفريق" : "Team rewards"}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isRTL
+                  ? "زد أعضاء VIP المؤهلين في فريقك لفتح المكافآت التالية."
+                  : "Grow your team of qualified VIP members to unlock rewards."}
+              </p>
+            </div>
+            <Link
+              to="/team"
+              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-cyan-glow/40 bg-cyan-glow/10 px-3 py-2 text-xs font-bold text-cyan-glow hover:bg-cyan-glow/15"
+            >
+              {isRTL ? "فريقي" : "My team"}
+              <ChevronRight className={`h-4 w-4 ${isRTL ? "rotate-180" : ""}`} />
+            </Link>
+          </div>
+
+          <div className="surface-card glow-border rounded-3xl p-3 sm:p-4">
+            <div className="mb-3 flex items-center justify-between rounded-2xl border border-border/70 bg-surface/70 px-3 py-2.5 text-xs">
+              <span className="text-muted-foreground">
+                {isRTL ? "الأعضاء المؤهلون حاليًا" : "Qualified members"}
+              </span>
+              <span className="font-black text-cyan-glow">
+                {isTeamLoading ? "…" : isTeamError ? "—" : qualifiedMembers}
+              </span>
+            </div>
+            {isTeamError && (
+              <button
+                type="button"
+                onClick={() => void refetchTeam()}
+                className="mb-3 w-full rounded-xl border border-border bg-background/70 px-3 py-2 text-xs font-bold text-muted-foreground hover:text-foreground"
+              >
+                {isRTL ? "تعذر تحميل عدد الفريق — أعد المحاولة" : "Could not load team count — retry"}
+              </button>
+            )}
+
+            <div className="space-y-2">
+              {TEAM_REWARD_TIERS.map((tier) => {
+                const unlocked =
+                  !isTeamError && Boolean(teamData) && qualifiedMembers >= tier.members;
+                const progress = isTeamError
+                  ? 0
+                  : Math.min((qualifiedMembers / tier.members) * 100, 100);
+                const isVipReward = tier.kind === "vip";
+                const remaining = Math.max(tier.members - qualifiedMembers, 0);
+
+                return (
+                  <article
+                    key={tier.members}
+                    className={`relative overflow-hidden rounded-2xl border p-3 transition-colors sm:px-4 ${
+                      isVipReward
+                        ? "border-gold/70 bg-gradient-to-r from-gold/15 via-surface to-surface shadow-[0_0_14px_rgba(245,190,70,0.12)]"
+                        : unlocked
+                          ? "border-cyan-glow/50 bg-cyan-glow/[0.07]"
+                          : "border-border/80 bg-surface/70"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+                          isVipReward
+                            ? "border-gold/40 bg-gold/15 text-gold"
+                            : "border-cyan-glow/30 bg-cyan-glow/10 text-cyan-glow"
+                        }`}
+                      >
+                        {isVipReward ? <Crown className="h-5 w-5" /> : <Users className="h-5 w-5" />}
+                      </div>
+
+                      <div className="min-w-0 flex-1 text-start">
+                        <p className="text-xs sm:text-sm font-bold text-foreground">
+                          {isRTL
+                            ? `عند وصول العدد التراكمي إلى ${tier.members} أعضاء مؤهلين`
+                            : `When your team reaches ${tier.members} qualified members`}
+                        </p>
+                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          {unlocked ? (
+                            <CircleCheck className="h-3.5 w-3.5 text-emerald-400" />
+                          ) : (
+                            <TrendingUp className="h-3.5 w-3.5 text-cyan-glow" />
+                          )}
+                          <span>
+                            {isTeamError
+                              ? isRTL
+                                ? "تعذر التحقق من التقدم"
+                                : "Progress unavailable"
+                              : unlocked
+                              ? isRTL
+                                ? "تم بلوغ هذا المستوى"
+                                : "Milestone reached"
+                              : isRTL
+                                ? `المتبقي ${remaining} عضو`
+                                : `${remaining} members to go`}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`shrink-0 rounded-xl border px-3 py-2 text-center ${
+                          isVipReward
+                            ? "border-gold/60 bg-gold/15 text-gold"
+                            : "border-cyan-glow/40 bg-cyan-glow/10 text-foreground"
+                        }`}
+                      >
+                        <p className="text-lg leading-none font-black">{tier.reward}</p>
+                        <p className="mt-1 text-[9px] font-semibold text-muted-foreground">
+                          {isVipReward
+                            ? isRTL
+                              ? "ترقية VIP"
+                              : "VIP upgrade"
+                            : isRTL
+                              ? "مكافأة"
+                              : "Reward"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-background/80">
+                      <div
+                        className={`h-full rounded-full transition-[width] duration-500 ${
+                          isVipReward ? "bg-gold" : "bg-cyan-glow"
+                        }`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
 
         {/* Filter Chips Bar */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs scrollbar-none">
@@ -247,7 +434,22 @@ function RewardsPage() {
             </span>
           </div>
 
-          {filteredRewards.length === 0 ? (
+          {isRewardsLoading ? (
+            <div className="surface-card rounded-2xl p-10 text-center text-sm text-muted-foreground">
+              {t("common.loading")}
+            </div>
+          ) : isRewardsError ? (
+            <div className="surface-card rounded-2xl p-10 text-center">
+              <p className="mb-3 text-sm font-bold text-foreground">{t("common.error")}</p>
+              <button
+                type="button"
+                onClick={() => void refetchRewards()}
+                className="rounded-xl brand-gradient px-4 py-2 text-xs font-bold text-primary-foreground"
+              >
+                {t("common.retry")}
+              </button>
+            </div>
+          ) : filteredRewards.length === 0 ? (
             <div className="surface-card p-10 sm:p-14 text-center rounded-2xl">
               <Gift className="mx-auto h-10 w-10 text-muted-foreground/40 mb-2" />
               <p className="text-sm font-bold text-foreground">{t("rewards.noHistory")}</p>

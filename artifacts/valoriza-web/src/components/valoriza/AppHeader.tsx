@@ -26,7 +26,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ThemeToggle } from "./ThemeToggle";
 import { useI18n } from "@/lib/i18n";
 import { getUserNotifications } from "@/lib/valoriza-tasks.functions";
-import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/auth-client";
 
 interface AppHeaderProps {
   onMenu?: () => void;
@@ -73,7 +73,7 @@ export function AppHeader({
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await auth.signOut();
       toast.success(t("common.success"));
       navigate({ to: "/", replace: true });
     } catch {

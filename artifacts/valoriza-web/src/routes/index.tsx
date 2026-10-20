@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/auth-client";
 import { Logo } from "@/components/valoriza/Logo";
 import { LanguageSwitcher } from "@/components/valoriza/LanguageSwitcher";
 import { ThemeToggle } from "@/components/valoriza/ThemeToggle";
@@ -52,7 +52,7 @@ function AuthPage() {
   });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/home", replace: true });
     });
   }, [navigate]);
@@ -102,7 +102,7 @@ function AuthPage() {
           toast.error(t("auth.errPasswordLen"));
           return;
         }
-        const { error } = await supabase.auth.signUp({
+        const { error } = await auth.signUp({
           email: form.email.trim(),
           password: form.password,
           options: {
@@ -120,7 +120,7 @@ function AuthPage() {
         toast.success(t("auth.accountCreated"));
         navigate({ to: "/home", replace: true });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error } = await auth.signInWithPassword({
           email: form.email.trim(),
           password: form.password,
         });

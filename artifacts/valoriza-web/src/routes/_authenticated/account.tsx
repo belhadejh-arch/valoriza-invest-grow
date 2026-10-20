@@ -28,7 +28,7 @@ import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getAccountData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { getMockAccountData } from "@/lib/mock-data";
-import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/auth-client";
 import { backendRequest } from "@/lib/backend-client";
 import { useI18n } from "@/lib/i18n";
 
@@ -85,7 +85,7 @@ function AccountPage() {
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
-    await supabase.auth.signOut();
+    await auth.signOut();
     navigate({ to: "/", replace: true });
   }
 
@@ -113,13 +113,6 @@ function AccountPage() {
 
       if (!res.ok) {
         throw new Error(res.message || "فشل تغيير كلمة المرور في الخادم");
-      }
-
-      // Step 2: Optional sync with supabase if available
-      try {
-        await supabase.auth.updateUser({ password: newPassword });
-      } catch (e) {
-        void e;
       }
 
       toast.success(res.message || t("account.passwordChangedSuccess"));
