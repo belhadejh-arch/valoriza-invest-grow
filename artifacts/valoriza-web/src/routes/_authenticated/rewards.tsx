@@ -20,7 +20,11 @@ import {
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
-import { getRewardsData, getTeamData } from "@/lib/valoriza-pages.functions";
+import {
+  getRewardsData,
+  getTeamData,
+  settleTeamMilestones,
+} from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
 
@@ -53,6 +57,19 @@ type RewardsData = {
   dailyRewardAmount: number;
 };
 
+type TeamRewardProgress = {
+  members?: Array<{ vipLevel?: number | string | null }>;
+  userVipLevel?: number;
+  maxVipLevel?: number | null;
+  milestones?: Array<{
+    members: number;
+    kind: "cash" | "vip";
+    amount: number;
+    vipLevel: number | null;
+    claimedAt: string;
+  }>;
+};
+
 const TEAM_REWARD_TIERS = [
   { members: 3, reward: "$1", kind: "cash" },
   { members: 6, reward: "$1.5", kind: "cash" },
@@ -69,6 +86,7 @@ function RewardsPage() {
   const fetchData = useServerFn(getRewardsData);
   const claim = useServerFn(claimDailyLoginReward);
   const fetchTeam = useServerFn(getTeamData);
+  const settleTeam = useServerFn(settleTeamMilestones);
   const [filter, setFilter] = useState<RewardSource>("all");
 
   const {
@@ -78,17 +96,24 @@ function RewardsPage() {
     refetch: refetchRewards,
   } = useQuery<RewardsData>({
     queryKey: ["rewards"],
-    queryFn: async () => (await fetchData()) as RewardsData,
+    queryFn: async () => {
+      await settleTeam();
+      return (await fetchData()) as RewardsData;
+    },
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
   const {
     data: teamData,
     isLoading: isTeamLoading,
     isError: isTeamError,
     refetch: refetchTeam,
-  } = useQuery<{ members?: Array<{ vipLevel?: number | string | null }> }>({
+  } = useQuery<TeamRewardProgress>({
     queryKey: ["team-reward-progress"],
-    queryFn: async () =>
-      (await fetchTeam()) as { members?: Array<{ vipLevel?: number | string | null }> },
+    queryFn: async () => {
+      await settleTeam();
+      return (await fetchTeam()) as TeamRewardProgress;
+    },
     staleTime: 30_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
@@ -132,6 +157,7 @@ function RewardsPage() {
         };
       case "referral":
       case "referral_commission":
+      case "team_milestone":
         return {
           label: t("rewards.filterReferral"),
           icon: <Users className="h-4 w-4 text-emerald-400" />,
@@ -161,7 +187,8 @@ function RewardsPage() {
           if (filter === "daily_login") return r.source === "daily_login";
           if (filter === "task_reward") return r.source === "task_reward";
           if (filter === "lucky_wheel") return r.source === "lucky_wheel";
-          if (filter === "referral") return r.source.includes("referral");
+          if (filter === "referral")
+            return r.source.includes("referral") || r.source === "team_milestone";
           if (filter === "vip") return r.source.includes("vip");
           return true;
         });
@@ -302,13 +329,20 @@ function RewardsPage() {
 
             <div className="space-y-2">
               {TEAM_REWARD_TIERS.map((tier) => {
-                const unlocked =
-                  !isTeamError && Boolean(teamData) && qualifiedMembers >= tier.members;
+                const claim = teamData?.milestones?.find((milestone) => milestone.members === tier.members);
+                const reached = !isTeamError && Boolean(teamData) && qualifiedMembers >= tier.members;
+                const unlocked = reached || Boolean(claim);
                 const progress = isTeamError
                   ? 0
                   : Math.min((qualifiedMembers / tier.members) * 100, 100);
                 const isVipReward = tier.kind === "vip";
                 const remaining = Math.max(tier.members - qualifiedMembers, 0);
+                const vipAtMaximum =
+                  isVipReward &&
+                  reached &&
+                  !claim &&
+                  teamData?.maxVipLevel != null &&
+                  (teamData.userVipLevel ?? 0) >= teamData.maxVipLevel;
 
                 return (
                   <article
@@ -349,13 +383,25 @@ function RewardsPage() {
                               ? isRTL
                                 ? "تعذر التحقق من التقدم"
                                 : "Progress unavailable"
+                              : claim?.kind === "cash"
+                                ? isRTL
+                                  ? "أُضيفت المكافأة إلى المحفظة"
+                                  : "Reward added to wallet"
+                                : claim?.kind === "vip"
+                                  ? isRTL
+                                    ? `تمت الترقية إلى VIP ${claim.vipLevel ?? ""}`
+                                    : `Upgraded to VIP ${claim.vipLevel ?? ""}`
+                                  : vipAtMaximum
+                                    ? isRTL
+                                      ? "أنت في أعلى مستوى VIP"
+                                      : "You already have the highest VIP level"
                               : unlocked
-                              ? isRTL
-                                ? "تم بلوغ هذا المستوى"
-                                : "Milestone reached"
-                              : isRTL
-                                ? `المتبقي ${remaining} عضو`
-                                : `${remaining} members to go`}
+                                  ? isRTL
+                                    ? "تم بلوغ هذا المستوى"
+                                    : "Milestone reached"
+                                  : isRTL
+                                    ? `المتبقي ${remaining} عضو`
+                                    : `${remaining} members to go`}
                           </span>
                         </div>
                       </div>
@@ -494,7 +540,11 @@ function RewardsPage() {
 
                     <div className="shrink-0 text-end">
                       <span className="text-sm sm:text-base font-black text-emerald-400">
-                        +{money(r.amount)}
+                        {r.source === "vip_upgrade"
+                          ? isRTL
+                            ? "ترقية VIP"
+                            : "VIP upgrade"
+                          : `+${money(r.amount)}`}
                       </span>
                     </div>
                   </div>

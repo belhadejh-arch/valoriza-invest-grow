@@ -248,6 +248,218 @@ async function changeBalance(
   return after;
 }
 
+const TEAM_CASH_MILESTONES = [
+  { threshold: 3, amount: 1 },
+  { threshold: 6, amount: 1.5 },
+  { threshold: 10, amount: 2 },
+  { threshold: 25, amount: 5 },
+  { threshold: 50, amount: 12 },
+  { threshold: 100, amount: 25 },
+] as const;
+
+type TeamMilestoneSettlement = {
+  qualifiedMembers: number;
+  cashAwards: number;
+  vipUpgradeLevel: number | null;
+};
+
+async function applyTeamMilestonesForUser(
+  client: import("pg").PoolClient,
+  userId: string,
+): Promise<TeamMilestoneSettlement> {
+  const profile = await client.query<{
+    vip_level: number;
+    vip_expires_at: Date | string | null;
+  }>("SELECT vip_level,vip_expires_at FROM profiles WHERE id=$1 FOR UPDATE", [userId]);
+  if (!profile.rowCount) return { qualifiedMembers: 0, cashAwards: 0, vipUpgradeLevel: null };
+
+  const count = await client.query<{ count: number }>(
+    `SELECT count(DISTINCT p.id)::int AS count
+     FROM referrals r
+     JOIN profiles p ON p.id=r.referred_id
+     WHERE r.referrer_id=$1 AND p.vip_level>0`,
+    [userId],
+  );
+  const qualifiedMembers = Number(count.rows[0]?.count ?? 0);
+  if (qualifiedMembers === 0) return { qualifiedMembers, cashAwards: 0, vipUpgradeLevel: null };
+
+  let cashAwards = 0;
+  for (const milestone of TEAM_CASH_MILESTONES) {
+    if (qualifiedMembers < milestone.threshold) continue;
+
+    const claim = await client.query(
+      `INSERT INTO team_milestone_claims (user_id,threshold,reward_kind,reward_amount)
+       VALUES ($1,$2,'cash',$3)
+       ON CONFLICT (user_id,threshold) DO NOTHING
+       RETURNING threshold`,
+      [userId, milestone.threshold, milestone.amount],
+    );
+    if (!claim.rowCount) continue;
+
+    await client.query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
+      userId,
+    ]);
+    const description = `مكافأة الفريق عند بلوغ ${milestone.threshold} أعضاء VIP`;
+    const reward = await client.query<{ id: string }>(
+      `INSERT INTO rewards (user_id,source,amount,description_ar)
+       VALUES ($1,'team_milestone',$2,$3) RETURNING id`,
+      [userId, milestone.amount, description],
+    );
+    await changeBalance(
+      client,
+      userId,
+      milestone.amount,
+      "team_reward",
+      description,
+      reward.rows[0].id,
+    );
+    await client.query(
+      "UPDATE wallets SET team_income=team_income+$1,updated_at=now() WHERE user_id=$2",
+      [milestone.amount, userId],
+    );
+    await client.query(
+      "UPDATE team_milestone_claims SET reward_id=$3 WHERE user_id=$1 AND threshold=$2",
+      [userId, milestone.threshold, reward.rows[0].id],
+    );
+    await client.query(
+      "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,$2,$3)",
+      [
+        userId,
+        "مكافأة فريق جديدة 🎁",
+        `تمت إضافة مكافأة بقيمة $${milestone.amount} بعد بلوغ ${milestone.threshold} أعضاء VIP.`,
+      ],
+    );
+    cashAwards += 1;
+  }
+
+  let vipUpgradeLevel: number | null = null;
+  if (qualifiedMembers >= 250) {
+    const existingVipClaim = await client.query(
+      "SELECT 1 FROM team_milestone_claims WHERE user_id=$1 AND threshold=250",
+      [userId],
+    );
+    if (!existingVipClaim.rowCount) {
+      const currentLevel = Number(profile.rows[0].vip_level ?? 0);
+      const nextPlan = await client.query<{
+        id: string;
+        name: string;
+        level: number;
+        duration_days: number;
+      }>(
+        `SELECT id,name,level,duration_days FROM vip_packages
+         WHERE is_active=true AND level>$1
+         ORDER BY level ASC LIMIT 1`,
+        [currentLevel],
+      );
+
+      if (nextPlan.rowCount) {
+        const plan = nextPlan.rows[0];
+        const claim = await client.query(
+          `INSERT INTO team_milestone_claims
+             (user_id,threshold,reward_kind,reward_amount,vip_package_id)
+           VALUES ($1,250,'vip',0,$2)
+           ON CONFLICT (user_id,threshold) DO NOTHING
+           RETURNING threshold`,
+          [userId, plan.id],
+        );
+
+        if (claim.rowCount) {
+          const now = Date.now();
+          const currentExpiry = profile.rows[0].vip_expires_at
+            ? new Date(profile.rows[0].vip_expires_at).getTime()
+            : now;
+          const startsAt = new Date(Math.max(now, currentExpiry));
+          const expiresAt = new Date(
+            startsAt.getTime() + Number(plan.duration_days) * 24 * 60 * 60 * 1000,
+          );
+          const reward = await client.query<{ id: string }>(
+            `INSERT INTO rewards (user_id,source,amount,description_ar)
+             VALUES ($1,'vip_upgrade',0,$2) RETURNING id`,
+            [userId, `ترقية الفريق المجانية إلى ${plan.name}`],
+          );
+          await client.query(
+            `INSERT INTO user_vip (user_id,vip_package_id,started_at,expires_at,status)
+             VALUES ($1,$2,$3,$4,'active')`,
+            [userId, plan.id, startsAt, expiresAt],
+          );
+          await client.query(
+            `UPDATE profiles SET vip_level=$1,vip_expires_at=$2,
+               wheel_spins_available=COALESCE(wheel_spins_available,0)+1,
+               updated_at=now()
+             WHERE id=$3`,
+            [plan.level, expiresAt, userId],
+          );
+          await client.query(
+            `UPDATE team_milestone_claims
+             SET reward_id=$2 WHERE user_id=$1 AND threshold=250`,
+            [userId, reward.rows[0].id],
+          );
+          await client.query(
+            "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,$2,$3)",
+            [userId, "ترقية VIP جديدة 👑", `تمت ترقيتك تلقائيًا إلى ${plan.name} كمكافأة للفريق.`],
+          );
+          vipUpgradeLevel = Number(plan.level);
+        }
+      }
+    }
+  }
+
+  return { qualifiedMembers, cashAwards, vipUpgradeLevel };
+}
+
+async function settleTeamMilestonesForUsers(userIds: string[]) {
+  const queue = [...new Set(userIds.filter(Boolean))];
+  const queued = new Set(queue);
+  let cashAwards = 0;
+  let vipUpgrades = 0;
+
+  while (queue.length > 0) {
+    const userId = queue.shift()!;
+    queued.delete(userId);
+    const result = await withTransaction((client) => applyTeamMilestonesForUser(client, userId));
+    cashAwards += result.cashAwards;
+    if (result.vipUpgradeLevel === null) continue;
+
+    vipUpgrades += 1;
+    const parents = await query<{ referrer_id: string }>(
+      "SELECT referrer_id FROM referrals WHERE referred_id=$1 ORDER BY level ASC",
+      [userId],
+    );
+    for (const parent of parents.rows) {
+      if (!queued.has(parent.referrer_id)) {
+        queue.push(parent.referrer_id);
+        queued.add(parent.referrer_id);
+      }
+    }
+  }
+
+  return { cashAwards, vipUpgrades };
+}
+
+async function runTeamMilestoneSettlementJob() {
+  try {
+    const candidates = await query<{ referrer_id: string }>(
+      `SELECT r.referrer_id
+       FROM referrals r
+       JOIN profiles p ON p.id=r.referred_id
+       WHERE p.vip_level>0
+       GROUP BY r.referrer_id
+       HAVING count(DISTINCT p.id)>=3
+       ORDER BY r.referrer_id`,
+    );
+    const result = await settleTeamMilestonesForUsers(
+      candidates.rows.map((row) => row.referrer_id),
+    );
+    if (result.cashAwards || result.vipUpgrades) {
+      console.info(
+        `Team milestone settlement completed: ${result.cashAwards} cash award(s), ${result.vipUpgrades} VIP upgrade(s).`,
+      );
+    }
+  } catch (error) {
+    console.error("Team milestone settlement job failed:", error);
+  }
+}
+
 async function distributeReferralCommissions(
   client: import("pg").PoolClient,
   userId: string,
@@ -864,6 +1076,17 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
       const wallet = await client.query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]);
       return { ok: true, vipLevel: level, newBalance: number(wallet.rows[0]?.balance) };
     });
+    if (result.ok) {
+      try {
+        const sponsors = await query<{ referrer_id: string }>(
+          "SELECT referrer_id FROM referrals WHERE referred_id=$1 ORDER BY level ASC",
+          [user.id],
+        );
+        await settleTeamMilestonesForUsers(sponsors.rows.map((row) => row.referrer_id));
+      } catch (settlementError) {
+        console.error("Team milestone settlement after VIP purchase failed:", settlementError);
+      }
+    }
     response.json(result);
   } catch (error) {
     next(error);
@@ -1255,11 +1478,44 @@ app.get("/api/app/rewards", async (request, response, next) => {
   }
 });
 
+app.post("/api/app/team/settle-milestones", async (request, response, next) => {
+  try {
+    const user = (request as express.Request & { authUser: { id: string } }).authUser;
+    const settlement = await settleTeamMilestonesForUsers([user.id]);
+    const claims = await query<{
+      threshold: number;
+      reward_kind: "cash" | "vip";
+      reward_amount: string;
+      vip_level: number | null;
+      created_at: Date;
+    }>(
+      `SELECT c.threshold,c.reward_kind,c.reward_amount,v.level AS vip_level,c.created_at
+       FROM team_milestone_claims c
+       LEFT JOIN vip_packages v ON v.id=c.vip_package_id
+       WHERE c.user_id=$1 ORDER BY c.threshold`,
+      [user.id],
+    );
+    response.json({
+      ok: true,
+      ...settlement,
+      milestones: claims.rows.map((row) => ({
+        members: Number(row.threshold),
+        kind: row.reward_kind,
+        amount: number(row.reward_amount),
+        vipLevel: row.vip_level === null ? null : Number(row.vip_level),
+        claimedAt: row.created_at,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/app/team", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const [profile, referrals, wallet, settings, commissions] = await Promise.all([
-      query("SELECT id,username,email,referral_code FROM profiles WHERE id=$1", [user.id]),
+    const [profile, referrals, wallet, settings, commissions, milestones, maxVip] = await Promise.all([
+      query("SELECT id,username,email,referral_code,vip_level FROM profiles WHERE id=$1", [user.id]),
       query(
         `SELECT p.id, p.username, p.email, p.vip_level, p.created_at, r.level
          FROM referrals r
@@ -1277,6 +1533,22 @@ app.get("/api/app/team", async (request, response, next) => {
          WHERE rc.referrer_id = $1
          ORDER BY rc.created_at DESC LIMIT 50`,
         [user.id],
+      ),
+      query<{
+        threshold: number;
+        reward_kind: "cash" | "vip";
+        reward_amount: string;
+        vip_level: number | null;
+        created_at: Date;
+      }>(
+        `SELECT c.threshold,c.reward_kind,c.reward_amount,v.level AS vip_level,c.created_at
+         FROM team_milestone_claims c
+         LEFT JOIN vip_packages v ON v.id=c.vip_package_id
+         WHERE c.user_id=$1 ORDER BY c.threshold`,
+        [user.id],
+      ),
+      query<{ level: number | null }>(
+        "SELECT max(level)::int AS level FROM vip_packages WHERE is_active=true",
       ),
     ]);
 
@@ -1300,6 +1572,8 @@ app.get("/api/app/team", async (request, response, next) => {
 
     response.json({
       referralCode: profile.rows[0]?.referral_code || "",
+      userVipLevel: number(profile.rows[0]?.vip_level),
+      maxVipLevel: maxVip.rows[0]?.level === null ? null : number(maxVip.rows[0]?.level),
       totalMembers: referrals.rows.length,
       teamRewards: number(wallet.rows[0]?.team_income),
       teamIncome: number(wallet.rows[0]?.team_income),
@@ -1333,6 +1607,13 @@ app.get("/api/app/team", async (request, response, next) => {
         createdAt: row.created_at,
       })),
       commissions: commissions.rows,
+      milestones: milestones.rows.map((row) => ({
+        members: Number(row.threshold),
+        kind: row.reward_kind,
+        amount: number(row.reward_amount),
+        vipLevel: row.vip_level === null ? null : Number(row.vip_level),
+        claimedAt: row.created_at,
+      })),
     });
   } catch (error) {
     next(error);
@@ -2391,6 +2672,7 @@ if (!process.env.VERCEL) {
         await applySafeDatabaseSchema();
       }
       await initDatabase();
+      await runTeamMilestoneSettlementJob();
       await runInvestmentSettlementJob();
       const intervalMs = Number(process.env.INVESTMENT_SETTLEMENT_INTERVAL_MS ?? 15_000);
       if (!Number.isFinite(intervalMs) || intervalMs < 1_000) {

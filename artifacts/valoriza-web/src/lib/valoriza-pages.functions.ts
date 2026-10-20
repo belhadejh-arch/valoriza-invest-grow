@@ -21,6 +21,9 @@ export const purchaseVip = post<{ level?: number; packageId?: string }>("/api/ap
 export const investInSavingsFund = post<{ fundId: string; amount: number }>("/api/app/invest");
 
 export const getTeamData = get("/api/app/team");
+export const settleTeamMilestones = createServerFn({ method: "POST" }).handler(() =>
+  serverBackendRequest("/api/app/team/settle-milestones", { method: "POST" }),
+);
 export const getRewardsData = get("/api/app/rewards");
 export const getAccountData = get("/api/app/account");
 export const getAboutData = get("/api/public/about");
