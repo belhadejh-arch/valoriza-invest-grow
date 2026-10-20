@@ -83,6 +83,8 @@ app.get("/api/ping", (_request, response) => {
   response.json({ ok: true, time: new Date().toISOString() });
 });
 
+const TRIAL_TASK_LIMIT = 6;
+
 function number(value: unknown) {
   return Number(value ?? 0);
 }
@@ -1020,7 +1022,7 @@ app.get("/api/app/investment", async (request, response, next) => {
     const trialIsActive = Boolean(
       profileData?.trial_active &&
         trialStartedAt &&
-        trialTasksCompleted < 6 &&
+        trialTasksCompleted < TRIAL_TASK_LIMIT &&
         !trialExpiredByDate,
     );
     const trialStatus = !trialStartedAt ? "not_started" : trialIsActive ? "active" : "expired";
@@ -1419,13 +1421,15 @@ app.get("/api/app/tasks", async (request, response, next) => {
       vipLevel === 0 &&
         profile.rows[0]?.trial_active &&
         trialStartedAt &&
-        trialTasksCompleted < 6 &&
+        trialTasksCompleted < TRIAL_TASK_LIMIT &&
         !trialExpiredByDate,
     );
     const trialStatus = !trialStartedAt ? "not_started" : trialActive ? "active" : "expired";
     const reward = vipLevel ? number(plan?.task_reward) : trialActive ? 0.5 : 0;
     const limit = vipLevel ? number(plan?.daily_tasks) : trialActive ? 3 : 0;
-    const trialTasksRemaining = trialActive ? Math.max(0, 6 - trialTasksCompleted) : 0;
+    const trialTasksRemaining = trialActive
+      ? Math.max(0, TRIAL_TASK_LIMIT - trialTasksCompleted)
+      : 0;
     const remainingTasks = trialActive
       ? Math.min(Math.max(0, limit - completed.size), trialTasksRemaining)
       : Math.max(0, limit - completed.size);
@@ -1511,7 +1515,7 @@ app.post("/api/app/tasks/complete", async (request, response, next) => {
         vipLevel === 0 &&
           profileRow.trial_active &&
           profileRow.trial_started_at &&
-          trialTasksCompleted < 6 &&
+          trialTasksCompleted < TRIAL_TASK_LIMIT &&
           !trialExpiredByDate,
       );
       if (vipLevel === 0 && !trialActive) {
@@ -1540,7 +1544,7 @@ app.post("/api/app/tasks/complete", async (request, response, next) => {
         [user.id, taskId, reward, Number(watchedSeconds) || 0],
       );
       if (!inserted.rowCount) return { ok: false, reason: "ALREADY_COMPLETED_TODAY" };
-      if (trialActive && trialTasksCompleted + 1 >= 6) {
+      if (trialActive && trialTasksCompleted + 1 >= TRIAL_TASK_LIMIT) {
         await client.query("UPDATE profiles SET trial_active=false WHERE id=$1", [user.id]);
       }
       await changeBalance(
