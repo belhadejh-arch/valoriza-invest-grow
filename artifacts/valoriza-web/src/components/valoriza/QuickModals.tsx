@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { backendRequest } from "@/lib/backend-client";
+import { getInvestmentData, investInSavingsFund } from "@/lib/valoriza-pages.functions";
 
 /* =========================================================================
    1. Deposit Modal (Matching PDF Page 6)
@@ -512,68 +514,144 @@ export function WithdrawalModal({
    3. Savings Fund Quick Modal (Matching PDF Page 3)
    ========================================================================= */
 
-interface SavingsFundModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  funds?: Array<{
-    id: string;
-    code: string;
-    nameAr: string;
-    nameEn: string;
-    taglineAr: string;
-    durationDays: number;
-    profitPercent: number;
-    minAmount: number;
-  }>;
-}
+type SavingsFundRecord = {
+  id: string;
+  code?: string;
+  name_ar?: string;
+  name_en?: string;
+  tagline_ar?: string | null;
+  duration_days?: number | string;
+  profit_percent?: number | string;
+  min_amount?: number | string;
+};
 
-export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalProps) {
+type SavingsInvestmentRecord = {
+  id: string;
+  code?: string;
+  name_ar?: string;
+  amount?: number | string;
+  expected_profit?: number | string;
+  status?: string;
+  matures_at?: string | Date;
+  settled_at?: string | Date | null;
+};
+
+type SavingsData = {
+  funds?: SavingsFundRecord[];
+  investments?: SavingsInvestmentRecord[];
+  walletBalance?: number | string;
+  wallet?: { balance?: number | string } | null;
+};
+
+type SavingsFund = {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  taglineAr: string;
+  durationDays: number;
+  profitPercent: number;
+  minAmount: number;
+};
+
+const savingsMoney = (value: number) => {
+  const rounded = Number(value.toFixed(4));
+  const trimmed = rounded.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  const decimals = trimmed.split(".")[1] ?? "";
+  return `$${decimals.length < 2 ? rounded.toFixed(2) : trimmed}`;
+};
+
+export function SavingsFundModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const fetchInvestmentData = useServerFn(getInvestmentData);
+  const investInFund = useServerFn(investInSavingsFund);
+  const [selectedFundId, setSelectedFundId] = useState<string | null>(null);
+  const [investAmount, setInvestAmount] = useState("5");
+
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery<SavingsData>({
+    queryKey: ["investment"],
+    queryFn: async () => (await fetchInvestmentData()) as SavingsData,
+    enabled: isOpen,
+    staleTime: 0,
+  });
+
+  const funds: SavingsFund[] = (data?.funds ?? []).map((fund) => ({
+    id: fund.id,
+    code: fund.code || "FUND",
+    nameAr: fund.name_ar || fund.code || "صندوق التوفير",
+    nameEn: fund.name_en || fund.code || "Savings fund",
+    taglineAr: fund.tagline_ar || "",
+    durationDays: Number(fund.duration_days ?? 0),
+    profitPercent: Number(fund.profit_percent ?? 0),
+    minAmount: Number(fund.min_amount ?? 5),
+  }));
+  const investments = data?.investments ?? [];
+  const balance = Number(data?.walletBalance ?? data?.wallet?.balance ?? 0);
+  const selectedFund = funds.find((fund) => fund.id === selectedFundId) ?? null;
+  const amountValue = Number(investAmount) || 0;
+  const expectedProfit =
+    selectedFund && amountValue > 0
+      ? Math.round(((amountValue * selectedFund.profitPercent) / 100) * 10000) / 10000
+      : 0;
+
+  const investmentMutation = useMutation({
+    mutationFn: (values: { fundId: string; amount: number }) =>
+      investInFund({ data: values }),
+    onSuccess: async (result: any, values) => {
+      if (!result?.ok) {
+        if (result?.reason === "INSUFFICIENT_BALANCE") {
+          toast.error("رصيدك المتاح غير كافٍ لإتمام الاستثمار");
+        } else if (result?.reason === "BELOW_MIN_INVESTMENT") {
+          toast.error("المبلغ أقل من الحد الأدنى لهذا الصندوق");
+        } else {
+          toast.error("تعذر إتمام الاستثمار في هذا الصندوق");
+        }
+        return;
+      }
+
+      const fundName = funds.find((fund) => fund.id === values.fundId)?.nameAr ?? "الصندوق";
+      const profit = Number(result.expectedProfit ?? 0);
+      toast.success(
+        `تم الاستثمار في ${fundName}. الربح المتوقع ${savingsMoney(profit)}، والإجمالي عند الاستحقاق ${savingsMoney(values.amount + profit)}.`,
+      );
+      setSelectedFundId(null);
+      setInvestAmount("5");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["investment"] }),
+        queryClient.invalidateQueries({ queryKey: ["home"] }),
+        queryClient.invalidateQueries({ queryKey: ["account"] }),
+        queryClient.invalidateQueries({ queryKey: ["financial-records"] }),
+      ]);
+    },
+    onError: (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(
+        message.includes("INSUFFICIENT_BALANCE")
+          ? "رصيدك المتاح غير كافٍ لإتمام الاستثمار"
+          : "تعذر الاتصال بالخادم لإتمام الاستثمار",
+      );
+    },
+  });
+
+  const handleInvest = (event: React.FormEvent, fund: SavingsFund) => {
+    event.preventDefault();
+    if (!Number.isFinite(amountValue) || amountValue < fund.minAmount) {
+      toast.error(`الحد الأدنى للاستثمار هو ${savingsMoney(fund.minAmount)}`);
+      return;
+    }
+    if (amountValue > balance) {
+      toast.error("رصيدك المتاح أقل من المبلغ المطلوب");
+      return;
+    }
+    investmentMutation.mutate({ fundId: fund.id, amount: amountValue });
+  };
+
   if (!isOpen) return null;
-
-  const defaultFunds = [
-    {
-      id: "f1",
-      code: "MUMBAI",
-      nameAr: "صندوق مومباي",
-      nameEn: "MUMBAI FUND",
-      taglineAr: "استثمار ذكي .. لعوائد أسرع",
-      durationDays: 3,
-      profitPercent: 3.08,
-      minAmount: 5,
-    },
-    {
-      id: "f2",
-      code: "NEWMEXICO",
-      nameAr: "صندوق نيو مكسيكو",
-      nameEn: "NEW MEXICO FUND",
-      taglineAr: "فرص أكبر .. لمستقبل أكثر استقراراً",
-      durationDays: 10,
-      profitPercent: 4.2,
-      minAmount: 5,
-    },
-    {
-      id: "f3",
-      code: "GXR",
-      nameAr: "صندوق GXR",
-      nameEn: "GXR FUND",
-      taglineAr: "استثمار عالمي .. بعوائد مستقرة",
-      durationDays: 30,
-      profitPercent: 6.4,
-      minAmount: 5,
-    },
-    {
-      id: "f4",
-      code: "NBL",
-      nameAr: "صندوق NBL",
-      nameEn: "NBL FUND",
-      taglineAr: "نمو مستدام .. لثروتك المستقبلية",
-      durationDays: 160,
-      profitPercent: 10.8,
-      minAmount: 5,
-    },
-  ];
-
-  const list = funds && funds.length > 0 ? funds : defaultFunds;
 
   return (
     <div
@@ -587,7 +665,6 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
         onClick={(e) => e.stopPropagation()}
         dir="rtl"
       >
-        {/* Header matching Page 3 */}
         <div className="flex items-center justify-between pb-3 border-b border-border/50">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-surface border border-cyan-glow/40 text-cyan-glow">
@@ -607,60 +684,169 @@ export function SavingsFundModal({ isOpen, onClose, funds }: SavingsFundModalPro
           </button>
         </div>
 
-        {/* Hero banner matching Page 3 */}
         <div className="mt-4 surface-card glow-border p-4 text-center">
           <h3 className="text-xl font-extrabold text-gold-gradient">صندوق التوفير</h3>
-          <p className="mt-1 text-xs font-bold text-foreground">
-            فرص استثمارية آمنة مع عوائد مجزية
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            تمنحك الاستقرار المالي والنمو المستدام
-          </p>
+          <p className="mt-1 text-xs font-bold text-muted-foreground">الرصيد المتاح للاستثمار</p>
+          <p className="mt-1 text-lg font-black text-gold">{savingsMoney(balance)}</p>
         </div>
 
-        {/* Funds List matching Page 3 */}
         <div className="mt-4 space-y-3">
-          {list.map((fund) => (
-            <div
-              key={fund.id}
-              className="surface-card glow-border p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-bold text-xs">
-                  {fund.code}
-                </div>
-                <div>
-                  <h4 className="text-sm font-extrabold text-foreground">{fund.nameAr}</h4>
-                  <p className="text-[11px] text-muted-foreground">{fund.taglineAr}</p>
-                  <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                    <span className="flex items-center gap-1 text-cyan-glow">
-                      <Clock className="h-3.5 w-3.5" />
-                      مدة الصندوق: <b>{fund.durationDays} أيام</b>
-                    </span>
-                    <span className="flex items-center gap-1 text-success font-bold">
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      نسبة الأرباح: {fund.profitPercent}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <Link
-                to="/investment"
-                onClick={onClose}
-                className="shrink-0 inline-flex items-center justify-center rounded-xl gold-gradient px-4 py-2 text-xs font-extrabold text-navy-deep shadow-gold-glow hover:brightness-110 transition-all"
-              >
-                استثمر الآن ›
-              </Link>
+          {isLoading ? (
+            <div className="surface-card rounded-2xl p-5 text-center text-sm font-bold text-muted-foreground">
+              جارٍ تحميل الصناديق والرصيد...
             </div>
-          ))}
+          ) : isError ? (
+            <div className="surface-card rounded-2xl p-5 text-center">
+              <p className="text-sm font-bold text-destructive">تعذر تحميل صناديق التوفير من الخادم.</p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-3 rounded-xl border border-cyan-glow/40 px-4 py-2 text-xs font-bold text-cyan-glow"
+              >
+                إعادة المحاولة
+              </button>
+            </div>
+          ) : funds.length === 0 ? (
+            <div className="surface-card rounded-2xl p-5 text-center text-sm font-bold text-muted-foreground">
+              لا توجد صناديق توفير متاحة حالياً.
+            </div>
+          ) : (
+            funds.map((fund) => {
+              const isSelected = selectedFundId === fund.id;
+              return (
+                <div key={fund.id} className="surface-card glow-border overflow-hidden">
+                  <div className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/40 bg-surface text-xs font-bold text-cyan-glow">
+                        {fund.code}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-extrabold text-foreground">{fund.nameAr}</h4>
+                        <p className="text-[11px] text-muted-foreground">
+                          {fund.taglineAr || fund.nameEn}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                          <span className="flex items-center gap-1 text-cyan-glow">
+                            <Clock className="h-3.5 w-3.5" />
+                            مدة الصندوق: <b>{fund.durationDays} أيام</b>
+                          </span>
+                          <span className="flex items-center gap-1 font-bold text-success">
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            نسبة الأرباح: {fund.profitPercent}%
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:shrink-0">
+                      <span className="flex-1 rounded-xl border border-border/60 bg-surface/70 px-3 py-2 text-center text-[11px] text-muted-foreground sm:flex-none">
+                        الحد الأدنى: <b className="text-foreground">{savingsMoney(fund.minAmount)}</b>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFundId(isSelected ? null : fund.id);
+                          setInvestAmount(String(fund.minAmount));
+                        }}
+                        className="shrink-0 rounded-xl gold-gradient px-4 py-2 text-xs font-extrabold text-navy-deep shadow-gold-glow hover:brightness-110 transition-all"
+                      >
+                        {isSelected ? "إلغاء" : "استثمر الآن"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isSelected && (
+                    <form
+                      onSubmit={(event) => handleInvest(event, fund)}
+                      className="space-y-3 border-t border-border/50 bg-surface/40 p-3.5 text-start"
+                    >
+                      <label className="block text-xs font-bold text-foreground" htmlFor={`savings-amount-${fund.id}`}>
+                        مبلغ الاستثمار
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id={`savings-amount-${fund.id}`}
+                          type="number"
+                          min={fund.minAmount}
+                          max={balance}
+                          step="0.01"
+                          inputMode="decimal"
+                          value={investAmount}
+                          onChange={(event) => setInvestAmount(event.target.value)}
+                          className="min-w-0 flex-1 rounded-xl border border-border bg-navy-deep px-3 py-2.5 text-sm font-bold text-foreground focus:border-cyan-glow focus:outline-none"
+                          required
+                        />
+                        <span className="text-xs font-bold text-gold">USDT</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        الربح المتوقع: <b className="text-success">+{savingsMoney(expectedProfit)}</b>
+                        {" · "}المبلغ الذي يعود عند الاستحقاق:{" "}
+                        <b className="text-gold">
+                          {savingsMoney(amountValue + expectedProfit)}
+                        </b>
+                      </p>
+                      <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        النسبة إجمالية لمدة الصندوق. عند انتهاء المدة، يعود رأس المال مع الربح إلى محفظتك.
+                      </p>
+                      <button
+                        type="submit"
+                        disabled={
+                          investmentMutation.isPending ||
+                          amountValue < fund.minAmount ||
+                          amountValue > balance
+                        }
+                        className="w-full rounded-xl brand-gradient py-2.5 text-xs font-black text-primary-foreground shadow-glow disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {investmentMutation.isPending ? "جارٍ تأكيد الاستثمار..." : "تأكيد الاستثمار"}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
 
-        {/* Min investment note matching Page 3 */}
         <div className="mt-4 rounded-2xl border border-gold/40 bg-gold/10 p-3 text-center text-xs font-bold text-gold flex items-center justify-center gap-1.5">
           <Sparkles className="h-4 w-4" />
-          <span>الحد الأدنى للاستثمار في الصناديق التوفيرية هو 5 دولارات</span>
+          <span>الحد الأدنى للاستثمار هو 5 دولارات. عائد الصندوق يُصرف بعد انتهاء مدته.</span>
         </div>
+
+        {!isLoading && !isError && investments.length > 0 && (
+          <section className="mt-5 space-y-2">
+            <h3 className="text-sm font-extrabold text-foreground">استثماراتي في صناديق التوفير</h3>
+            {investments.slice(0, 5).map((investment) => {
+              const principal = Number(investment.amount ?? 0);
+              const profit = Number(investment.expected_profit ?? 0);
+              const maturity = investment.matures_at ? new Date(investment.matures_at) : null;
+              const statusLabel =
+                investment.status === "completed"
+                  ? "مكتمل — تمت إعادة رأس المال والربح"
+                  : investment.status === "cancelled"
+                    ? "ملغى"
+                    : "قيد الاستثمار";
+              return (
+                <div key={investment.id} className="surface-card rounded-2xl p-3 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-foreground">
+                      {investment.name_ar || investment.code || "صندوق التوفير"}
+                    </span>
+                    <span className="font-bold text-cyan-glow">{statusLabel}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap justify-between gap-2 text-muted-foreground">
+                    <span>رأس المال: {savingsMoney(principal)}</span>
+                    <span className="text-success">الربح المتوقع: +{savingsMoney(profit)}</span>
+                  </div>
+                  {maturity && !Number.isNaN(maturity.getTime()) && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      تاريخ الاستحقاق: {maturity.toLocaleDateString("ar")}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        )}
       </div>
     </div>
   );

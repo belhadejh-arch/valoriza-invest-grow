@@ -64,7 +64,7 @@ const HERO_SLIDES = [
   },
   {
     title: "صناديق التوفير الذكية",
-    subtitle: "أرباح يومية تصل إلى 10.8%",
+    subtitle: "عائد إجمالي يصل إلى 10.8%",
     caption: "خطط ادخارية تبدأ من 5 دولارات فقط",
     ctaLabel: "استكشف الصناديق",
     ctaTo: "/investment",
@@ -180,6 +180,12 @@ function HomePage() {
               <Link
                 id="hero-cta-btn"
                 to={currentSlide.ctaTo}
+                onClick={(event) => {
+                  if (slideIndex === 1) {
+                    event.preventDefault();
+                    setSavingsOpen(true);
+                  }
+                }}
                 className="inline-flex items-center gap-2 rounded-2xl gold-gradient px-4 sm:px-5 py-2 sm:py-2.5 text-xs sm:text-sm font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
               >
                 <span>{currentSlide.ctaLabel}</span>

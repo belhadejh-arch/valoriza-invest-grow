@@ -150,7 +150,6 @@ export async function settleMaturedInvestments(batchSize = 100): Promise<number>
         `INSERT INTO transactions
            (user_id,type,status,amount,balance_before,balance_after,reference_id,description)
          VALUES ($1,'investment_return','completed',$2::numeric+$3::numeric,$4::numeric,$5::numeric,$6,$7)
-         ON CONFLICT (reference_id) WHERE type='investment_return' DO NOTHING
          RETURNING id`,
         [
           investment.user_id,

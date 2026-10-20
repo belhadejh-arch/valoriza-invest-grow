@@ -98,7 +98,7 @@ export const translations = {
     "home.luckyWheelSubtitle": "أدر العجلة واربح جوائز نقدية فورية تصل إلى $100!",
     "home.spinNow": "أدر العجلة الآن",
     "home.savingsFunds": "صناديق التوفير الذكية",
-    "home.savingsSubtitle": "عوائد يومية تصاعدية تبدأ من 5$ فقط",
+    "home.savingsSubtitle": "عوائد تُصرف عند الاستحقاق، تبدأ من 5$ فقط",
     "home.investNow": "استثمر الآن",
     "home.dailyReward": "مكافأة تسجيل الدخول اليومية",
     "home.claimDaily": "استلام مكافأة اليوم ($0.11)",
@@ -130,7 +130,7 @@ export const translations = {
     "invest.upgrade": "ترقية الباقة",
     "invest.trialDesc": "الباقة التجريبية المجانية: 3 مهام يومياً بربح $1.20 لمدة 3 أيام",
     "invest.savingsDesc":
-      "صندوق استثماري مرن يتيح لك جني أرباح يومية وسحب رأس المال عند انتهاء المدة",
+      "صندوق بمدة وعائد محددين؛ يعود رأس المال مع الربح إلى محفظتك عند الاستحقاق",
     "invest.minDeposit": "الحد الأدنى للإيداع",
 
     // Investment page specific

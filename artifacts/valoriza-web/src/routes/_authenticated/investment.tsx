@@ -4,17 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  Calendar,
   Check,
-  Clock,
   Crown,
   Lock,
   Sparkles,
   Timer,
-  TrendingUp,
-  Vault,
   Wallet,
-  X,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
@@ -23,7 +18,6 @@ import {
   getInvestmentData,
   activateTrial,
   purchaseVip,
-  investInSavingsFund,
 } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
 
@@ -33,10 +27,10 @@ export const Route = createFileRoute("/_authenticated/investment")({
       { title: "الاستثمار و VIP — Valoriza" },
       {
         name: "description",
-        content: "صناديق التوفير الاستثمارية وترقيات باقات VIP بعوائد يومية مضمونة.",
+        content: "باقات VIP وأسعارها وأرباحها اليومية وعدد المهام المتاحة لكل مستوى.",
       },
       { property: "og:title", content: "الاستثمار و VIP — Valoriza" },
-      { property: "og:description", content: "صناديق التوفير وباقات VIP في منصة Valoriza." },
+      { property: "og:description", content: "باقات VIP الرسمية في منصة Valoriza." },
     ],
   }),
   component: InvestmentPage,
@@ -55,24 +49,16 @@ type InvestmentPageData = {
     trialActive?: boolean;
     trial_active?: boolean;
   } | null;
-  funds?: any[];
   packages?: any[];
   vipPackages?: any[];
-  userInvestments?: any[];
-  investments?: any[];
 };
 
 function InvestmentPage() {
   const qc = useQueryClient();
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<"funds" | "vip">("vip");
-  const [selectedFund, setSelectedFund] = useState<any | null>(null);
-  const [investAmount, setInvestAmount] = useState<string>("5");
-
   const fetchData = useServerFn(getInvestmentData);
   const trial = useServerFn(activateTrial);
   const buy = useServerFn(purchaseVip);
-  const invest = useServerFn(investInSavingsFund);
 
   const { data, isLoading, isError, refetch } = useQuery<InvestmentPageData>({
     queryKey: ["investment"],
@@ -84,18 +70,6 @@ function InvestmentPage() {
   const balance = data?.wallet?.balance ?? (data as any)?.walletBalance ?? 0;
   const userVipLevel = data?.profile?.vipLevel ?? (data as any)?.profile?.vip_level ?? 0;
   const isTrialActive = !!(data?.profile?.trialActive ?? (data as any)?.profile?.trial_active);
-
-  const fundsList = (data?.funds || []).map((fund: any) => ({
-    ...fund,
-    id: fund.id,
-    code: fund.code,
-    nameAr: fund.nameAr || fund.name_ar || fund.code,
-    nameEn: fund.nameEn || fund.name_en || fund.code,
-    taglineAr: fund.taglineAr || fund.tagline_ar || "",
-    durationDays: Number(fund.durationDays || fund.duration_days || 0),
-    profitPercent: Number(fund.profitPercent || fund.profit_percent || 0),
-    minAmount: Number(fund.minAmount || fund.min_amount || 5),
-  }));
 
   const packagesList = (data?.packages || (data as any)?.vipPackages || []).map((pkg: any) => ({
     ...pkg,
@@ -109,17 +83,6 @@ function InvestmentPage() {
     durationDays: Number(pkg.durationDays ?? pkg.duration_days ?? 365),
     isActive: pkg.isActive !== false && pkg.is_active !== false,
   }));
-
-  const userInvestmentsList = (data?.userInvestments || (data as any)?.investments || []).map(
-    (inv: any) => ({
-      ...inv,
-      id: inv.id,
-      fundName: inv.fundName || inv.name_ar || inv.code || "صندوق استثماري",
-      amount: Number(inv.amount),
-      expectedProfit: Number(inv.expectedProfit ?? inv.expected_profit ?? 0),
-      maturesAt: inv.maturesAt || inv.matures_at || new Date().toISOString(),
-    }),
-  );
 
   const trialMutation = useMutation({
     mutationFn: () => trial(),
@@ -158,60 +121,6 @@ function InvestmentPage() {
     },
     onError: () => toast.error("تعذر شراء الباقة حالياً"),
   });
-
-  const investMutation = useMutation({
-    mutationFn: (vals: { fundId: string; amount: number }) => invest({ data: vals }),
-    onSuccess: (res: any) => {
-      if (res?.ok) {
-        toast.success(
-          `تم الاستثمار بنجاح في ${res.fundName || "الصندوق"}! الأرباح المتوقعة: +${money(res.expectedProfit ?? 0)}`,
-        );
-        setSelectedFund(null);
-        setInvestAmount("5");
-        qc.invalidateQueries({ queryKey: ["investment"] });
-        qc.invalidateQueries({ queryKey: ["account"] });
-        qc.invalidateQueries({ queryKey: ["financial-records"] });
-      } else {
-        if (res?.reason === "INSUFFICIENT_BALANCE") {
-          toast.error("رصيدك المتاح غير كافٍ لإتمام الاستثمار");
-        } else if (res?.reason === "BELOW_MIN_AMOUNT") {
-          toast.error(`الحد الأدنى للاستثمار في هذا الصندوق هو ${res.minAmount}$`);
-        } else {
-          toast.error("تعذر إتمام الاستثمار");
-        }
-      }
-    },
-    onError: () => toast.error("حدث خطأ أثناء معالجة الاستثمار"),
-  });
-
-  const handleOpenInvest = (fund: any) => {
-    setSelectedFund(fund);
-    setInvestAmount(Math.max(5, fund.minAmount || 5).toString());
-  };
-
-  const handleConfirmInvest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFund) return;
-    const num = parseFloat(investAmount);
-    if (isNaN(num) || num < selectedFund.minAmount) {
-      toast.error(`الحد الأدنى للاستثمار هو ${selectedFund.minAmount}$`);
-      return;
-    }
-    if (num > balance) {
-      toast.error("رصيدك المتاح أقل من المبلغ المطلوب");
-      return;
-    }
-    investMutation.mutate({
-      fundId: selectedFund.id,
-      amount: num,
-    });
-  };
-
-  const parsedAmount = parseFloat(investAmount) || 0;
-  const calculatedProfit =
-    selectedFund && parsedAmount > 0
-      ? Math.round(((parsedAmount * selectedFund.profitPercent) / 100) * 100) / 100
-      : 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-28">
@@ -287,150 +196,7 @@ function InvestmentPage() {
           </div>
         )}
 
-        {/* View Switcher (Tabs) */}
-        <div className="max-w-md mx-auto grid grid-cols-2 gap-2 rounded-2xl border border-border bg-surface/80 p-1.5 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setActiveTab("funds")}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs sm:text-sm font-black transition-all ${
-              activeTab === "funds"
-                ? "brand-gradient text-primary-foreground shadow-glow"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Vault className="h-4 w-4" />
-            <span>{t("investment.fundsTab")}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("vip")}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs sm:text-sm font-black transition-all ${
-              activeTab === "vip"
-                ? "brand-gradient text-primary-foreground shadow-glow"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Crown className="h-4 w-4" />
-            <span>{t("investment.vipTab")}</span>
-          </button>
-        </div>
-
-        {/* TAB 1: SAVINGS FUNDS */}
-        {activeTab === "funds" && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            {/* Hero Header */}
-            <div className="surface-card glow-border p-5 text-center relative overflow-hidden">
-              <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-gold/10 blur-2xl pointer-events-none" />
-              <h2 className="text-xl font-black text-foreground">{t("investment.fundsTab")}</h2>
-              <p className="mt-1 text-sm font-bold text-gold-gradient">
-                {t("investment.fundsSubtitle")}
-              </p>
-              <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed max-w-lg mx-auto">
-                {t("investment.fundsDesc")}
-              </p>
-            </div>
-
-            {/* 4 Savings Funds Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {fundsList.map((fund: any) => (
-                <div
-                  key={fund.id}
-                  className="surface-card glow-border p-4 flex flex-col justify-between gap-3 hover:border-cyan-glow/50 transition-all shadow-md"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 text-start">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-primary/40 text-cyan-glow font-black text-xs shadow-glow">
-                        {fund.code}
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-black text-foreground">{fund.nameAr}</h3>
-                        <p className="text-xs text-muted-foreground">
-                          {fund.taglineAr || fund.nameEn}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span className="shrink-0 rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-black text-emerald-400">
-                      +{fund.profitPercent}%
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-border/40 text-start">
-                    <span className="text-muted-foreground flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 text-cyan-glow" />
-                      <span>
-                        {fund.durationDays} {t("investment.durationDays")}
-                      </span>
-                    </span>
-                    <span className="text-muted-foreground text-end">
-                      {t("investment.minAmount")}:{" "}
-                      <b className="text-foreground">${fund.minAmount || 5}</b>
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenInvest(fund)}
-                    className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl gold-gradient py-2.5 text-xs font-black text-navy-deep shadow-gold-glow hover:brightness-110 active:scale-95 transition-all"
-                  >
-                    <span>{t("investment.investNow")}</span>
-                    <span>›</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Minimum Note */}
-            <div className="rounded-2xl border border-gold/40 bg-gold/10 p-3 text-center text-xs font-bold text-gold flex items-center justify-center gap-2">
-              <Sparkles className="h-4 w-4 shrink-0" />
-              <span>{t("investment.minNote")}</span>
-            </div>
-
-            {/* My Active Investments List */}
-            {userInvestmentsList && userInvestmentsList.length > 0 && (
-              <section className="mt-6">
-                <h3 className="text-sm font-black text-foreground mb-3 flex items-center gap-2 text-start">
-                  <Clock className="h-4 w-4 text-cyan-glow" />
-                  <span>
-                    {t("investment.activeInvestments")} ({userInvestmentsList.length})
-                  </span>
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {userInvestmentsList.map((inv: any) => (
-                    <div
-                      key={inv.id}
-                      className="surface-card p-3.5 flex flex-col justify-between gap-2 text-xs text-start"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="font-black text-foreground text-sm">{inv.fundName}</p>
-                        <span className="text-xs font-bold text-success">
-                          +{money(inv.expectedProfit)}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        {t("investment.maturesAt")}:{" "}
-                        {new Date(inv.maturesAt).toLocaleDateString(undefined, {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
-                      </p>
-                      <div className="pt-2 border-t border-border/40 flex justify-between text-muted-foreground">
-                        <span>{t("investment.investedAmount")}:</span>
-                        <span className="font-black text-foreground">{money(inv.amount)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
-
-        {/* TAB 2: VIP PACKAGES */}
-        {activeTab === "vip" && (
+        {/* VIP packages stay on this page; savings funds live in the homepage savings icon. */}
           <div className="space-y-4 animate-in fade-in duration-200">
             <div className="surface-card p-4 text-center glow-border">
               <h2 className="text-base sm:text-lg font-black text-foreground flex items-center justify-center gap-2">
@@ -561,134 +327,8 @@ function InvestmentPage() {
                 })}
               </div>
             )}
-          </div>
-        )}
-      </main>
-
-      {/* Real Investment Modal Flow for Savings Fund */}
-      {selectedFund && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in"
-          onClick={() => setSelectedFund(null)}
-        >
-          <div
-            className="w-full max-w-md surface-card glow-border p-5 rounded-3xl relative shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-border/60">
-              <div className="flex items-center gap-2.5 text-start">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow">
-                  <Vault className="h-5 w-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-foreground">
-                    {t("investment.investIn")} {selectedFund.nameAr}
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    {selectedFund.durationDays} {t("investment.durationDays")} •{" "}
-                    {selectedFund.profitPercent}%
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedFund(null)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-full hover:bg-surface transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Form */}
-            <form onSubmit={handleConfirmInvest} className="mt-4 space-y-4 text-start">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-foreground">
-                    {t("investment.amountLabel")}
-                  </label>
-                  <span className="text-xs text-muted-foreground">
-                    {t("investment.availableBalance")}:{" "}
-                    <b className="text-gold">{money(balance)}</b>
-                  </span>
-                </div>
-
-                <div className="relative">
-                  <input
-                    type="number"
-                    min={selectedFund.minAmount}
-                    max={balance}
-                    step="0.01"
-                    placeholder={`Min: $${selectedFund.minAmount}`}
-                    value={investAmount}
-                    onChange={(e) => setInvestAmount(e.target.value)}
-                    required
-                    className="w-full rounded-2xl border border-border bg-surface px-4 py-3.5 text-sm font-extrabold text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none"
-                  />
-                  <span className="absolute right-4 rtl:right-auto rtl:left-4 top-1/2 -translate-y-1/2 text-xs font-extrabold text-gold">
-                    USDT
-                  </span>
-                </div>
-
-                {/* Quick amount presets */}
-                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                  {[5, 20, 50, 100, 250].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setInvestAmount(preset.toString())}
-                      className="rounded-xl border border-border/70 bg-surface/60 px-2.5 py-1 text-xs font-bold text-muted-foreground hover:text-cyan-glow hover:border-cyan-glow/50 transition-colors"
-                    >
-                      ${preset}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setInvestAmount(balance > 0 ? balance.toString() : "5")}
-                    className="rounded-xl border border-gold/40 bg-gold/10 px-2.5 py-1 text-xs font-bold text-gold hover:bg-gold/20 transition-colors"
-                  >
-                    {t("investment.allAmount")}
-                  </button>
-                </div>
-              </div>
-
-              {/* Live Calculation Preview */}
-              <div className="rounded-2xl border border-border/80 bg-surface/80 p-3.5 text-xs space-y-2">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t("investment.fixedProfitRate")}:</span>
-                  <span className="font-bold text-success">+{selectedFund.profitPercent}%</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t("investment.lockDuration")}:</span>
-                  <span className="font-bold text-foreground">
-                    {selectedFund.durationDays} {t("investment.durationDays")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>{t("investment.expectedNetProfit")}:</span>
-                  <span className="font-extrabold text-success">+{money(calculatedProfit)}</span>
-                </div>
-                <div className="flex justify-between font-extrabold text-foreground border-t border-border/50 pt-2 text-sm">
-                  <span>{t("investment.totalAtMaturity")}:</span>
-                  <span className="text-gold-gradient font-black">
-                    {money(parsedAmount + calculatedProfit)} USDT
-                  </span>
-                </div>
-              </div>
-
-              {/* Submit button */}
-              <button
-                type="submit"
-                disabled={investMutation.isPending || parsedAmount <= 0}
-                className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-black text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-              >
-                {investMutation.isPending ? t("common.loading") : t("investment.confirmInvestBtn")}
-              </button>
-            </form>
-          </div>
         </div>
-      )}
+      </main>
 
       <BottomNav />
     </div>
