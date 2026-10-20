@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Crown, Edit2, CheckCircle2, XCircle, X, RefreshCw, Video, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminVipPackages, saveVipPackage } from "@/lib/valoriza-admin.functions";
+import { arabicVipLabel } from "@/lib/arabic-labels";
 
 export function AdminVipPackagesTab() {
   const queryClient = useQueryClient();
@@ -28,7 +29,7 @@ export function AdminVipPackagesTab() {
   const saveMutation = useMutation({
     mutationFn: saveVipPackage,
     onSuccess: () => {
-      toast.success("تم تحديث باقة VIP بنجاح");
+      toast.success("تم تحديث باقة العضوية المميزة بنجاح");
       queryClient.invalidateQueries({ queryKey: ["admin-vip-packages"] });
       queryClient.invalidateQueries({ queryKey: ["investment-data"] });
       queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
@@ -52,7 +53,7 @@ export function AdminVipPackagesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xs font-extrabold text-foreground">إدارة وتعديل باقات VIP</h2>
+          <h2 className="text-xs font-extrabold text-foreground">إدارة وتعديل باقات العضوية المميزة</h2>
           <p className="text-[10px] text-muted-foreground">
             تحديد أسعار الترقية، الأرباح اليومية، وعدد المهام لكل مستوى.
           </p>
@@ -70,7 +71,7 @@ export function AdminVipPackagesTab() {
       {isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
-          جارٍ جلب باقات VIP...
+          جارٍ جلب باقات العضوية المميزة...
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -89,7 +90,7 @@ export function AdminVipPackagesTab() {
                     <Crown className="h-5 w-5 text-gold" />
                   </div>
                   <div>
-                    <h3 className="text-xs font-black text-foreground">{pkg.name}</h3>
+                    <h3 className="text-xs font-black text-foreground">{arabicVipLabel(pkg.name)}</h3>
                     <span className="text-[10px] font-bold text-gold">
                       سعر التفعيل: ${Number(pkg.price).toFixed(2)}
                     </span>

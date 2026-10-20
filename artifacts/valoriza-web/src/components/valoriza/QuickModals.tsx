@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { backendRequest } from "@/lib/backend-client";
+import { arabicFundLabel } from "@/lib/arabic-labels";
 import { getInvestmentData, investInSavingsFund } from "@/lib/valoriza-pages.functions";
 
 /* =========================================================================
@@ -583,9 +584,11 @@ export function SavingsFundModal({ isOpen, onClose }: { isOpen: boolean; onClose
   const funds: SavingsFund[] = (data?.funds ?? []).map((fund) => ({
     id: fund.id,
     code: fund.code || "FUND",
-    nameAr: fund.name_ar || fund.code || "صندوق التوفير",
+    nameAr: arabicFundLabel(
+      fund.name_ar || (fund.code ? `صندوق ${fund.code}` : "صندوق التوفير"),
+    ),
     nameEn: fund.name_en || fund.code || "Savings fund",
-    taglineAr: fund.tagline_ar || "",
+    taglineAr: fund.tagline_ar || "فرصة ادخارية بعائد ومدة محددين",
     durationDays: Number(fund.duration_days ?? 0),
     profitPercent: Number(fund.profit_percent ?? 0),
     minAmount: Number(fund.min_amount ?? 5),
@@ -723,7 +726,7 @@ export function SavingsFundModal({ isOpen, onClose }: { isOpen: boolean; onClose
                       <div className="min-w-0">
                         <h4 className="text-sm font-extrabold text-foreground">{fund.nameAr}</h4>
                         <p className="text-[11px] text-muted-foreground">
-                          {fund.taglineAr || fund.nameEn}
+                          {fund.taglineAr}
                         </p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                           <span className="flex items-center gap-1 text-cyan-glow">

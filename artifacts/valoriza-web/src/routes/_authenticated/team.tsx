@@ -15,7 +15,7 @@ import {
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
-import { getTeamData } from "@/lib/valoriza-pages.functions";
+import { getTeamData, type TeamPageData } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/team")({
@@ -33,33 +33,11 @@ export const Route = createFileRoute("/_authenticated/team")({
   component: TeamPage,
 });
 
-const money = (n: number) => `$${n.toFixed(2)}`;
-
-type TeamMember = {
-  id: string;
-  username?: string | null;
-  email?: string | null;
-  level: number;
-  vipLevel?: number | null;
-  createdAt?: string;
-};
-
-type TeamLevel = {
-  level: number;
-  members: number;
-  earnings: number;
-  ratePercent?: string;
-};
-
-type TeamApiResponse = {
-  referralCode?: string;
-  totalMembers?: number;
-  teamIncome?: number;
-  teamRewards?: number;
-  rates?: { l1?: number; l2?: number; l3?: number };
-  levels?: TeamLevel[];
-  members?: TeamMember[];
-};
+const money = (n: number) =>
+  `${new Intl.NumberFormat("ar", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)} دولار`;
 
 const levelThemes: Record<
   number,
@@ -98,11 +76,15 @@ function TeamPage() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | null>(null);
 
   const fetchData = useServerFn(getTeamData);
-  const { data, isLoading, isError, refetch } = useQuery<TeamApiResponse>({
+  const { data, error, isLoading, isError, refetch } = useQuery<TeamPageData>({
     queryKey: ["team"],
-    queryFn: async () => (await fetchData()) as TeamApiResponse,
+    queryFn: () => fetchData(),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 5_000),
     refetchInterval: 30_000,
+    refetchOnReconnect: true,
     refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
 
   const referralCode = data?.referralCode || "";
@@ -147,8 +129,8 @@ function TeamPage() {
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: "Valoriza Team",
-          text: `Valoriza Referral Code: ${referralCode}`,
+          title: "فريق فالوريزا",
+          text: `رمز الدعوة الخاص بي: ${referralCode}`,
           url: referralLink,
         });
         return;
@@ -186,7 +168,7 @@ function TeamPage() {
                 readOnly
                 dir="ltr"
                 value={referralLink}
-                placeholder={isLoading ? "…" : "—"}
+                placeholder={isLoading ? "جارٍ تحميل الرابط…" : isError ? "تعذر تحميل الرابط" : "—"}
                 className="min-w-0 flex-1 bg-transparent px-1 text-left text-[11px] text-slate-300 outline-none"
               />
               <button
@@ -224,7 +206,7 @@ function TeamPage() {
                 readOnly
                 dir="ltr"
                 value={referralCode}
-                placeholder={isLoading ? "…" : "—"}
+                placeholder={isLoading ? "جارٍ تحميل الرمز…" : isError ? "تعذر تحميل الرمز" : "—"}
                 className="min-w-0 flex-1 bg-transparent px-1 text-center font-mono text-sm font-black tracking-wider text-amber-300 outline-none"
               />
             </div>
@@ -247,13 +229,19 @@ function TeamPage() {
             role="alert"
             className="flex items-center justify-between gap-3 rounded-xl border border-red-400/30 bg-red-950/30 px-3 py-2.5 text-xs text-red-100"
           >
-            <span>{t("common.error")}</span>
+            <span>
+              {error instanceof Error && error.message.toUpperCase().includes("UNAUTHORIZED")
+                ? "انتهت جلسة الدخول؛ سجّل الدخول مجددًا."
+                : error instanceof Error && error.message.toUpperCase().includes("FORBIDDEN")
+                  ? "لا تملك صلاحية عرض بيانات الفريق."
+                  : "تعذر تحميل بيانات الفريق من قاعدة البيانات. حاول مرة أخرى."}
+            </span>
             <button
               type="button"
               onClick={() => void refetch()}
               className="shrink-0 rounded-lg border border-red-300/40 px-3 py-1.5 font-bold hover:bg-red-900/40"
             >
-              {isRTL ? "أعد المحاولة" : "Try again"}
+              {t("common.retry")}
             </button>
           </div>
         )}
@@ -304,7 +292,7 @@ function TeamPage() {
                         </div>
                         <div className="rounded-md bg-white px-1 py-1.5 text-slate-950 sm:py-2">
                           <div className="text-[9px] font-semibold sm:text-[10px]">
-                            {isRTL ? "إجمالي الأرباح" : "Total earnings"}
+                            إجمالي الأرباح
                           </div>
                           <div className="text-sm font-black sm:text-base">
                             {money(level.earnings)}
@@ -330,7 +318,7 @@ function TeamPage() {
                     className={`${theme.rate} flex min-h-12 flex-col items-center justify-center rounded-xl px-1.5 py-2 text-center text-white shadow`}
                   >
                     <span className="text-[9px] font-semibold leading-tight sm:text-[11px]">
-                      {isRTL ? `من ${t(levelKey(level.level))}` : `From ${t(levelKey(level.level))}`}
+                      من {t(levelKey(level.level))}
                     </span>
                     <span className="text-sm font-black sm:text-base">
                       {level.ratePercent}
@@ -391,7 +379,7 @@ function TeamPage() {
                       {t("team.level")}
                     </th>
                     <th className="px-3 py-2.5 text-right font-bold">
-                      {isRTL ? "البريد الإلكتروني" : "Email"}
+                      البريد الإلكتروني
                     </th>
                   </tr>
                 </thead>
@@ -427,7 +415,7 @@ function TeamPage() {
                             </span>
                             <UserRound className="h-4 w-4 shrink-0 text-cyan-300" />
                             <span className="shrink-0 rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[9px] font-bold text-slate-200" dir="ltr">
-                              VIP {Number(member.vipLevel ?? 0)}
+                              المستوى المميز {Number(member.vipLevel ?? 0)}
                             </span>
                           </div>
                         </td>

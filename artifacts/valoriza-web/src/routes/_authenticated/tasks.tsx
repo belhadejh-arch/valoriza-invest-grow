@@ -23,6 +23,7 @@ import {
   type TasksPageData,
 } from "@/lib/valoriza-tasks.functions";
 import { useI18n } from "@/lib/i18n";
+import { arabicVipLabel } from "@/lib/arabic-labels";
 
 export const Route = createFileRoute("/_authenticated/tasks")({
   head: () => ({
@@ -191,7 +192,7 @@ function TasksPage() {
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-black/30 backdrop-blur-md px-3 py-1 text-xs font-black text-cyan-glow border border-cyan-glow/40">
                   <Crown className="h-3.5 w-3.5 text-gold" />
-                  {data?.vipName || `VIP ${vipLevel}`}
+                  {arabicVipLabel(data?.vipName, vipLevel)}
                 </span>
                 <span className="flex items-center gap-1.5 text-xs font-bold text-primary-foreground/90">
                   <Sparkles className="h-3.5 w-3.5 text-gold" />
@@ -211,7 +212,7 @@ function TasksPage() {
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
                   {t("home.vipStatus")}
                 </p>
-                <p className="mt-0.5 text-sm font-black text-gold">VIP {vipLevel}</p>
+                <p className="mt-0.5 text-sm font-black text-gold">المستوى المميز {vipLevel}</p>
               </div>
               <div className="p-2 rounded-xl bg-black/20">
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
@@ -303,7 +304,7 @@ function TasksPage() {
                         {t("tasks.taskNumber")} {task.taskNumber}
                       </span>
                       <span className="rounded-full bg-surface/90 backdrop-blur-md px-2.5 py-1 text-[10px] font-black text-gold border border-gold/40">
-                        {task.vipRequirement}
+                        {arabicVipLabel(task.vipRequirement)}
                       </span>
                     </div>
 
@@ -423,7 +424,7 @@ function TasksPage() {
                 <Clock className="h-3.5 w-3.5 text-cyan-glow animate-spin" />
                 <span className="text-xs font-black text-white">
                   {secondsRemaining > 0
-                    ? `${secondsRemaining} ${isRTL ? "ثوانٍ" : "s"}`
+                    ? `${secondsRemaining} ${t("tasks.seconds")}`
                     : t("tasks.completed")}
                 </span>
               </div>

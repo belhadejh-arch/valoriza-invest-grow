@@ -9,8 +9,8 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       id="theme-toggle-btn"
       type="button"
       onClick={toggleTheme}
-      aria-label={isDark ? "تفعيل الوضع النهاري (Light Mode)" : "تفعيل الوضع الليلي (Dark Mode)"}
-      title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+      aria-label={isDark ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
+      title={isDark ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
       className={`relative flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-surface/80 text-foreground hover:border-gold hover:text-gold transition-all active:scale-90 shadow-sm ${className}`}
     >
       {isDark ? (

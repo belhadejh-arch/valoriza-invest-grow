@@ -192,7 +192,7 @@ export function AppHeader({
                 className="flex items-center gap-1 rounded-full border border-vip/50 bg-vip/15 px-2 py-0.5 text-[10px] font-extrabold text-vip-soft shadow-[0_0_10px_oklch(0.72_0.17_310/0.3)]"
               >
                 <Crown className="h-3 w-3 text-gold" />
-                VIP {vipLevel}
+                المستوى المميز {vipLevel}
               </span>
             )}
 
@@ -294,7 +294,7 @@ export function AppHeader({
                       <p className="text-xs font-bold text-foreground truncate">{username}</p>
                       <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <Crown className="h-3 w-3 text-gold" />
-                        {vipLevel ? `VIP ${vipLevel}` : t("home.vipStatus")}
+                        {vipLevel ? `المستوى المميز ${vipLevel}` : t("home.vipStatus")}
                       </p>
                     </div>
                   </div>

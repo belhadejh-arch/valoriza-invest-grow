@@ -142,7 +142,7 @@ export function AdminUsersTab() {
   const vipMutation = useMutation({
     mutationFn: updateUserVipLevel,
     onSuccess: () => {
-      toast.success("تم تحديث مستوى VIP بنجاح");
+      toast.success("تم تحديث مستوى العضوية المميزة بنجاح");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       setVipModalOpen(false);
     },
@@ -267,9 +267,9 @@ export function AdminUsersTab() {
               <tr>
                 <th className="p-3">المستخدم</th>
                 <th className="p-3">كود الإحالة</th>
-                <th className="p-3">VIP</th>
+                <th className="p-3">العضوية المميزة</th>
                 <th className="p-3">الرصيد</th>
-                <th className="p-3">أعضاء الفريق (VIP1-7)</th>
+                <th className="p-3">أعضاء الفريق (المستويات ١–٧)</th>
                 <th className="p-3">إجمالي سحب الفريق</th>
                 <th className="p-3">سحب المستخدم</th>
                 <th className="p-3">إجمالي الإيداع</th>
@@ -290,7 +290,7 @@ export function AdminUsersTab() {
                   <td className="p-3">
                     <span className="inline-flex items-center gap-1 rounded-full border border-vip/40 bg-vip/10 px-2 py-0.5 text-[10px] font-extrabold text-vip-soft">
                       <Crown className="h-3 w-3 text-gold" />
-                      VIP {user.vipLevel}
+                      المستوى المميز {user.vipLevel}
                     </span>
                   </td>
                   <td className="p-3 font-extrabold text-gold">${user.balance.toFixed(2)}</td>
@@ -298,7 +298,7 @@ export function AdminUsersTab() {
                   {/* Requirement 3: Team VIP Members Count (VIP1 - VIP7 only) */}
                   <td className="p-3">
                     <span
-                      title="عدد أعضاء الفريق الحاصلين على VIP1 إلى VIP7 فقط"
+                      title="عدد أعضاء الفريق الحاصلين على المستويات المميزة من ١ إلى ٧ فقط"
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-black border transition-all ${
                         (user.teamVipCount ?? user.teamCount ?? 0) > 0
                           ? "bg-cyan-glow/15 border-cyan-glow/40 text-cyan-glow"
@@ -307,7 +307,7 @@ export function AdminUsersTab() {
                     >
                       <Users className="h-3 w-3" />
                       <span>{user.teamVipCount ?? user.teamCount ?? 0}</span>
-                      <span className="text-[9px] font-normal opacity-75">عضو VIP</span>
+                      <span className="text-[9px] font-normal opacity-75">عضو مميز</span>
                     </span>
                   </td>
 
@@ -426,7 +426,7 @@ export function AdminUsersTab() {
                           setTargetVipLevel(user.vipLevel);
                           setVipModalOpen(true);
                         }}
-                        title="تغيير مستوى VIP"
+                        title="تغيير مستوى العضوية المميزة"
                         className="rounded-lg bg-surface border border-vip/40 p-1.5 text-vip-soft hover:bg-vip/10"
                       >
                         <Crown className="h-3.5 w-3.5" />
@@ -502,8 +502,8 @@ export function AdminUsersTab() {
                   </p>
                 </div>
                 <div className="rounded-xl border border-border bg-surface p-2.5">
-                  <p className="text-[10px] text-muted-foreground font-bold">مستوى VIP</p>
-                  <p className="text-xs font-black text-gold mt-0.5">VIP {selectedUser.vipLevel}</p>
+                  <p className="text-[10px] text-muted-foreground font-bold">مستوى العضوية المميزة</p>
+                  <p className="text-xs font-black text-gold mt-0.5">المستوى المميز {selectedUser.vipLevel}</p>
                 </div>
                 <div className="rounded-xl border border-border bg-surface p-2.5">
                   <p className="text-[10px] text-muted-foreground font-bold">الرصيد المتاح</p>
@@ -512,10 +512,10 @@ export function AdminUsersTab() {
                   </p>
                 </div>
                 <div className="rounded-xl border border-cyan-glow/40 bg-cyan-glow/10 p-2.5">
-                  <p className="text-[10px] text-cyan-glow font-bold">أعضاء الفريق (VIP1-7)</p>
+                  <p className="text-[10px] text-cyan-glow font-bold">أعضاء الفريق (المستويات ١–٧)</p>
                   <p className="text-xs font-black text-cyan-glow mt-0.5 flex items-center justify-center gap-1">
                     <Users className="h-3 w-3" />
-                    <span>{selectedUser.teamVipCount ?? selectedUser.teamCount ?? 0} عضو VIP</span>
+                    <span>{selectedUser.teamVipCount ?? selectedUser.teamCount ?? 0} عضوًا مميزًا</span>
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-2.5">
@@ -899,7 +899,7 @@ export function AdminUsersTab() {
           <div className="w-full max-w-sm rounded-3xl border border-vip/40 bg-navy-deep p-5 shadow-2xl">
             <div className="flex items-center justify-between pb-3 border-b border-border/60">
               <h3 className="text-xs font-extrabold text-foreground">
-                ترقية VIP للمستخدم: {selectedUser.username}
+                ترقية العضوية المميزة للمستخدم: {selectedUser.username}
               </h3>
               <button
                 type="button"
@@ -911,7 +911,7 @@ export function AdminUsersTab() {
             </div>
 
             <div className="mt-3 space-y-3">
-              <p className="text-[11px] text-muted-foreground">اختر مستوى VIP الجديد:</p>
+              <p className="text-[11px] text-muted-foreground">اختر مستوى العضوية المميزة الجديد:</p>
               <div className="grid grid-cols-4 gap-2">
                 {[0, 1, 2, 3, 4, 5, 6, 7].map((lvl) => (
                   <button
@@ -924,7 +924,7 @@ export function AdminUsersTab() {
                         : "border-border bg-surface text-foreground hover:border-vip/50"
                     }`}
                   >
-                    {lvl === 0 ? "عادي" : `VIP ${lvl}`}
+                    {lvl === 0 ? "عادي" : `المستوى المميز ${lvl}`}
                   </button>
                 ))}
               </div>

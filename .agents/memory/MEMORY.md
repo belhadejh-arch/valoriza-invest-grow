@@ -3,3 +3,4 @@
 - [Vercel artifact builds](vercel-artifact-builds.md) — Vercel workspace builds do not inherit environment values from Replit artifact workflows.
 - [Valoriza authentication](valoriza-authentication.md) — the browser must use the same-origin API; local-only auth creates sessions the backend cannot accept.
 - [Vercel function type checks](pnpm-root-dependencies.md) — root-level Vercel functions may not resolve Node built-in type imports; prefer locally typed runtime globals.
+- [واجهة عربية موحدة](arabic-language-policy.md) — واجهة Valoriza للمستخدمين بالعربية فقط، بلا مزج نصوص بلغات أخرى.

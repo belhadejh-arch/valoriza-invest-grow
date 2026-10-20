@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -24,6 +24,8 @@ import {
   getRewardsData,
   getTeamData,
   settleTeamMilestones,
+  type RewardsPageData,
+  type TeamPageData,
 } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
@@ -40,44 +42,24 @@ export const Route = createFileRoute("/_authenticated/rewards")({
   component: RewardsPage,
 });
 
-const money = (n: number) => `$${n.toFixed(2)}`;
+const money = (n: number) =>
+  `${new Intl.NumberFormat("ar", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)} دولار`;
+const milestoneMoney = (n: number) =>
+  `${new Intl.NumberFormat("ar", { maximumFractionDigits: 2 }).format(n)} دولار`;
 
 type RewardSource = "all" | "daily_login" | "task_reward" | "lucky_wheel" | "referral" | "vip";
-type RewardsData = {
-  rewards: Array<{
-    id: string;
-    source: string;
-    amount: number;
-    description?: string | null;
-    createdAt: string;
-  }>;
-  balance: number;
-  totalEarned: number;
-  dailyRewardClaimed: boolean;
-  dailyRewardAmount: number;
-};
-
-type TeamRewardProgress = {
-  members?: Array<{ vipLevel?: number | string | null }>;
-  userVipLevel?: number;
-  maxVipLevel?: number | null;
-  milestones?: Array<{
-    members: number;
-    kind: "cash" | "vip";
-    amount: number;
-    vipLevel: number | null;
-    claimedAt: string;
-  }>;
-};
 
 const TEAM_REWARD_TIERS = [
-  { members: 3, reward: "$1", kind: "cash" },
-  { members: 6, reward: "$1.5", kind: "cash" },
-  { members: 10, reward: "$2", kind: "cash" },
-  { members: 25, reward: "$5", kind: "cash" },
-  { members: 50, reward: "$12", kind: "cash" },
-  { members: 100, reward: "$25", kind: "cash" },
-  { members: 250, reward: "VIP", kind: "vip" },
+  { members: 3, reward: 1, kind: "cash" },
+  { members: 6, reward: 1.5, kind: "cash" },
+  { members: 10, reward: 2, kind: "cash" },
+  { members: 25, reward: 5, kind: "cash" },
+  { members: 50, reward: 12, kind: "cash" },
+  { members: 100, reward: 25, kind: "cash" },
+  { members: 250, reward: null, kind: "vip" },
 ] as const;
 
 function RewardsPage() {
@@ -89,34 +71,58 @@ function RewardsPage() {
   const settleTeam = useServerFn(settleTeamMilestones);
   const [filter, setFilter] = useState<RewardSource>("all");
 
+  const settlementQuery = useQuery({
+    queryKey: ["team-milestone-settlement"],
+    queryFn: async () => {
+      const result = await settleTeam();
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["rewards"] }),
+        qc.invalidateQueries({ queryKey: ["team-reward-progress"] }),
+        qc.invalidateQueries({ queryKey: ["team"] }),
+      ]);
+      return result;
+    },
+    retry: 1,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (settlementQuery.isError) {
+      toast.error("تعذر تحديث مكافآت الفريق. ستظل بيانات الفريق متاحة، أعد المحاولة لاحقًا.");
+    }
+  }, [settlementQuery.isError]);
+
   const {
     data,
     isLoading: isRewardsLoading,
     isError: isRewardsError,
     refetch: refetchRewards,
-  } = useQuery<RewardsData>({
+  } = useQuery<RewardsPageData>({
     queryKey: ["rewards"],
-    queryFn: async () => {
-      await settleTeam();
-      return (await fetchData()) as RewardsData;
-    },
+    queryFn: () => fetchData(),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 5_000),
     refetchInterval: 30_000,
+    refetchOnReconnect: true,
     refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
   const {
     data: teamData,
     isLoading: isTeamLoading,
     isError: isTeamError,
     refetch: refetchTeam,
-  } = useQuery<TeamRewardProgress>({
+  } = useQuery<TeamPageData>({
     queryKey: ["team-reward-progress"],
-    queryFn: async () => {
-      await settleTeam();
-      return (await fetchTeam()) as TeamRewardProgress;
-    },
+    queryFn: () => fetchTeam(),
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 5_000),
     staleTime: 30_000,
     refetchInterval: 30_000,
+    refetchOnReconnect: true,
     refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
   const qualifiedMembers =
     teamData?.members?.filter((member) => Number(member.vipLevel ?? 0) > 0).length ?? 0;
@@ -291,19 +297,17 @@ function RewardsPage() {
                 className="flex items-center gap-2 text-base sm:text-lg font-black text-foreground"
               >
                 <Users className="h-5 w-5 text-cyan-glow" />
-                {isRTL ? "مكافآت الفريق" : "Team rewards"}
+                مكافآت الفريق
               </h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                {isRTL
-                  ? "زد أعضاء VIP المؤهلين في فريقك لفتح المكافآت التالية."
-                  : "Grow your team of qualified VIP members to unlock rewards."}
+                زد أعضاء العضوية المميزة في فريقك لفتح المكافآت التالية.
               </p>
             </div>
             <Link
               to="/team"
               className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-cyan-glow/40 bg-cyan-glow/10 px-3 py-2 text-xs font-bold text-cyan-glow hover:bg-cyan-glow/15"
             >
-              {isRTL ? "فريقي" : "My team"}
+              فريقي
               <ChevronRight className={`h-4 w-4 ${isRTL ? "rotate-180" : ""}`} />
             </Link>
           </div>
@@ -311,7 +315,7 @@ function RewardsPage() {
           <div className="surface-card glow-border rounded-3xl p-3 sm:p-4">
             <div className="mb-3 flex items-center justify-between rounded-2xl border border-border/70 bg-surface/70 px-3 py-2.5 text-xs">
               <span className="text-muted-foreground">
-                {isRTL ? "الأعضاء المؤهلون حاليًا" : "Qualified members"}
+                الأعضاء المؤهلون حاليًا
               </span>
               <span className="font-black text-cyan-glow">
                 {isTeamLoading ? "…" : isTeamError ? "—" : qualifiedMembers}
@@ -323,7 +327,7 @@ function RewardsPage() {
                 onClick={() => void refetchTeam()}
                 className="mb-3 w-full rounded-xl border border-border bg-background/70 px-3 py-2 text-xs font-bold text-muted-foreground hover:text-foreground"
               >
-                {isRTL ? "تعذر تحميل عدد الفريق — أعد المحاولة" : "Could not load team count — retry"}
+                تعذر تحميل عدد الأعضاء المؤهلين من قاعدة البيانات — أعد المحاولة
               </button>
             )}
 
@@ -368,9 +372,7 @@ function RewardsPage() {
 
                       <div className="min-w-0 flex-1 text-start">
                         <p className="text-xs sm:text-sm font-bold text-foreground">
-                          {isRTL
-                            ? `عند وصول العدد التراكمي إلى ${tier.members} أعضاء مؤهلين`
-                            : `When your team reaches ${tier.members} qualified members`}
+                          عند وصول العدد التراكمي إلى {tier.members} عضوًا مؤهلًا
                         </p>
                         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           {unlocked ? (
@@ -380,28 +382,16 @@ function RewardsPage() {
                           )}
                           <span>
                             {isTeamError
-                              ? isRTL
-                                ? "تعذر التحقق من التقدم"
-                                : "Progress unavailable"
+                              ? "تعذر التحقق من التقدم"
                               : claim?.kind === "cash"
-                                ? isRTL
-                                  ? "أُضيفت المكافأة إلى المحفظة"
-                                  : "Reward added to wallet"
+                                ? "أُضيفت المكافأة إلى المحفظة"
                                 : claim?.kind === "vip"
-                                  ? isRTL
-                                    ? `تمت الترقية إلى VIP ${claim.vipLevel ?? ""}`
-                                    : `Upgraded to VIP ${claim.vipLevel ?? ""}`
+                                  ? `تمت الترقية إلى المستوى المميز ${claim.vipLevel ?? ""}`
                                   : vipAtMaximum
-                                    ? isRTL
-                                      ? "أنت في أعلى مستوى VIP"
-                                      : "You already have the highest VIP level"
-                              : unlocked
-                                  ? isRTL
-                                    ? "تم بلوغ هذا المستوى"
-                                    : "Milestone reached"
-                                  : isRTL
-                                    ? `المتبقي ${remaining} عضو`
-                                    : `${remaining} members to go`}
+                                    ? "أنت في أعلى مستوى للعضوية المميزة"
+                                    : unlocked
+                                      ? "تم بلوغ هذا المستوى"
+                                      : `المتبقي ${remaining} عضوًا`}
                           </span>
                         </div>
                       </div>
@@ -413,15 +403,11 @@ function RewardsPage() {
                             : "border-cyan-glow/40 bg-cyan-glow/10 text-foreground"
                         }`}
                       >
-                        <p className="text-lg leading-none font-black">{tier.reward}</p>
+                        <p className="text-lg leading-none font-black">
+                          {isVipReward ? "ترقية" : milestoneMoney(tier.reward ?? 0)}
+                        </p>
                         <p className="mt-1 text-[9px] font-semibold text-muted-foreground">
-                          {isVipReward
-                            ? isRTL
-                              ? "ترقية VIP"
-                              : "VIP upgrade"
-                            : isRTL
-                              ? "مكافأة"
-                              : "Reward"}
+                          {isVipReward ? "العضوية المميزة" : "مكافأة نقدية"}
                         </p>
                       </div>
                     </div>
@@ -525,10 +511,10 @@ function RewardsPage() {
                           </span>
                         </div>
                         <p className="mt-1 truncate text-xs font-black text-foreground">
-                          {r.description || info.label}
+                          {r.description?.replace(/\bVIP\b/gi, "العضوية المميزة") || info.label}
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {new Date(r.createdAt).toLocaleDateString(undefined, {
+                          {new Date(r.createdAt).toLocaleDateString("ar-DZ", {
                             month: "short",
                             day: "numeric",
                             hour: "2-digit",
@@ -541,9 +527,7 @@ function RewardsPage() {
                     <div className="shrink-0 text-end">
                       <span className="text-sm sm:text-base font-black text-emerald-400">
                         {r.source === "vip_upgrade"
-                          ? isRTL
-                            ? "ترقية VIP"
-                            : "VIP upgrade"
+                            ? "ترقية العضوية المميزة"
                           : `+${money(r.amount)}`}
                       </span>
                     </div>

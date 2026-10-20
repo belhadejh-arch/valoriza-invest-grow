@@ -175,7 +175,7 @@ function AccountPage() {
                 </div>
                 <div className="absolute -bottom-1.5 -start-1.5 flex items-center gap-1 rounded-full bg-background border border-gold px-2 py-0.5 text-[10px] font-black text-gold shadow-md">
                   <Crown className="h-3 w-3 text-gold fill-gold" />
-                  <span>VIP {data.profile.vipLevel}</span>
+                  <span>المستوى المميز {data.profile.vipLevel}</span>
                 </div>
               </div>
 
@@ -385,7 +385,7 @@ function AccountPage() {
             <div className="rounded-2xl border border-border bg-surface p-3.5 space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">{t("home.vipStatus")}:</span>
-                <span className="font-black text-gold">VIP {data.profile.vipLevel}</span>
+                <span className="font-black text-gold">المستوى المميز {data.profile.vipLevel}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">حماية وتشفير البيانات:</span>

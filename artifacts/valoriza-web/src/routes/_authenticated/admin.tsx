@@ -70,7 +70,7 @@ function AdminDashboardPage() {
     { id: "withdrawals", label: "السحوبات", icon: ArrowUpRight },
     { id: "users", label: "المستخدمين", icon: Users },
     { id: "investments", label: "الصناديق", icon: TrendingUp },
-    { id: "vip", label: "باقات VIP", icon: Crown },
+    { id: "vip", label: "باقات العضوية المميزة", icon: Crown },
     { id: "tasks", label: "المهام", icon: Video },
     { id: "wheel", label: "عجلة الحظ", icon: Sparkles },
     { id: "broadcast", label: "التعاميم", icon: Bell },

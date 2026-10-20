@@ -22,17 +22,18 @@ import {
   purchaseVip,
 } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { arabicVipLabel } from "@/lib/arabic-labels";
 
 export const Route = createFileRoute("/_authenticated/investment")({
   head: () => ({
     meta: [
-      { title: "الاستثمار و VIP — Valoriza" },
+      { title: "الاستثمار والعضوية المميزة — Valoriza" },
       {
         name: "description",
-        content: "باقات VIP وأسعارها وأرباحها اليومية وعدد المهام المتاحة لكل مستوى.",
+        content: "باقات العضوية المميزة وأسعارها وأرباحها اليومية وعدد المهام المتاحة لكل مستوى.",
       },
-      { property: "og:title", content: "الاستثمار و VIP — Valoriza" },
-      { property: "og:description", content: "باقات VIP الرسمية في منصة Valoriza." },
+      { property: "og:title", content: "الاستثمار والعضوية المميزة — Valoriza" },
+      { property: "og:description", content: "باقات العضوية المميزة في منصة Valoriza." },
     ],
   }),
   component: InvestmentPage,
@@ -104,7 +105,7 @@ function InvestmentPage() {
       } else {
         toast.error(
           res?.reason === "HAS_VIP"
-            ? "لديك باقة VIP نشطة بالفعل"
+            ? "لديك باقة عضوية مميزة نشطة بالفعل"
             : "تم استخدام الفترة التجريبية مسبقاً لهذا الحساب",
         );
       }
@@ -117,7 +118,7 @@ function InvestmentPage() {
       buy({ data: { packageId: pkg.id, level: pkg.level } }),
     onSuccess: (res: any) => {
       if (res?.ok) {
-        toast.success(`تم ترقية حسابك إلى VIP ${res.level ?? res.vipLevel} بنجاح!`);
+        toast.success(`تمت ترقية حسابك إلى المستوى المميز ${res.level ?? res.vipLevel} بنجاح!`);
         qc.invalidateQueries({ queryKey: ["investment"] });
         qc.invalidateQueries({ queryKey: ["home"] });
         qc.invalidateQueries({ queryKey: ["account"] });
@@ -157,7 +158,7 @@ function InvestmentPage() {
             <p className="text-xs text-muted-foreground">{t("investment.activeVip")}</p>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-gold px-3 py-1 text-xs font-black text-gold shadow-sm mt-0.5">
               <Crown className="h-3.5 w-3.5 fill-gold text-gold" />
-              <span>{isLoading || isError ? "—" : `VIP ${userVipLevel}`}</span>
+              <span>{isLoading || isError ? "—" : `المستوى المميز ${userVipLevel}`}</span>
             </span>
           </div>
         </section>
@@ -250,8 +251,8 @@ function InvestmentPage() {
             ) : packagesList.length === 0 ? (
               <div className="surface-card rounded-2xl p-6 text-center text-sm font-bold text-muted-foreground">
                 {isError
-                  ? "تعذّر جلب باقات VIP من الخادم."
-                  : "لا توجد باقات VIP متاحة حالياً."}
+                  ? "تعذّر جلب باقات العضوية المميزة من الخادم."
+                  : "لا توجد باقات عضوية مميزة متاحة حالياً."}
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2.5 min-[430px]:grid-cols-4 sm:gap-4">
@@ -293,7 +294,7 @@ function InvestmentPage() {
                         className={`mt-1 inline-flex min-h-8 items-center justify-center gap-1 self-center rounded-full border px-2 py-1 sm:mt-2 ${colorClass}`}
                       >
                         <Crown className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-                        <h3 className="text-xs font-black sm:text-sm">{pkg.name}</h3>
+                        <h3 className="text-xs font-black sm:text-sm">{arabicVipLabel(pkg.name)}</h3>
                       </div>
 
                       {isLocked && (

@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Valoriza — استثمر اليوم .. لبناء مستقبلك غداً" },
       {
         name: "description",
-        content: "منصة Valoriza للاستثمار: صناديق توفير، باقات VIP، مهام يومية ومكافآت الفريق.",
+        content: "منصة Valoriza للاستثمار: صناديق توفير، باقات العضوية المميزة، مهام يومية ومكافآت الفريق.",
       },
       { property: "og:title", content: "فالوريزا — استثمر اليوم .. لبناء مستقبلك غداً" },
       {

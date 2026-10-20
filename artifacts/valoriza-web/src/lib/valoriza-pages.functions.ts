@@ -14,6 +14,51 @@ export interface AccountPageData {
   dailyReward: { amount: number; claimed: boolean };
 }
 
+export interface TeamPageData {
+  referralCode?: string | null;
+  userVipLevel?: number;
+  maxVipLevel?: number | null;
+  totalMembers?: number;
+  teamIncome?: number;
+  teamRewards?: number;
+  rates?: { l1?: number; l2?: number; l3?: number };
+  levels?: Array<{
+    level: number;
+    members: number;
+    earnings: number;
+    ratePercent?: string;
+  }>;
+  members?: Array<{
+    id: string;
+    username?: string | null;
+    email?: string | null;
+    level: number;
+    vipLevel?: number | null;
+    createdAt?: string;
+  }>;
+  milestones?: Array<{
+    members: number;
+    kind: "cash" | "vip";
+    amount: number;
+    vipLevel: number | null;
+    claimedAt: string;
+  }>;
+}
+
+export interface RewardsPageData {
+  rewards: Array<{
+    id: string;
+    source: string;
+    amount: number;
+    description?: string | null;
+    createdAt: string;
+  }>;
+  balance: number;
+  totalEarned: number;
+  dailyRewardClaimed: boolean;
+  dailyRewardAmount: number;
+}
+
 const get = (path: string) =>
   createServerFn({ method: "GET" }).handler(() => serverBackendRequest(path));
 const post = <T>(path: string, fallback?: (data: T) => string) =>
@@ -33,11 +78,15 @@ export const activateTrial = createServerFn({ method: "POST" }).handler(() =>
 export const purchaseVip = post<{ level?: number; packageId?: string }>("/api/app/vip/purchase");
 export const investInSavingsFund = post<{ fundId: string; amount: number }>("/api/app/invest");
 
-export const getTeamData = get("/api/app/team");
+export const getTeamData = createServerFn({ method: "GET" }).handler(() =>
+  serverBackendRequest<TeamPageData>("/api/app/team"),
+);
 export const settleTeamMilestones = createServerFn({ method: "POST" }).handler(() =>
   serverBackendRequest("/api/app/team/settle-milestones", { method: "POST" }),
 );
-export const getRewardsData = get("/api/app/rewards");
+export const getRewardsData = createServerFn({ method: "GET" }).handler(() =>
+  serverBackendRequest<RewardsPageData>("/api/app/rewards"),
+);
 export const getAccountData = createServerFn({ method: "GET" }).handler(() =>
   serverBackendRequest<AccountPageData>("/api/app/account"),
 );

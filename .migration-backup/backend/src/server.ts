@@ -322,7 +322,7 @@ async function applyTeamMilestonesForUser(
     await client.query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
       userId,
     ]);
-    const description = `مكافأة الفريق عند بلوغ ${milestone.threshold} أعضاء VIP`;
+    const description = `مكافأة الفريق عند بلوغ ${milestone.threshold} عضوًا من أصحاب العضوية المميزة`;
     const reward = await client.query<{ id: string }>(
       `INSERT INTO rewards (user_id,source,amount,description_ar)
        VALUES ($1,'team_milestone',$2,$3) RETURNING id`,
@@ -349,7 +349,7 @@ async function applyTeamMilestonesForUser(
       [
         userId,
         "مكافأة فريق جديدة 🎁",
-        `تمت إضافة مكافأة بقيمة $${milestone.amount} بعد بلوغ ${milestone.threshold} أعضاء VIP.`,
+        `تمت إضافة مكافأة بقيمة $${milestone.amount} بعد بلوغ ${milestone.threshold} عضوًا من أصحاب العضوية المميزة.`,
       ],
     );
     cashAwards += 1;
@@ -419,7 +419,13 @@ async function applyTeamMilestonesForUser(
           );
           await client.query(
             "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,$2,$3)",
-            [userId, "ترقية VIP جديدة 👑", `تمت ترقيتك تلقائيًا إلى ${plan.name} كمكافأة للفريق.`],
+            [
+              userId,
+              "ترقية جديدة للعضوية المميزة 👑",
+              `تمت ترقيتك تلقائيًا إلى ${String(plan.name)
+                .replace(/^VIP\s*(\d+).*$/i, "المستوى المميز $1")
+                .replace(/\bVIP\b/gi, "العضوية المميزة")} كمكافأة للفريق.`,
+            ],
           );
           vipUpgradeLevel = Number(plan.level);
         }
@@ -1397,7 +1403,7 @@ app.get("/api/app/tasks", async (request, response, next) => {
     if (settings.tasks_enabled === "false") {
       return response.json({
         vipLevel: 0,
-        vipName: "VIP",
+        vipName: "العضوية المميزة",
         isTrial: false,
         videoCommission: 0,
         dailyLimit: 0,
@@ -1459,10 +1465,10 @@ app.get("/api/app/tasks", async (request, response, next) => {
     response.json({
       vipLevel,
       vipName: vipLevel
-        ? `VIP ${vipLevel}`
+        ? `المستوى المميز ${vipLevel}`
         : trialActive
           ? "الفترة التجريبية"
-          : "VIP",
+          : "العضوية المميزة",
       isTrial: trialActive,
       trialStatus,
       trialExpiresAt: profile.rows[0]?.trial_expires_at,
@@ -1483,7 +1489,7 @@ app.get("/api/app/tasks", async (request, response, next) => {
         videoUrl: `https://www.youtube.com/embed/${task.youtube_id}?enablejsapi=1&playsinline=1&rel=0&modestbranding=1`,
         thumbnailUrl: `https://img.youtube.com/vi/${task.youtube_id}/hqdefault.jpg`,
         durationSeconds: task.duration_seconds,
-        vipRequirement: vipLevel ? `VIP ${vipLevel}` : "الفترة التجريبية",
+        vipRequirement: vipLevel ? `المستوى المميز ${vipLevel}` : "الفترة التجريبية",
         reward,
         isCompletedToday: completed.has(task.id),
         status: completed.has(task.id)
@@ -2146,10 +2152,10 @@ app.post("/api/admin/users/vip", async (request, response, next) => {
       [vipLevel, targetUserId],
     );
     await query(
-      "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,'ترقية مستوى VIP',$2)",
+      "INSERT INTO notifications (user_id,title_ar,body_ar) VALUES ($1,'ترقية مستوى العضوية المميزة',$2)",
       [
         targetUserId,
-        `تم تحديث رتبتك إلى VIP ${vipLevel} من قبل إدارة المنصة وحصلت على فرصة واحدة في عجلة الحظ.`,
+        `تم تحديث رتبتك إلى المستوى المميز ${vipLevel} من قبل إدارة المنصة وحصلت على فرصة واحدة في عجلة الحظ.`,
       ],
     );
     await query(
@@ -2822,7 +2828,7 @@ async function initDatabase() {
           ('هاتف نقال', 'item', 0, 0, '📱', 'red', 6, true),
           ('48 دولار', 'cash', 48.0, 0, '💎', 'gold', 7, true),
           ('4 دولار', 'cash', 4.0, 0, '🎁', 'purple', 8, true),
-          ('مستوى VIP', 'vip', 0, 0, '👑', 'gold', 9, true)
+          ('العضوية المميزة', 'vip', 0, 0, '👑', 'gold', 9, true)
       `);
     }
 

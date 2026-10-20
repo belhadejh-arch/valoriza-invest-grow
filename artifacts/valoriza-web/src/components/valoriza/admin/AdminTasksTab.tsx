@@ -174,7 +174,7 @@ export function AdminTasksTab() {
         <div>
           <h2 className="text-xs font-extrabold text-foreground">إدارة مهام المشاهدة والعمولات</h2>
           <p className="text-[10px] text-muted-foreground">
-            إضافة فيديوهات جديدة، تعديل مدة المشاهدة، وتعيين متطلبات VIP.
+            إضافة فيديوهات جديدة، تعديل مدة المشاهدة، وتعيين متطلبات العضوية المميزة.
           </p>
         </div>
         <button
@@ -217,7 +217,7 @@ export function AdminTasksTab() {
 
                 <span className="absolute top-2 left-2 flex items-center gap-1 rounded-full bg-vip/80 px-2 py-0.5 text-[9px] font-bold text-white">
                   <Crown className="h-2.5 w-2.5 text-gold" />
-                  VIP {task.min_vip_level}
+                  المستوى المميز {task.min_vip_level}
                 </span>
 
                 <div className="absolute bottom-2 inset-x-2 flex items-center justify-between text-[10px] text-white">
@@ -346,7 +346,7 @@ export function AdminTasksTab() {
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground font-bold">
-                    أقل رتبة VIP
+                    أدنى مستوى للعضوية المميزة
                   </label>
                   <input
                     type="number"

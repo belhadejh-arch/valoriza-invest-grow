@@ -194,7 +194,7 @@ export function AdminInvestmentsTab() {
                   <input
                     type="text"
                     value={code}
-                    placeholder="MUMBAI"
+                    placeholder="مثال: صندوق مومباي"
                     onChange={(e) => setCode(e.target.value.toUpperCase())}
                     className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
                   />

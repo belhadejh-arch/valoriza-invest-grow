@@ -135,7 +135,7 @@ export function LuckyWheel({ prizes, spinsLeft, onSpin, disabled }: LuckyWheelPr
     },
     {
       id: "w-vip",
-      label: "مستوى VIP",
+      label: "العضوية المميزة",
       prizeType: "vip",
       prizeValue: 0,
       icon: "👑",
