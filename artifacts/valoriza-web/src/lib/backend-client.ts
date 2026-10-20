@@ -1,30 +1,15 @@
-const configuredBackendUrl = import.meta.env.VITE_BACKEND_URL?.trim().replace(/\/+$/, "");
-
 export function hasConfiguredBackend(): boolean {
-  // The Replit API service is mounted on the same origin under /api.
-  return typeof window !== "undefined" || Boolean(configuredBackendUrl);
+  return true;
 }
 
 export function backendBaseUrl(): string {
-  // When explicitly configured, send browser requests to the chosen API
-  // service. Otherwise use the deployment's same-origin /api proxy.
+  // In browser, relative to current origin (Vite proxies /api to port 4000)
   if (typeof window !== "undefined") {
-    return configuredBackendUrl || "";
+    return "";
   }
 
   // In Node/SSR server default to local express port
-  return configuredBackendUrl || process.env.VITE_BACKEND_URL || "http://127.0.0.1:8080";
-}
-
-function sessionTokenKey(): string {
-  const backendUrl = backendBaseUrl();
-  if (!backendUrl) return "valoriza_session_token";
-
-  try {
-    return `valoriza_session_token:${new URL(backendUrl).origin}`;
-  } catch {
-    return "valoriza_session_token";
-  }
+  return process.env.VITE_BACKEND_URL || "http://127.0.0.1:4000";
 }
 
 export function buildApiUrl(path: string): string {
@@ -42,7 +27,7 @@ export function buildApiUrl(path: string): string {
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
   try {
-    return localStorage.getItem(sessionTokenKey());
+    return localStorage.getItem("valoriza_session_token");
   } catch {
     return null;
   }
@@ -51,21 +36,17 @@ export function getStoredToken(): string | null {
 export function setStoredToken(token: string | null): void {
   if (typeof window === "undefined") return;
   try {
-    const key = sessionTokenKey();
     if (token) {
-      localStorage.setItem(key, token);
+      localStorage.setItem("valoriza_session_token", token);
     } else {
-      localStorage.removeItem(key);
+      localStorage.removeItem("valoriza_session_token");
     }
   } catch {
     // Ignore localStorage access errors
   }
 }
 
-export async function backendRequest<T = any>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
+export async function backendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
     headers.set("content-type", "application/json");

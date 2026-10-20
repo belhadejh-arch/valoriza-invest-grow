@@ -20,7 +20,6 @@ import {
   Ticket,
   Power,
   Link as LinkIcon,
-  KeyRound,
   Check,
   Save,
 } from "lucide-react";
@@ -33,7 +32,6 @@ import {
   toggleUserWithdrawal,
   updateUserWithdrawalAddress,
   addFreeWheelSpin,
-  adminResetUserPassword,
 } from "@/lib/valoriza-admin.functions";
 
 export function AdminUsersTab() {
@@ -53,9 +51,6 @@ export function AdminUsersTab() {
 
   const [addSpinModalOpen, setAddSpinModalOpen] = useState(false);
   const [spinCountInput, setSpinCountInput] = useState(1);
-  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState("");
 
   // Edit withdrawal address state
   const [editingAddressOpen, setEditingAddressOpen] = useState(false);
@@ -79,7 +74,6 @@ export function AdminUsersTab() {
   });
 
   const selectedUserId = selectedUser?.id;
-  const newPasswordByteLength = new TextEncoder().encode(newPassword).length;
   useEffect(() => {
     if (!selectedUserId) return;
     const latestUser = users.find((user) => user.id === selectedUserId);
@@ -132,23 +126,12 @@ export function AdminUsersTab() {
   const addSpinMutation = useMutation({
     mutationFn: addFreeWheelSpin,
     onSuccess: (res, vars) => {
-      const addedCount = vars.count || 1;
-      const persistedCount = Number(res?.newSpins);
-      if (Number.isFinite(persistedCount)) {
-        queryClient.setQueryData(["admin-users"], (currentUsers: any[] | undefined) =>
-          currentUsers?.map((user) =>
-            user.id === vars.userId ? { ...user, wheelSpins: persistedCount } : user,
-          ),
-        );
-      }
-      toast.success(`تمت إضافة ${addedCount} فرصة مجانية لعجلة الحظ للمستخدم بنجاح 🎟️`);
+      toast.success(`تمت إضافة ${vars.count || 1} فرصة مجانية لعجلة الحظ للمستخدم بنجاح 🎟️`);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       if (selectedUser && selectedUser.id === vars.userId) {
         setSelectedUser((prev: any) => ({
           ...prev,
-          wheelSpins: Number.isFinite(persistedCount)
-            ? persistedCount
-            : (prev.wheelSpins || 0) + addedCount,
+          wheelSpins: (prev.wheelSpins || 0) + (vars.count || 1),
         }));
       }
       setAddSpinModalOpen(false);
@@ -175,18 +158,6 @@ export function AdminUsersTab() {
       setAdjustBalanceOpen(false);
       setAdjustAmount("");
       setAdjustReason("");
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
-
-  const resetPasswordMutation = useMutation({
-    mutationFn: adminResetUserPassword,
-    onSuccess: () => {
-      toast.success("تم تغيير كلمة المرور وإنهاء الجلسات الأخرى للمستخدم");
-      queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] });
-      setChangePasswordOpen(false);
-      setNewPassword("");
-      setConfirmNewPassword("");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -394,8 +365,6 @@ export function AdminUsersTab() {
                         type="button"
                         onClick={() => handleOpenAddSpin(user)}
                         title="إضافة فرصة مجانية لعجلة الحظ"
-                        aria-label={`منح فرصة عجلة مجانية إلى ${user.username || user.email}`}
-                        disabled={addSpinMutation.isPending}
                         className="rounded-lg bg-gold/15 text-gold border border-gold/30 p-1 hover:bg-gold/25 transition-all"
                       >
                         <Ticket className="h-3 w-3" />
@@ -426,20 +395,14 @@ export function AdminUsersTab() {
                         <Eye className="h-3.5 w-3.5" />
                       </button>
 
-                      {/* Reset User Password Button */}
+                      {/* Add Free Spin Button */}
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setNewPassword("");
-                          setConfirmNewPassword("");
-                          setChangePasswordOpen(true);
-                        }}
-                        title="تغيير كلمة مرور المستخدم"
-                        aria-label={`تغيير كلمة مرور ${user.username || user.email}`}
-                        className="rounded-lg bg-surface border border-amber-400/40 p-1.5 text-amber-300 hover:bg-amber-400/10"
+                        onClick={() => handleOpenAddSpin(user)}
+                        title="إضافة فرصة مجانية"
+                        className="rounded-lg bg-surface border border-gold/40 p-1.5 text-gold hover:bg-gold/10"
                       >
-                        <KeyRound className="h-3.5 w-3.5" />
+                        <Ticket className="h-3.5 w-3.5" />
                       </button>
 
                       {/* Adjust Balance Button */}
@@ -730,6 +693,17 @@ export function AdminUsersTab() {
                       </p>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSpinCountInput(1);
+                      setAddSpinModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 rounded-xl gold-gradient px-3 py-1.5 text-xs font-black text-navy-deep shadow-gold-glow active:scale-95"
+                  >
+                    <Ticket className="h-3.5 w-3.5" />
+                    <span>إضافة فرصة مجانية</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -743,119 +717,6 @@ export function AdminUsersTab() {
                 إغلاق المعاينة
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ADMIN RESET USER PASSWORD MODAL */}
-      {changePasswordOpen && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="w-full max-w-sm rounded-3xl border border-amber-400/40 bg-navy-deep p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3">
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-amber-300" />
-                <div>
-                  <h3 className="text-xs font-extrabold text-foreground">تغيير كلمة المرور</h3>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {selectedUser.username || selectedUser.email}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setChangePasswordOpen(false);
-                  setNewPassword("");
-                  setConfirmNewPassword("");
-                }}
-                disabled={resetPasswordMutation.isPending}
-                aria-label="إغلاق"
-                className="text-muted-foreground hover:text-foreground disabled:opacity-50"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form
-              className="mt-4 space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                resetPasswordMutation.mutate({
-                  userId: selectedUser.id,
-                  newPassword,
-                });
-              }}
-            >
-              <p className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-[11px] leading-relaxed text-muted-foreground">
-                أدخل كلمة مرور جديدة. لن تظهر كلمة المرور الحالية، وسيتم إنهاء جلسات المستخدم
-                الأخرى بعد الحفظ.
-              </p>
-
-              <div>
-                <label
-                  htmlFor="admin-user-new-password"
-                  className="text-[10px] font-bold text-muted-foreground"
-                >
-                  كلمة المرور الجديدة
-                </label>
-                <input
-                  id="admin-user-new-password"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  maxLength={72}
-                  required
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-amber-400 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="admin-user-confirm-password"
-                  className="text-[10px] font-bold text-muted-foreground"
-                >
-                  تأكيد كلمة المرور الجديدة
-                </label>
-                <input
-                  id="admin-user-confirm-password"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  maxLength={72}
-                  required
-                  value={confirmNewPassword}
-                  onChange={(event) => setConfirmNewPassword(event.target.value)}
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-amber-400 focus:outline-none"
-                />
-                {confirmNewPassword && newPassword !== confirmNewPassword && (
-                  <p className="mt-1 text-[10px] font-bold text-danger" role="alert">
-                    كلمتا المرور غير متطابقتين.
-                  </p>
-                )}
-                {newPasswordByteLength > 72 && (
-                  <p className="mt-1 text-[10px] font-bold text-danger" role="alert">
-                    كلمة المرور طويلة جدًا؛ الحد الأقصى 72 بايتًا.
-                  </p>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={
-                  resetPasswordMutation.isPending ||
-                  newPassword.length < 8 ||
-                  newPasswordByteLength > 72 ||
-                  newPassword !== confirmNewPassword
-                }
-                className="w-full rounded-xl bg-amber-400 py-2.5 text-xs font-black text-navy-deep shadow-lg transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {resetPasswordMutation.isPending
-                  ? "جارٍ تغيير كلمة المرور..."
-                  : "حفظ كلمة المرور الجديدة"}
-              </button>
-            </form>
           </div>
         </div>
       )}
