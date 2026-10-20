@@ -2604,7 +2604,7 @@ async function initDatabase() {
   }
   try {
     // Ensure default primary admin user exists and is linked
-    const adminEmail = (process.env.ADMIN_EMAIL || "admin@valoriza.com").trim().toLowerCase();
+    const adminEmail = (process.env.ADMIN_EMAIL || "superadmin@valoriza.com").trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD;
     const adminCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
       adminEmail,

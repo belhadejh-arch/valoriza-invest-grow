@@ -2,7 +2,7 @@ import "dotenv/config";
 import { closeDb, query, withTransaction } from "./db.js";
 import { hashPassword } from "./auth.js";
 
-const adminEmail = (process.env.ADMIN_EMAIL || "admin@valoriza.com").trim().toLowerCase();
+const adminEmail = (process.env.ADMIN_EMAIL || "superadmin@valoriza.com").trim().toLowerCase();
 const adminPassword = process.env.ADMIN_PASSWORD || "ValorizaAdmin2025!";
 const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();
 const userPassword = process.env.USER_PASSWORD || "ValorizaUser2025!";
