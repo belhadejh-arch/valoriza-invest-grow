@@ -4,22 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
-  Award,
   Check,
   Copy,
-  Layers,
+  Crown,
+  Gift,
   Share2,
-  Sparkles,
-  TrendingUp,
   Users,
-  ChevronRight,
-  ShieldCheck,
+  UserRound,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getTeamData } from "@/lib/valoriza-pages.functions";
-import { getMockTeamData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/team")({
@@ -39,6 +35,62 @@ export const Route = createFileRoute("/_authenticated/team")({
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
+type TeamMember = {
+  id: string;
+  username?: string | null;
+  email?: string | null;
+  level: number;
+  vipLevel?: number | null;
+  createdAt?: string;
+};
+
+type TeamLevel = {
+  level: number;
+  members: number;
+  earnings: number;
+  ratePercent?: string;
+};
+
+type TeamApiResponse = {
+  referralCode?: string;
+  totalMembers?: number;
+  teamIncome?: number;
+  teamRewards?: number;
+  rates?: { l1?: number; l2?: number; l3?: number };
+  levels?: TeamLevel[];
+  members?: TeamMember[];
+};
+
+const levelThemes: Record<
+  number,
+  { border: string; header: string; ring: string; rate: string; badge: string }
+> = {
+  1: {
+    border: "border-blue-400/70",
+    header: "bg-gradient-to-r from-blue-700 to-blue-500",
+    ring: "ring-blue-300",
+    rate: "bg-gradient-to-r from-blue-700 to-blue-500",
+    badge: "border-blue-400/40 bg-blue-500/15 text-blue-100",
+  },
+  2: {
+    border: "border-fuchsia-400/70",
+    header: "bg-gradient-to-r from-fuchsia-700 to-purple-500",
+    ring: "ring-fuchsia-300",
+    rate: "bg-gradient-to-r from-fuchsia-700 to-purple-500",
+    badge: "border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-100",
+  },
+  3: {
+    border: "border-emerald-400/70",
+    header: "bg-gradient-to-r from-emerald-700 to-emerald-500",
+    ring: "ring-emerald-300",
+    rate: "bg-gradient-to-r from-emerald-700 to-emerald-500",
+    badge: "border-emerald-400/40 bg-emerald-500/15 text-emerald-100",
+  },
+};
+
+const levelKey = (level: number) =>
+  level === 1 ? "team.level1" : level === 2 ? "team.level2" : "team.level3";
+
 function TeamPage() {
   const { t, isRTL } = useI18n();
   const [copiedCode, setCopiedCode] = useState(false);
@@ -46,16 +98,40 @@ function TeamPage() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | null>(null);
 
   const fetchData = useServerFn(getTeamData);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery<TeamApiResponse>({
     queryKey: ["team"],
-    queryFn: () => fetchData(),
+    queryFn: async () => (await fetchData()) as TeamApiResponse,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const referralCode = data?.referralCode || "";
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const referralLink = `${origin}/?ref=${referralCode}`;
+  const referralLink = referralCode
+    ? `${origin}/?ref=${encodeURIComponent(referralCode)}`
+    : "";
+  const members = Array.isArray(data?.members) ? data.members : [];
+  const levels = [1, 2, 3].map((level) => {
+    const apiLevel = data?.levels?.find((item) => Number(item.level) === level);
+    const configuredRate =
+      level === 1 ? data?.rates?.l1 : level === 2 ? data?.rates?.l2 : data?.rates?.l3;
+    return {
+      level,
+      members: Number(apiLevel?.members ?? 0),
+      earnings: Number(apiLevel?.earnings ?? 0),
+      ratePercent:
+        apiLevel?.ratePercent ??
+        (configuredRate === undefined ? "—" : `${Math.round(configuredRate * 100)}%`),
+    };
+  });
+  const filteredMembers =
+    selectedLevelFilter === null
+      ? members
+      : members.filter((member) => Number(member.level) === selectedLevelFilter);
+  const totalMembers = Number(data?.totalMembers ?? members.length);
 
   async function copyCode() {
+    if (!referralCode) return;
     try {
       await navigator.clipboard.writeText(referralCode);
       setCopiedCode(true);
@@ -67,6 +143,7 @@ function TeamPage() {
   }
 
   async function shareOrCopyLink() {
+    if (!referralLink) return;
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
@@ -89,276 +166,276 @@ function TeamPage() {
     }
   }
 
-  // Exact system rates from PostgreSQL platform_settings (no fake numbers)
-  const r1 = data?.rates?.l1 ? `${Math.round(data.rates.l1 * 100)}%` : "8%";
-  const r2 = data?.rates?.l2 ? `${Math.round(data.rates.l2 * 100)}%` : "4%";
-  const r3 = data?.rates?.l3 ? `${Math.round(data.rates.l3 * 100)}%` : "1%";
-  const totalCommissionPercent = data?.rates
-    ? `${Math.round(((data.rates.l1 || 0) + (data.rates.l2 || 0) + (data.rates.l3 || 0)) * 100)}%`
-    : "13%";
-
-  const levelPercentages: Record<number, string> = {
-    1: r1,
-    2: r2,
-    3: r3,
-  };
-
-  const filteredMembers =
-    data?.members && selectedLevelFilter !== null
-      ? data.members.filter((m: any) => m.level === selectedLevelFilter)
-      : data?.members || [];
-
   return (
     <div className="min-h-screen bg-background pb-28 md:pb-12" dir={isRTL ? "rtl" : "ltr"}>
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Team Hero Section (Responsive 2-column on desktop) */}
-        <section className="surface-card glow-border p-5 sm:p-6 lg:p-8 rounded-3xl relative overflow-hidden">
-          <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-cyan-glow/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-gold/10 blur-3xl pointer-events-none" />
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-            <div className="lg:col-span-7 space-y-3 text-start">
-              <div className="inline-flex items-center gap-2 rounded-full border border-cyan-glow/30 bg-cyan-glow/10 px-3 py-1 text-xs font-bold text-cyan-glow">
-                <Users className="h-4 w-4" />
-                <span>{t("team.title")}</span>
-              </div>
-
-              <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight">
-                {t("team.togetherWeAchieve")}
-              </h1>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-xl">
-                {t("team.subtitle")}
-              </p>
-
-              <div className="pt-2 flex items-center gap-4 text-xs font-semibold text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <ShieldCheck className="h-4 w-4 text-success" />3 {t("team.referralLevels")}
-                </span>
-                <span>•</span>
-                <span className="text-gold font-bold">
-                  {totalCommissionPercent} إجمالي عمولات الفريق
-                </span>
-              </div>
-            </div>
-
-            {/* Referral Code & Share Link Bento Card */}
-            <div className="lg:col-span-5">
-              <div className="rounded-2xl border border-border/80 bg-surface/90 p-4 sm:p-5 space-y-3.5 shadow-lg">
-                <div>
-                  <span className="text-xs text-muted-foreground block font-medium mb-1">
-                    {t("team.inviteCode")}
-                  </span>
-                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-border bg-background">
-                    <span className="text-lg font-black tracking-widest text-gold font-mono select-all">
-                      {referralCode || "—"}
-                    </span>
-                    <button
-                      id="btn-copy-team-code"
-                      type="button"
-                      onClick={copyCode}
-                      className="flex items-center gap-1.5 rounded-lg brand-gradient px-3 py-2 text-xs font-black text-primary-foreground shadow active:scale-95 transition-all"
-                    >
-                      {copiedCode ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                      <span>{copiedCode ? t("common.copied") : t("team.copyCode")}</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <span className="text-xs text-muted-foreground block font-medium mb-1">
-                    {t("team.inviteLink")}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={referralLink}
-                      className="w-full text-xs font-mono text-muted-foreground bg-background border border-border rounded-xl px-3 py-2.5 truncate focus:outline-none"
-                    />
-                    <button
-                      id="btn-share-team-link"
-                      type="button"
-                      onClick={shareOrCopyLink}
-                      className="shrink-0 flex items-center gap-1.5 rounded-xl border border-cyan-glow/40 bg-surface px-3 py-2.5 text-xs font-black text-cyan-glow hover:bg-surface/80 active:scale-95 transition-all"
-                    >
-                      {copiedLink ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Share2 className="h-3.5 w-3.5" />
-                      )}
-                      <span>{copiedLink ? t("common.copied") : t("team.shareLink")}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
+      <main className="mx-auto w-full max-w-3xl space-y-4 px-3 py-4 sm:px-5 sm:py-6">
+        <section className="space-y-3 rounded-2xl border border-blue-400/20 bg-slate-950/60 p-3 shadow-[0_12px_32px_rgba(0,0,0,0.28)]">
+          <div>
+            <label
+              htmlFor="team-referral-link"
+              className="mb-1.5 block text-center text-xs font-bold text-slate-200"
+            >
+              {t("team.inviteLink")}
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 p-2">
+              <input
+                id="team-referral-link"
+                type="text"
+                readOnly
+                dir="ltr"
+                value={referralLink}
+                placeholder={isLoading ? "…" : "—"}
+                className="min-w-0 flex-1 bg-transparent px-1 text-left text-[11px] text-slate-300 outline-none"
+              />
+              <button
+                type="button"
+                onClick={shareOrCopyLink}
+                disabled={!referralLink}
+                aria-label={copiedLink ? t("common.copied") : t("team.copyLink")}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
+              >
+                {copiedLink ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
             </div>
           </div>
+
+          <div>
+            <label
+              htmlFor="team-referral-code"
+              className="mb-1.5 block text-center text-xs font-bold text-slate-200"
+            >
+              {t("team.inviteCode")}
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 p-2">
+              <button
+                type="button"
+                onClick={copyCode}
+                disabled={!referralCode}
+                aria-label={copiedCode ? t("common.copied") : t("team.copyCode")}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-300 transition hover:bg-slate-800 disabled:opacity-40"
+              >
+                {copiedCode ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
+              <input
+                id="team-referral-code"
+                type="text"
+                readOnly
+                dir="ltr"
+                value={referralCode}
+                placeholder={isLoading ? "…" : "—"}
+                className="min-w-0 flex-1 bg-transparent px-1 text-center font-mono text-sm font-black tracking-wider text-amber-300 outline-none"
+              />
+            </div>
+          </div>
+
+          <button
+            id="btn-share-team-link"
+            type="button"
+            onClick={shareOrCopyLink}
+            disabled={!referralLink}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-amber-500 to-yellow-500 px-4 py-3 text-sm font-black text-slate-950 shadow-[0_4px_16px_rgba(245,158,11,0.2)] transition active:scale-[0.99] disabled:opacity-50"
+          >
+            {copiedLink ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+            <span>{copiedLink ? t("common.copied") : t("team.shareLink")}</span>
+          </button>
         </section>
 
-        {/* 3 Key Team Metrics (Bento-Grid 3 Columns) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <div className="surface-card glow-border p-4 sm:p-5 rounded-2xl flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gold/15 text-gold border border-gold/30">
-              <Award className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground font-semibold">{t("team.teamRewards")}</p>
-              <p className="text-xl sm:text-2xl font-black text-gold-gradient mt-0.5">
-                {money(data?.teamRewards ?? 0)}
-              </p>
-            </div>
+        {isError && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-xl border border-red-400/30 bg-red-950/30 px-3 py-2.5 text-xs text-red-100"
+          >
+            <span>{t("common.error")}</span>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="shrink-0 rounded-lg border border-red-300/40 px-3 py-1.5 font-bold hover:bg-red-900/40"
+            >
+              {isRTL ? "أعد المحاولة" : "Try again"}
+            </button>
           </div>
+        )}
 
-          <div className="surface-card glow-border p-4 sm:p-5 rounded-2xl flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/15 text-cyan-glow border border-cyan-glow/30">
-              <Users className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground font-semibold">
-                {t("team.totalMembers")}
-              </p>
-              <p className="text-xl sm:text-2xl font-black text-foreground mt-0.5">
-                {data?.totalMembers ?? 0}{" "}
-                <span className="text-xs font-normal text-muted-foreground">
-                  {t("team.members")}
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <div className="surface-card glow-border p-4 sm:p-5 rounded-2xl flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-success/15 text-success border border-success/30">
-              <TrendingUp className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground font-semibold">{t("team.teamIncome")}</p>
-              <p className="text-xl sm:text-2xl font-black text-success mt-0.5">
-                {money(data?.teamIncome ?? 0)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* 3 Referral Levels */}
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base sm:text-lg font-black text-foreground flex items-center gap-2">
-              <Layers className="h-5 w-5 text-cyan-glow" />
-              <span>{t("team.referralLevels")}</span>
+          <h1 className="flex items-center justify-center gap-2 text-center text-lg font-black text-amber-300 sm:text-xl">
+            <Crown className="h-5 w-5" />
+            <span>{t("team.referralLevels")}</span>
+            <Crown className="h-5 w-5" />
+          </h1>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {isLoading
+              ? [1, 2, 3].map((level) => (
+                  <div
+                    key={level}
+                    className="h-36 animate-pulse rounded-xl border border-slate-700 bg-slate-900/70"
+                  />
+                ))
+              : !isError &&
+                levels.map((level) => {
+                  const theme = levelThemes[level.level];
+                  const isSelected = selectedLevelFilter === level.level;
+                  return (
+                    <button
+                      key={level.level}
+                      type="button"
+                      aria-pressed={isSelected}
+                      aria-label={`${t(levelKey(level.level))}: ${level.members} ${t("team.members")}`}
+                      onClick={() =>
+                        setSelectedLevelFilter(isSelected ? null : level.level)
+                      }
+                      className={`overflow-hidden rounded-xl border text-center shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950 ${
+                        theme.border
+                      } ${isSelected ? `ring-2 ${theme.ring}` : "hover:-translate-y-0.5"}`}
+                    >
+                      <div className={`${theme.header} px-1 py-2 text-[11px] font-black text-white sm:text-sm`}>
+                        {t(levelKey(level.level))}
+                      </div>
+                      <div className="space-y-1.5 bg-slate-900/90 p-1.5 sm:p-2">
+                        <div className="rounded-md bg-white px-1 py-1.5 text-slate-950 sm:py-2">
+                          <div className="text-[9px] font-semibold sm:text-[10px]">
+                            {t("team.members")}
+                          </div>
+                          <div className="text-base font-black sm:text-lg">
+                            {level.members}
+                          </div>
+                        </div>
+                        <div className="rounded-md bg-white px-1 py-1.5 text-slate-950 sm:py-2">
+                          <div className="text-[9px] font-semibold sm:text-[10px]">
+                            {isRTL ? "إجمالي الأرباح" : "Total earnings"}
+                          </div>
+                          <div className="text-sm font-black sm:text-base">
+                            {money(level.earnings)}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-amber-300/35 bg-slate-950/60">
+            <h2 className="flex items-center justify-center gap-2 border-b border-amber-300/20 px-3 py-2.5 text-center text-xs font-black text-amber-200 sm:text-sm">
+              <Gift className="h-4 w-4" />
+              <span>{t("team.referralRewardRates")}</span>
+            </h2>
+            <div className="grid grid-cols-3 gap-2 p-2">
+              {levels.map((level) => {
+                const theme = levelThemes[level.level];
+                return (
+                  <div
+                    key={level.level}
+                    className={`${theme.rate} flex min-h-12 flex-col items-center justify-center rounded-xl px-1.5 py-2 text-center text-white shadow`}
+                  >
+                    <span className="text-[9px] font-semibold leading-tight sm:text-[11px]">
+                      {isRTL ? `من ${t(levelKey(level.level))}` : `From ${t(levelKey(level.level))}`}
+                    </span>
+                    <span className="text-sm font-black sm:text-base">
+                      {level.ratePercent}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <p className="px-1 text-center text-[10px] leading-relaxed text-slate-400">
+            {t("team.autoCalcNote")}
+          </p>
+        </section>
+
+        <section id="team-members" className="overflow-hidden rounded-2xl border border-blue-400/25 bg-slate-950/60 shadow-lg">
+          <div className="flex items-center justify-between gap-2 bg-gradient-to-r from-blue-800 to-blue-600 px-3 py-3 text-white">
+            <h2 className="flex items-center gap-2 text-sm font-black sm:text-base">
+              <Users className="h-4 w-4" />
+              <span>
+                {t("team.teamMembers")}
+                {selectedLevelFilter !== null
+                  ? ` — ${t(levelKey(selectedLevelFilter))}`
+                  : ""}
+              </span>
             </h2>
             {selectedLevelFilter !== null && (
               <button
                 type="button"
                 onClick={() => setSelectedLevelFilter(null)}
-                className="text-xs font-bold text-cyan-glow hover:underline cursor-pointer"
+                className="shrink-0 rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-bold hover:bg-white/25"
               >
                 {t("team.viewAllLevels")}
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            {(
-              data?.levels || [
-                { level: 1, members: 0, earnings: 0, ratePercent: r1 },
-                { level: 2, members: 0, earnings: 0, ratePercent: r2 },
-                { level: 3, members: 0, earnings: 0, ratePercent: r3 },
-              ]
-            ).map((lvl: any) => {
-              const isSelected = selectedLevelFilter === lvl.level;
-              const rate = lvl.ratePercent || levelPercentages[lvl.level] || "—";
-              return (
-                <button
-                  key={lvl.level}
-                  type="button"
-                  onClick={() => setSelectedLevelFilter(isSelected ? null : lvl.level)}
-                  className={`surface-card p-4 sm:p-5 rounded-2xl text-start transition-all cursor-pointer ${
-                    isSelected
-                      ? "border-cyan-glow bg-surface shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow"
-                      : "hover:border-border"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-black text-foreground text-sm sm:text-base">
-                      {t("team.level")} {lvl.level}
-                    </span>
-                    <span className="rounded-full bg-gold/20 border border-gold/40 px-2.5 py-0.5 text-xs font-black text-gold">
-                      {rate}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 pt-2 border-t border-border/50 text-xs">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>{t("team.members")}:</span>
-                      <span className="font-black text-foreground">{lvl.members}</span>
-                    </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>{t("team.earnings")}:</span>
-                      <span className="font-black text-success">+{money(lvl.earnings)}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Commission note */}
-          <div className="rounded-2xl border border-border/70 bg-surface/70 p-4 text-xs text-muted-foreground leading-relaxed flex items-center gap-3">
-            <Sparkles className="h-5 w-5 text-cyan-glow shrink-0" />
-            <span>{t("team.autoCalcNote")}</span>
-          </div>
-        </section>
-
-        {/* Team Members List (Bento-Grid 1-3 columns) */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base sm:text-lg font-black text-foreground flex items-center gap-2">
-              <Users className="h-5 w-5 text-gold" />
-              <span>
-                {t("team.teamMembers")}{" "}
-                {selectedLevelFilter !== null
-                  ? `(${t("team.level")} ${selectedLevelFilter})`
-                  : `(${data.totalMembers})`}
-              </span>
-            </h2>
-          </div>
-
-          {filteredMembers.length === 0 ? (
-            <div className="surface-card p-8 sm:p-12 text-center rounded-2xl">
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                {selectedLevelFilter !== null ? t("team.noMembersInLevel") : t("team.noMembers")}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredMembers.map((m, i) => (
+          {isLoading ? (
+            <div className="space-y-2 p-3">
+              {[1, 2].map((row) => (
                 <div
-                  key={`${m.email}-${i}`}
-                  className="surface-card p-3.5 rounded-2xl flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-surface border border-border text-foreground font-black text-sm">
-                      {m.email.slice(0, 1).toUpperCase()}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-black text-foreground truncate">{m.email}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {t("team.level")} {m.level} • {levelPercentages[m.level]}
-                      </p>
-                    </div>
-                  </div>
-
-                  <span className="shrink-0 rounded-full bg-gold/15 border border-gold/40 px-2.5 py-0.5 text-[11px] font-black text-gold">
-                    VIP {m.vipLevel}
-                  </span>
-                </div>
+                  key={row}
+                  className="h-12 animate-pulse rounded-lg bg-slate-800/70"
+                />
               ))}
+            </div>
+          ) : isError ? null : filteredMembers.length === 0 ? (
+            <p className="px-4 py-8 text-center text-xs leading-relaxed text-slate-400">
+              {selectedLevelFilter !== null ? t("team.noMembersInLevel") : t("team.noMembers")}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[340px] table-fixed text-right text-xs">
+                <thead className="border-b border-blue-300/20 bg-slate-900/90 text-slate-300">
+                  <tr>
+                    <th className="w-12 px-3 py-2.5 text-center font-bold">#</th>
+                    <th className="w-28 px-2 py-2.5 text-center font-bold">
+                      {t("team.level")}
+                    </th>
+                    <th className="px-3 py-2.5 text-right font-bold">
+                      {isRTL ? "البريد الإلكتروني" : "Email"}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMembers.map((member, index) => {
+                    const level = Number(member.level);
+                    const theme = levelThemes[level] ?? levelThemes[1];
+                    const memberEmail = member.email || member.username || "—";
+                    return (
+                      <tr
+                        key={member.id}
+                        className="border-b border-slate-800/90 last:border-0"
+                      >
+                        <td className="px-3 py-3 text-center font-black text-slate-200">
+                          {index + 1}
+                        </td>
+                        <td className="px-2 py-3 text-center">
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="text-[10px] text-slate-300">
+                              {t(levelKey(level))}
+                            </span>
+                            <span
+                              className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${theme.badge}`}
+                            >
+                              {t("team.level")} {level}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="max-w-0 px-3 py-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="min-w-0 flex-1 truncate text-left font-semibold text-slate-100" dir="ltr">
+                              {memberEmail}
+                            </span>
+                            <UserRound className="h-4 w-4 shrink-0 text-cyan-300" />
+                            <span className="shrink-0 rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[9px] font-bold text-slate-200" dir="ltr">
+                              VIP {Number(member.vipLevel ?? 0)}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>

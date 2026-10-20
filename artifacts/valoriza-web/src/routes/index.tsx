@@ -52,6 +52,15 @@ function AuthPage() {
   });
 
   useEffect(() => {
+    const referralCode = new URLSearchParams(window.location.search).get("ref");
+    if (referralCode?.trim()) {
+      setForm((current) => ({
+        ...current,
+        referral: referralCode.trim().toUpperCase(),
+      }));
+      setMode("register");
+    }
+
     auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/home", replace: true });
     });

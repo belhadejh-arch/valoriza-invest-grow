@@ -218,6 +218,23 @@ async function ensureUserRows(userId: string) {
   ]);
 }
 
+function changeBalance(
+  client: import("pg").PoolClient,
+  userId: string,
+  amount: number,
+  type: string,
+  description: string,
+  referenceId?: string,
+): Promise<number>;
+function changeBalance(
+  client: import("pg").PoolClient,
+  userId: string,
+  amount: number,
+  type: string,
+  description: string,
+  referenceId: string | undefined,
+  includeTransactionId: true,
+): Promise<{ balance: number; transactionId: string }>;
 async function changeBalance(
   client: import("pg").PoolClient,
   userId: string,
@@ -225,7 +242,8 @@ async function changeBalance(
   type: string,
   description: string,
   referenceId?: string,
-) {
+  includeTransactionId = false,
+): Promise<number | { balance: number; transactionId: string }> {
   const wallet = await client.query<{ balance: string }>(
     "SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE",
     [userId],
@@ -240,11 +258,15 @@ async function changeBalance(
       updated_at = now() WHERE user_id = $4`,
     [after, amount, type, userId],
   );
-  await client.query(
+  const transaction = await client.query<{ id: string }>(
     `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, reference_id, description)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING id`,
     [userId, type, amount, before, after, referenceId ?? null, description],
   );
+  if (includeTransactionId) {
+    return { balance: after, transactionId: transaction.rows[0].id };
+  }
   return after;
 }
 
@@ -1051,12 +1073,14 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
       ]);
       if (!plan.rowCount) return { ok: false, reason: "PACKAGE_NOT_FOUND" };
       const expires = new Date(Date.now() + plan.rows[0].duration_days * 86400000);
-      await changeBalance(
+      const purchaseTransaction = await changeBalance(
         client,
         user.id,
         -number(plan.rows[0].price),
         "vip_purchase",
         `تفعيل ${plan.rows[0].name}`,
+        undefined,
+        true,
       );
       await client.query(
         "INSERT INTO user_vip (user_id,vip_package_id,expires_at) VALUES ($1,$2,$3)",
@@ -1070,7 +1094,7 @@ app.post("/api/app/vip/purchase", async (request, response, next) => {
         client,
         user.id,
         number(plan.rows[0].price),
-        plan.rows[0].id,
+        purchaseTransaction.transactionId,
         `عمولة تفعيل ${plan.rows[0].name}`,
       );
       const wallet = await client.query("SELECT balance FROM wallets WHERE user_id=$1", [user.id]);
@@ -1514,7 +1538,16 @@ app.post("/api/app/team/settle-milestones", async (request, response, next) => {
 app.get("/api/app/team", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const [profile, referrals, wallet, settings, commissions, milestones, maxVip] = await Promise.all([
+    const [
+      profile,
+      referrals,
+      wallet,
+      settings,
+      commissions,
+      commissionTotals,
+      milestones,
+      maxVip,
+    ] = await Promise.all([
       query("SELECT id,username,email,referral_code,vip_level FROM profiles WHERE id=$1", [user.id]),
       query(
         `SELECT p.id, p.username, p.email, p.vip_level, p.created_at, r.level
@@ -1532,6 +1565,13 @@ app.get("/api/app/team", async (request, response, next) => {
          JOIN profiles p ON p.id = rc.referred_id
          WHERE rc.referrer_id = $1
          ORDER BY rc.created_at DESC LIMIT 50`,
+        [user.id],
+      ),
+      query<{ level: number; total: string }>(
+        `SELECT level, COALESCE(SUM(amount),0)::text AS total
+         FROM referral_commissions
+         WHERE referrer_id=$1
+         GROUP BY level`,
         [user.id],
       ),
       query<{
@@ -1555,16 +1595,11 @@ app.get("/api/app/team", async (request, response, next) => {
     const l1Members = referrals.rows.filter((r) => r.level === 1);
     const l2Members = referrals.rows.filter((r) => r.level === 2);
     const l3Members = referrals.rows.filter((r) => r.level === 3);
-
-    const l1Earnings = commissions.rows
-      .filter((c) => c.level === 1)
-      .reduce((sum, c) => sum + number(c.amount), 0);
-    const l2Earnings = commissions.rows
-      .filter((c) => c.level === 2)
-      .reduce((sum, c) => sum + number(c.amount), 0);
-    const l3Earnings = commissions.rows
-      .filter((c) => c.level === 3)
-      .reduce((sum, c) => sum + number(c.amount), 0);
+    const earningsForLevel = (level: number) =>
+      number(commissionTotals.rows.find((row) => Number(row.level) === level)?.total);
+    const l1Earnings = earningsForLevel(1);
+    const l2Earnings = earningsForLevel(2);
+    const l3Earnings = earningsForLevel(3);
 
     const r1 = number(settings.referral_rate_l1 ?? 0.08);
     const r2 = number(settings.referral_rate_l2 ?? 0.04);
@@ -2072,19 +2107,20 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
       const status = action === "approve" ? "approved" : "rejected";
       if (status === "approved") {
         const depAmount = number(deposit.rows[0].amount);
-        await changeBalance(
+        const depositTransaction = await changeBalance(
           client,
           deposit.rows[0].user_id,
           depAmount,
           "deposit",
           "اعتماد طلب الإيداع",
           depositId,
+          true,
         );
         await distributeReferralCommissions(
           client,
           deposit.rows[0].user_id,
           depAmount,
-          depositId,
+          depositTransaction.transactionId,
           "عمولة إيداع إحالة",
         );
       }
