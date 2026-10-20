@@ -21,6 +21,7 @@ export type TasksPageData = {
   vipName: string;
   isTrial: boolean;
   trialExpiresAt: string | null;
+  trialStatus?: "not_started" | "active" | "expired";
   videoCommission: number;
   dailyLimit: number;
   completedCount: number;

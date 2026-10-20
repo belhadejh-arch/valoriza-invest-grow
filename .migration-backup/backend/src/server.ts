@@ -1005,11 +1005,32 @@ app.get("/api/app/investment", async (request, response, next) => {
       ),
       query("SELECT balance FROM wallets WHERE user_id = $1", [user.id]),
     ]);
+    const profileData = profile.rows[0];
+    const trialStartedAt = profileData?.trial_started_at ?? null;
+    const completedTrialTasks = trialStartedAt
+      ? await query<{ count: number }>(
+          "SELECT count(*)::int AS count FROM task_completions WHERE user_id=$1 AND completed_at >= $2",
+          [user.id, trialStartedAt],
+        )
+      : null;
+    const trialTasksCompleted = number(completedTrialTasks?.rows[0]?.count);
+    const trialExpiredByDate =
+      profileData?.trial_expires_at != null &&
+      new Date(profileData.trial_expires_at).getTime() <= Date.now();
+    const trialIsActive = Boolean(
+      profileData?.trial_active &&
+        trialStartedAt &&
+        trialTasksCompleted < 6 &&
+        !trialExpiredByDate,
+    );
+    const trialStatus = !trialStartedAt ? "not_started" : trialIsActive ? "active" : "expired";
     response.json({
       funds: funds.rows,
       investments: investments.rows,
       vipPackages: plans.rows,
-      profile: profile.rows[0],
+      profile: profileData
+        ? { ...profileData, trial_active: trialIsActive, trial_status: trialStatus }
+        : null,
       walletBalance: number(wallet.rows[0]?.balance),
     });
   } catch (error) {
@@ -1021,15 +1042,23 @@ app.post("/api/app/trial", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const result = await query(
-      `UPDATE profiles SET trial_active=true, trial_started_at=now(), trial_expires_at=now() + interval '2 days'
-       WHERE id=$1 AND trial_started_at IS NULL RETURNING trial_expires_at`,
+      `UPDATE profiles
+       SET trial_active=true, trial_started_at=now(), trial_expires_at=NULL
+       WHERE id=$1 AND vip_level=0 AND trial_started_at IS NULL
+       RETURNING trial_started_at`,
       [user.id],
     );
-    response.json(
-      result.rowCount
-        ? { ok: true, trialExpiresAt: result.rows[0].trial_expires_at }
-        : { ok: false, reason: "TRIAL_ALREADY_USED" },
-    );
+    if (result.rowCount) {
+      response.json({ ok: true, trialExpiresAt: null });
+      return;
+    }
+    const profile = await query<{ vip_level: number }>("SELECT vip_level FROM profiles WHERE id=$1", [
+      user.id,
+    ]);
+    response.json({
+      ok: false,
+      reason: number(profile.rows[0]?.vip_level) > 0 ? "HAS_VIP" : "TRIAL_ALREADY_USED",
+    });
   } catch (error) {
     next(error);
   }
@@ -1364,7 +1393,10 @@ app.get("/api/app/tasks", async (request, response, next) => {
         "SELECT task_id FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
         [user.id],
       ),
-      query("SELECT vip_level,trial_active,trial_expires_at FROM profiles WHERE id=$1", [user.id]),
+      query(
+        "SELECT vip_level,trial_active,trial_started_at,trial_expires_at FROM profiles WHERE id=$1",
+        [user.id],
+      ),
       query("SELECT * FROM vip_packages WHERE level=(SELECT vip_level FROM profiles WHERE id=$1)", [
         user.id,
       ]),
@@ -1372,24 +1404,48 @@ app.get("/api/app/tasks", async (request, response, next) => {
     const completed = new Set(completions.rows.map((row) => row.task_id));
     const plan = plans.rows[0];
     const vipLevel = number(profile.rows[0]?.vip_level);
-    const reward = vipLevel ? number(plan?.task_reward) : profile.rows[0]?.trial_active ? 0.5 : 0;
-    const limit = vipLevel ? number(plan?.daily_tasks) : profile.rows[0]?.trial_active ? 3 : 0;
+    const trialStartedAt = profile.rows[0]?.trial_started_at ?? null;
+    const completedTrialTasks = trialStartedAt
+      ? await query<{ count: number }>(
+          "SELECT count(*)::int AS count FROM task_completions WHERE user_id=$1 AND completed_at >= $2",
+          [user.id, trialStartedAt],
+        )
+      : null;
+    const trialTasksCompleted = number(completedTrialTasks?.rows[0]?.count);
+    const trialExpiredByDate =
+      profile.rows[0]?.trial_expires_at != null &&
+      new Date(profile.rows[0].trial_expires_at).getTime() <= Date.now();
+    const trialActive = Boolean(
+      vipLevel === 0 &&
+        profile.rows[0]?.trial_active &&
+        trialStartedAt &&
+        trialTasksCompleted < 6 &&
+        !trialExpiredByDate,
+    );
+    const trialStatus = !trialStartedAt ? "not_started" : trialActive ? "active" : "expired";
+    const reward = vipLevel ? number(plan?.task_reward) : trialActive ? 0.5 : 0;
+    const limit = vipLevel ? number(plan?.daily_tasks) : trialActive ? 3 : 0;
+    const trialTasksRemaining = trialActive ? Math.max(0, 6 - trialTasksCompleted) : 0;
+    const remainingTasks = trialActive
+      ? Math.min(Math.max(0, limit - completed.size), trialTasksRemaining)
+      : Math.max(0, limit - completed.size);
     response.json({
       vipLevel,
       vipName: vipLevel
         ? `VIP ${vipLevel}`
-        : profile.rows[0]?.trial_active
+        : trialActive
           ? "الفترة التجريبية"
           : "VIP",
-      isTrial: Boolean(profile.rows[0]?.trial_active),
+      isTrial: trialActive,
+      trialStatus,
       trialExpiresAt: profile.rows[0]?.trial_expires_at,
       videoCommission: reward,
       dailyLimit: limit,
       completedCount: completed.size,
-      remainingTasks: Math.max(0, limit - completed.size),
+      remainingTasks,
       videoDuration: 10,
       userBalance: currentBalance,
-      allDailyTasksCompleted: completed.size >= limit,
+      allDailyTasksCompleted: remainingTasks <= 0,
       tasksEnabled: true,
       tasks: tasks.rows.map((task) => ({
         id: task.id,
@@ -1405,7 +1461,7 @@ app.get("/api/app/tasks", async (request, response, next) => {
         isCompletedToday: completed.has(task.id),
         status: completed.has(task.id)
           ? "REWARDED"
-          : completed.size >= limit
+          : remainingTasks <= 0
             ? "LOCKED"
             : "AVAILABLE",
       })),
@@ -1428,16 +1484,51 @@ app.post("/api/app/tasks/complete", async (request, response, next) => {
         taskId,
       ]);
       if (!task.rowCount) return { ok: false, reason: "TASK_NOT_FOUND" };
-      const profile = await client.query<{ vip_level: number; trial_active: boolean }>(
-        "SELECT vip_level,trial_active FROM profiles WHERE id=$1",
+      const profile = await client.query<{
+        vip_level: number;
+        trial_active: boolean;
+        trial_started_at: Date | null;
+        trial_expires_at: Date | null;
+      }>(
+        "SELECT vip_level,trial_active,trial_started_at,trial_expires_at FROM profiles WHERE id=$1 FOR UPDATE",
         [user.id],
       );
+      const profileRow = profile.rows[0];
+      if (!profileRow) return { ok: false, reason: "TRIAL_NOT_ACTIVE" };
+      const vipLevel = number(profileRow.vip_level);
+      let trialTasksCompleted = 0;
+      if (vipLevel === 0 && profileRow.trial_started_at) {
+        const trialCount = await client.query<{ count: number }>(
+          "SELECT count(*)::int AS count FROM task_completions WHERE user_id=$1 AND completed_at >= $2",
+          [user.id, profileRow.trial_started_at],
+        );
+        trialTasksCompleted = number(trialCount.rows[0]?.count);
+      }
+      const trialExpiredByDate =
+        profileRow.trial_expires_at != null &&
+        new Date(profileRow.trial_expires_at).getTime() <= Date.now();
+      const trialActive = Boolean(
+        vipLevel === 0 &&
+          profileRow.trial_active &&
+          profileRow.trial_started_at &&
+          trialTasksCompleted < 6 &&
+          !trialExpiredByDate,
+      );
+      if (vipLevel === 0 && !trialActive) {
+        if (profileRow.trial_active) {
+          await client.query("UPDATE profiles SET trial_active=false WHERE id=$1", [user.id]);
+        }
+        return {
+          ok: false,
+          reason: profileRow.trial_started_at ? "TRIAL_EXPIRED" : "TRIAL_NOT_ACTIVE",
+        };
+      }
       const plan = await client.query<{ task_reward: string; daily_tasks: number }>(
         "SELECT task_reward,daily_tasks FROM vip_packages WHERE level=$1",
-        [profile.rows[0]?.vip_level ?? 0],
+        [vipLevel],
       );
-      const reward = number(plan.rows[0]?.task_reward) || (profile.rows[0]?.trial_active ? 0.5 : 0);
-      const limit = number(plan.rows[0]?.daily_tasks) || (profile.rows[0]?.trial_active ? 3 : 0);
+      const reward = number(plan.rows[0]?.task_reward) || (trialActive ? 0.5 : 0);
+      const limit = number(plan.rows[0]?.daily_tasks) || (trialActive ? 3 : 0);
       const count = await client.query(
         "SELECT count(*)::int AS count FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
         [user.id],
@@ -1449,6 +1540,9 @@ app.post("/api/app/tasks/complete", async (request, response, next) => {
         [user.id, taskId, reward, Number(watchedSeconds) || 0],
       );
       if (!inserted.rowCount) return { ok: false, reason: "ALREADY_COMPLETED_TODAY" };
+      if (trialActive && trialTasksCompleted + 1 >= 6) {
+        await client.query("UPDATE profiles SET trial_active=false WHERE id=$1", [user.id]);
+      }
       await changeBalance(
         client,
         user.id,

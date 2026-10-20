@@ -5,11 +5,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   Check,
+  CheckCircle2,
   Crown,
   Lock,
   Sparkles,
   Timer,
   Wallet,
+  XCircle,
 } from "lucide-react";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
@@ -48,6 +50,8 @@ type InvestmentPageData = {
     vip_level?: number;
     trialActive?: boolean;
     trial_active?: boolean;
+    trial_status?: "not_started" | "active" | "expired";
+    trial_started_at?: string | null;
   } | null;
   packages?: any[];
   vipPackages?: any[];
@@ -69,7 +73,14 @@ function InvestmentPage() {
 
   const balance = data?.wallet?.balance ?? (data as any)?.walletBalance ?? 0;
   const userVipLevel = data?.profile?.vipLevel ?? (data as any)?.profile?.vip_level ?? 0;
-  const isTrialActive = !!(data?.profile?.trialActive ?? (data as any)?.profile?.trial_active);
+  const trialStatus =
+    data?.profile?.trial_status ??
+    ((data?.profile?.trialActive ?? (data as any)?.profile?.trial_active)
+      ? "active"
+      : data?.profile?.trial_started_at
+        ? "expired"
+        : "not_started");
+  const isTrialActive = trialStatus === "active";
 
   const packagesList = (data?.packages || (data as any)?.vipPackages || []).map((pkg: any) => ({
     ...pkg,
@@ -88,7 +99,6 @@ function InvestmentPage() {
     mutationFn: () => trial(),
     onSuccess: (res: any) => {
       if (res?.ok) {
-        toast.success("تم تفعيل الفترة التجريبية المجانية بنجاح!");
         qc.invalidateQueries({ queryKey: ["investment"] });
         qc.invalidateQueries({ queryKey: ["home"] });
       } else {
@@ -170,8 +180,8 @@ function InvestmentPage() {
           </div>
         )}
 
-        {/* Trial Banner if VIP 0 */}
-        {!!data && !isTrialActive && userVipLevel === 0 && (
+        {/* Trial status is derived from the server-side activation and task limit. */}
+        {!!data && userVipLevel === 0 && (
           <div className="rounded-2xl border border-cyan-glow/40 bg-surface/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
             <div className="flex items-center gap-3 text-start">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/20 text-cyan-glow">
@@ -185,14 +195,34 @@ function InvestmentPage() {
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={trialMutation.isPending}
-              onClick={() => trialMutation.mutate()}
-              className="shrink-0 rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
-            >
-              {t("investment.activateTrial")}
-            </button>
+            {trialStatus === "active" ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-400/35 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-400"
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                <span>لقد تم تفعيل الفترة التجريبية</span>
+              </div>
+            ) : trialStatus === "expired" ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-red-400/35 bg-red-400/10 px-3 py-2 text-xs font-black text-red-400"
+              >
+                <XCircle className="h-4 w-4" aria-hidden="true" />
+                <span>انتهت صلاحية الفترة التجريبية</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={trialMutation.isPending}
+                onClick={() => trialMutation.mutate()}
+                className="shrink-0 rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
+              >
+                {t("investment.activateTrial")}
+              </button>
+            )}
           </div>
         )}
 

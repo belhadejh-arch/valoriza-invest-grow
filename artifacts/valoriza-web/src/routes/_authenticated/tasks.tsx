@@ -66,6 +66,7 @@ function TasksPage() {
       if (result.ok) {
         toast.success(t("tasks.completeSuccess"));
         queryClient.invalidateQueries({ queryKey: ["tasks-data"] });
+        queryClient.invalidateQueries({ queryKey: ["investment"] });
         queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
         queryClient.invalidateQueries({ queryKey: ["investment-data"] });
         queryClient.invalidateQueries({ queryKey: ["account-data"] });
