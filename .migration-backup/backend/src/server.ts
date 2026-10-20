@@ -683,7 +683,15 @@ app.post("/api/auth/login", async (request, response, next) => {
     const token = await createSession(row.id, response);
     const userProfile = await query<{ username: string; email: string; role: string }>(
       `SELECT p.username, p.email,
-              COALESCE((SELECT role FROM user_roles WHERE user_id = p.id ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
+              CASE
+                WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = p.id AND role = 'admin')
+                  OR EXISTS (SELECT 1 FROM admin_users WHERE user_id = p.id)
+                THEN 'admin'
+                ELSE COALESCE(
+                  (SELECT role FROM user_roles WHERE user_id = p.id ORDER BY role = 'admin' DESC LIMIT 1),
+                  'user'
+                )
+              END AS role
        FROM profiles p WHERE p.id = $1`,
       [row.id],
     );
@@ -778,7 +786,13 @@ app.get("/api/app/home", async (request, response, next) => {
       ),
     ]);
     response.json({
-      profile: profile.rows[0],
+      profile: profile.rows[0]
+        ? {
+            username: profile.rows[0].username,
+            email: profile.rows[0].email,
+            vipLevel: number(profile.rows[0].vip_level),
+          }
+        : null,
       wallet: {
         balance: number(wallet.rows[0]?.balance),
         totalEarned: number(wallet.rows[0]?.total_earned),
@@ -945,7 +959,16 @@ app.get("/api/app/account", async (request, response, next) => {
       ),
     ]);
     response.json({
-      profile: profile.rows[0],
+      profile: profile.rows[0]
+        ? {
+            username: profile.rows[0].username,
+            email: profile.rows[0].email,
+            phone: profile.rows[0].phone,
+            vipLevel: number(profile.rows[0].vip_level),
+            referralCode: profile.rows[0].referral_code,
+            trialActive: Boolean(profile.rows[0].trial_active),
+          }
+        : null,
       balance: number(wallet.rows[0]?.balance),
       dailyReward: {
         amount: number(settings.daily_login_reward),
@@ -2627,6 +2650,18 @@ async function initDatabase() {
       );
       console.log(`👑 Primary admin verified: ${adminEmail}`);
     }
+
+    // Keep the two explicit admin-membership tables consistent on startup.
+    await query(
+      `INSERT INTO user_roles (user_id, role)
+       SELECT user_id, 'admin' FROM admin_users
+       ON CONFLICT (user_id, role) DO NOTHING`,
+    );
+    await query(
+      `INSERT INTO admin_users (user_id)
+       SELECT user_id FROM user_roles WHERE role = 'admin'
+       ON CONFLICT (user_id) DO NOTHING`,
+    );
 
     // Ensure default user exists
     const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();

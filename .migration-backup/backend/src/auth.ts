@@ -69,7 +69,15 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
     if (!payload.sub) return null;
     const result = await query<AuthUser>(
       `SELECT u.id, u.email, p.username,
-              COALESCE((SELECT role FROM user_roles WHERE user_id = u.id ORDER BY role = 'admin' DESC LIMIT 1), 'user') AS role
+              CASE
+                WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND role = 'admin')
+                  OR EXISTS (SELECT 1 FROM admin_users WHERE user_id = u.id)
+                THEN 'admin'
+                ELSE COALESCE(
+                  (SELECT role FROM user_roles WHERE user_id = u.id ORDER BY role = 'admin' DESC LIMIT 1),
+                  'user'
+                )
+              END AS role
        FROM users u JOIN profiles p ON p.id = u.id
        JOIN sessions s ON s.user_id = u.id
        WHERE u.id = $1 AND s.token_hash = $2 AND s.expires_at > now()`,

@@ -1,6 +1,19 @@
 import { createServerFn } from "@tanstack/react-start";
 import { serverBackendRequest } from "@/lib/backend-server";
 
+export interface AccountPageData {
+  profile: {
+    username: string;
+    email: string;
+    phone: string | null;
+    vipLevel: number;
+    referralCode: string;
+    trialActive: boolean;
+  } | null;
+  balance: number;
+  dailyReward: { amount: number; claimed: boolean };
+}
+
 const get = (path: string) =>
   createServerFn({ method: "GET" }).handler(() => serverBackendRequest(path));
 const post = <T>(path: string, fallback?: (data: T) => string) =>
@@ -25,7 +38,9 @@ export const settleTeamMilestones = createServerFn({ method: "POST" }).handler((
   serverBackendRequest("/api/app/team/settle-milestones", { method: "POST" }),
 );
 export const getRewardsData = get("/api/app/rewards");
-export const getAccountData = get("/api/app/account");
+export const getAccountData = createServerFn({ method: "GET" }).handler(() =>
+  serverBackendRequest<AccountPageData>("/api/app/account"),
+);
 export const getAboutData = get("/api/public/about");
 export const getCompanySettingsAndSupport = get("/api/app/settings");
 export const getWithdrawalInfo = get("/api/app/withdrawal");

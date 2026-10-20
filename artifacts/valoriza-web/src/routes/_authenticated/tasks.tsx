@@ -22,7 +22,6 @@ import {
   type TaskItem,
   type TasksPageData,
 } from "@/lib/valoriza-tasks.functions";
-import { getMockTasksData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/tasks")({

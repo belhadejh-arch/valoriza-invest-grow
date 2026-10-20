@@ -25,9 +25,9 @@ import {
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
+import { ErrorState, LoadingState } from "@/components/valoriza/StatusStates";
 import { getAccountData } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
-import { getMockAccountData } from "@/lib/mock-data";
 import { auth } from "@/lib/auth-client";
 import { backendRequest } from "@/lib/backend-client";
 import { useI18n } from "@/lib/i18n";
@@ -61,10 +61,10 @@ function AccountPage() {
   const fetchAccount = useServerFn(getAccountData);
   const claimDaily = useServerFn(claimDailyLoginReward);
 
-  const { data = getMockAccountData() } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["account"],
     queryFn: () => fetchAccount(),
-    initialData: getMockAccountData,
+    refetchOnMount: "always",
   });
 
   const claimMutation = useMutation({
@@ -81,6 +81,31 @@ function AccountPage() {
     },
     onError: () => toast.error(t("common.error")),
   });
+
+  if (!data || !data.profile) {
+    return (
+      <div className="min-h-screen bg-background text-foreground pb-28">
+        <AppHeader />
+        <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4">
+          {isError ? (
+            <ErrorState
+              title="تعذر تحميل بيانات الحساب من قاعدة البيانات"
+              description={error instanceof Error ? error.message : "تحقق من اتصال الخادم."}
+              onRetry={() => void refetch()}
+            />
+          ) : data && !data.profile ? (
+            <ErrorState
+              title="ملف الحساب غير موجود في قاعدة البيانات"
+              description="لا يمكن عرض بيانات الحساب حتى يتم استعادة ملف الحساب."
+            />
+          ) : (
+            <LoadingState message={isLoading ? "جارٍ تحميل بيانات الحساب..." : undefined} />
+          )}
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
 
   async function signOut() {
     await qc.cancelQueries();

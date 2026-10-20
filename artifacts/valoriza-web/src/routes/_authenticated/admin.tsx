@@ -104,9 +104,9 @@ function AdminDashboardPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="hidden sm:flex rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-[11px] font-bold text-emerald-400 items-center gap-1.5 shadow-sm">
+              <span className="hidden sm:flex rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-[11px] font-bold text-emerald-400 items-center gap-1.5 shadow-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              تحديث تلقائي نشط (5ث)
+                تحديث تلقائي حسب الاتصال
             </span>
             <button
               type="button"

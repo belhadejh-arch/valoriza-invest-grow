@@ -23,11 +23,11 @@ import { toast } from "sonner";
 
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
+import { ErrorState, LoadingState } from "@/components/valoriza/StatusStates";
 import { LuckyWheel } from "@/components/valoriza/LuckyWheel";
 import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal";
 import { DepositModal, WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
-import { getMockHomeData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 import heroCityImg from "@/assets/hero-city.jpg";
 import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
@@ -93,10 +93,10 @@ function HomePage() {
   const [supportOpen, setSupportOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
 
-  const { data = getMockHomeData() } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["home"],
     queryFn: () => fetchHome(),
-    initialData: getMockHomeData,
+    refetchOnMount: "always",
   });
 
   const claimMutation = useMutation({
@@ -112,6 +112,31 @@ function HomePage() {
     onError: () => toast.error(t("common.error")),
   });
 
+  if (!data || !data.profile) {
+    return (
+      <div className="min-h-screen bg-background text-foreground pb-28">
+        <AppHeader />
+        <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4">
+          {isError ? (
+            <ErrorState
+              title="تعذر تحميل بيانات المنصة من قاعدة البيانات"
+              description={error instanceof Error ? error.message : "تحقق من اتصال الخادم."}
+              onRetry={() => void refetch()}
+            />
+          ) : data && !data.profile ? (
+            <ErrorState
+              title="ملف الحساب غير موجود في قاعدة البيانات"
+              description="لا يمكن عرض بيانات الصفحة الرئيسية حتى يتم استعادة ملف الحساب."
+            />
+          ) : (
+            <LoadingState message={isLoading ? "جارٍ تحميل بيانات المنصة..." : undefined} />
+          )}
+        </main>
+        <BottomNav />
+      </div>
+    );
+  }
+
   const nextSlide = () => {
     setSlideIndex((prev) => (prev + 1) % HERO_SLIDES.length);
   };
@@ -122,10 +147,8 @@ function HomePage() {
 
   const currentSlide = HERO_SLIDES[slideIndex];
   const settings = data.settings;
-  const companyInfo =
-    settings.about_company ||
-    "تأسست شركة Valoriza للاستثمار في عام 2018 في العاصمة، ويقع مقرها الرئيسي في مدريد، إسبانيا. تعمل على توفير فرص استثمارية مبتكرة وآمنة لعملائنا حول العالم.";
-  const membersCount = settings.members_count || "75,000";
+  const companyInfo = settings.about_company || "—";
+  const membersCount = settings.members_count || "—";
 
   return (
     <div

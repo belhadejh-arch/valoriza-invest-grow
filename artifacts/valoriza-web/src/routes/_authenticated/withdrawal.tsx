@@ -26,7 +26,6 @@ import {
   requestWithdrawal,
   getUserFinancialRecords,
 } from "@/lib/valoriza-pages.functions";
-import { getMockWithdrawalData, getMockRecordsData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/withdrawal")({

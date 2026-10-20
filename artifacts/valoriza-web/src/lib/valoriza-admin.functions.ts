@@ -10,7 +10,27 @@ const adminPost = <T>(path: string) =>
       serverBackendRequest(path, { method: "POST", body: JSON.stringify(data) }),
     );
 
-export const getAdminOverview = adminGet("/api/admin/overview");
+export interface AdminOverviewData {
+  usersCount: number;
+  totalUsers: number;
+  totalBalance: number;
+  totalDeposited: number;
+  totalWithdrawn: number;
+  pendingDepositsCount: number;
+  pendingDepositsAmount: number;
+  pendingWithdrawalsCount: number;
+  pendingWithdrawalsAmount: number;
+  approvedWithdrawalsCount: number;
+  approvedWithdrawalsAmount: number;
+  activeInvestmentsCount: number;
+  activeInvestmentsVolume: number;
+  taskCompletionsCount: number;
+  totalTasksCompleted: number;
+}
+
+export const getAdminOverview = createServerFn({ method: "GET" }).handler(() =>
+  serverBackendRequest<AdminOverviewData>("/api/admin/overview"),
+);
 export const getAdminUsers = adminGet("/api/admin/users");
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",

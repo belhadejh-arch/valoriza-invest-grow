@@ -17,14 +17,18 @@ interface AdminOverviewTabProps {
   onSelectTab: (tab: string) => void;
 }
 
+const isForbiddenError = (error: unknown) =>
+  error instanceof Error && error.message === "FORBIDDEN";
+
 export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
-    refetchInterval: 5000,
+    retry: (failureCount, queryError) => !isForbiddenError(queryError) && failureCount < 2,
+    refetchInterval: (query) => (isForbiddenError(query.state.error) ? false : 30_000),
     refetchIntervalInBackground: true,
     refetchOnMount: "always",
-    refetchOnWindowFocus: "always",
+    refetchOnWindowFocus: (query) => !isForbiddenError(query.state.error),
   });
 
   if (isLoading) {
@@ -37,13 +41,20 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
   }
 
   if (isError && !data) {
+    const forbidden = isForbiddenError(error);
     return (
       <div className="surface-card rounded-2xl border border-danger/40 p-6 text-center">
         <p className="text-sm font-bold text-danger">
-          تعذر جلب إحصائيات لوحة التحكم من الخادم وقاعدة البيانات.
+          {forbidden
+            ? "الحساب الحالي لا يملك صلاحية إدارة المنصة."
+            : "تعذر جلب إحصائيات لوحة التحكم من الخادم وقاعدة البيانات."}
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
-          {error instanceof Error ? error.message : "تحقق من اتصال الخادم بقاعدة البيانات."}
+          {forbidden
+            ? "سجّل الدخول بحساب المدير أو تأكد من تعيين هذا الحساب ضمن أدوار الإدارة."
+            : error instanceof Error
+              ? error.message
+              : "تحقق من اتصال الخادم بقاعدة البيانات."}
         </p>
         <button
           type="button"

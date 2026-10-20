@@ -17,7 +17,6 @@ import {
 import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getUserFinancialRecords } from "@/lib/valoriza-pages.functions";
-import { getMockRecordsData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 type RecordsTab = "deposits" | "withdrawals" | "transactions" | "rewards";
