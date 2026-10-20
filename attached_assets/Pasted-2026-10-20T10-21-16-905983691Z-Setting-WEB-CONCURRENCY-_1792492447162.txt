@@ -1,0 +1,53 @@
+2026-10-20T10:21:16.905983691Z ==> Setting WEB_CONCURRENCY=1 by default, based on available CPUs in the instance
+2026-10-20T10:21:45.024729067Z ==> Running 'corepack pnpm --filter @workspace/api-server run start'
+2026-10-20T10:21:58.817380485Z 
+2026-10-20T10:21:58.817407296Z > @workspace/api-server@0.0.0 start /opt/render/project/src/artifacts/api-server
+2026-10-20T10:21:58.817414406Z > node --enable-source-maps ./dist/server.mjs
+2026-10-20T10:21:58.817417586Z 
+2026-10-20T10:22:00.828551626Z Valoriza backend listening on port 4000
+2026-10-20T10:22:00.920670774Z (node:83) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+2026-10-20T10:22:00.920698714Z In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+2026-10-20T10:22:00.920702164Z 
+2026-10-20T10:22:00.920705974Z To prepare for this change:
+2026-10-20T10:22:00.920709624Z - If you want the current behavior, explicitly use 'sslmode=verify-full'
+2026-10-20T10:22:00.920712795Z - If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+2026-10-20T10:22:00.920715204Z 
+2026-10-20T10:22:00.920718455Z See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+2026-10-20T10:22:00.920721075Z (Use `node --trace-warnings ...` to show where the warning was created)
+2026-10-20T10:22:01.10838628Z 👑 Primary admin verified: admin@valoriza.com
+2026-10-20T10:22:01.425251181Z Team milestone settlement job failed: error: relation "team_milestone_claims" does not exist
+2026-10-20T10:22:01.425266861Z     at /opt/render/project/src/node_modules/.pnpm/pg@8.23.1/node_modules/pg/lib/client.js:694:17
+2026-10-20T10:22:01.425270171Z     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+2026-10-20T10:22:01.425273681Z     at async applyTeamMilestonesForUser (/opt/render/project/src/.migration-backup/backend/src/server.ts:312:19)
+2026-10-20T10:22:01.425276341Z     at async withTransaction (/opt/render/project/src/.migration-backup/backend/src/db.ts:49:20)
+2026-10-20T10:22:01.425279532Z     at async settleTeamMilestonesForUsers (/opt/render/project/src/.migration-backup/backend/src/server.ts:441:20)
+2026-10-20T10:22:01.425282402Z     at async runTeamMilestoneSettlementJob (/opt/render/project/src/.migration-backup/backend/src/server.ts:472:20)
+2026-10-20T10:22:01.425285222Z     at async Server.<anonymous> (/opt/render/project/src/.migration-backup/backend/src/server.ts:2711:7) {
+2026-10-20T10:22:01.425288032Z   length: 120,
+2026-10-20T10:22:01.425291462Z   severity: 'ERROR',
+2026-10-20T10:22:01.425294272Z   code: '42P01',
+2026-10-20T10:22:01.425297042Z   detail: undefined,
+2026-10-20T10:22:01.425300202Z   hint: undefined,
+2026-10-20T10:22:01.425302642Z   position: '13',
+2026-10-20T10:22:01.425306232Z   internalPosition: undefined,
+2026-10-20T10:22:01.425308772Z   internalQuery: undefined,
+2026-10-20T10:22:01.425311482Z   where: undefined,
+2026-10-20T10:22:01.425313933Z   schema: undefined,
+2026-10-20T10:22:01.425316773Z   table: undefined,
+2026-10-20T10:22:01.425319342Z   column: undefined,
+2026-10-20T10:22:01.425322073Z   dataType: undefined,
+2026-10-20T10:22:01.425324573Z   constraint: undefined,
+2026-10-20T10:22:01.425327213Z   file: 'parse_relation.c',
+2026-10-20T10:22:01.425330003Z   line: '1498',
+2026-10-20T10:22:01.425332573Z   routine: 'parserOpenTable'
+2026-10-20T10:22:01.425335103Z }
+2026-10-20T10:22:07.885007849Z ==> Your service is live 🎉
+2026-10-20T10:22:08.072676362Z ==> 
+2026-10-20T10:22:08.078470615Z ==> ///////////////////////////////////////////////////////////
+2026-10-20T10:22:08.083111883Z ==> 
+2026-10-20T10:22:08.089757505Z ==> Available at your primary URL https://valoriza-invest-grow-7sic.onrender.com
+2026-10-20T10:22:08.095144936Z ==> 
+2026-10-20T10:22:08.103315126Z ==> ///////////////////////////////////////////////////////////
+
+و لازال مشكل عند تسجيل يظهر لي  
+فشلةالطلب (503)

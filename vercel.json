@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/:apiPath*",
-      "destination": "https://valoriza-invest-grow-5atm.onrender.com/api/:apiPath*"
+      "destination": "https://valoriza-invest-grow-7sic.onrender.com/api/:apiPath*"
     },
     { "source": "/about", "destination": "/index.html" },
     { "source": "/account", "destination": "/index.html" },
