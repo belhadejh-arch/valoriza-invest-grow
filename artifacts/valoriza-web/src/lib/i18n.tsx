@@ -301,7 +301,7 @@ export const translations = {
     "withdraw.receivable": "المبلغ الصافي الذي ستستلمه",
     "withdraw.submit": "تقديم طلب السحب",
     "withdraw.submitting": "جارٍ تقديم الطلب...",
-    "withdraw.minNotice": "الحد الأدنى للسحب هو 5 دولارات.",
+    "withdraw.minNotice": "الحد الأدنى للسحب:",
     "withdraw.instantNotice": "تتم معالجة السحوبات يومياً بسرعة وأمان.",
     "withdraw.history": "سجل عمليات السحب",
     "withdraw.selectNetwork": "اختر شبكة السحب",

@@ -79,7 +79,7 @@ function WithdrawalPage() {
     }
   }, [boundAddress]);
 
-  const minWithdrawal = info?.settings?.minWithdrawal ?? 6;
+  const minWithdrawal = Math.max(6, Number(info?.settings?.minWithdrawal) || 6);
   const feePercent = info?.settings?.feePercent ?? 10;
   const startHour = info?.settings?.startHour ?? "09:00";
   const endHour = info?.settings?.endHour ?? "16:00";

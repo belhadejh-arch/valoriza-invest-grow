@@ -1268,7 +1268,7 @@ app.get("/api/app/withdrawal", async (request, response, next) => {
       canWithdraw,
       disabledReason,
       settings: {
-        minWithdrawal: number(settings.min_withdrawal ?? 6),
+        minWithdrawal: Math.max(6, number(settings.min_withdrawal ?? 6)),
         feePercent: number(settings.withdrawal_fee_percent ?? 10),
         startHour: settings.withdrawal_start_hour ?? "09:00",
         endHour: settings.withdrawal_end_hour ?? "16:00",
@@ -1333,7 +1333,7 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
       });
     }
 
-    const minimum = number(settings.min_withdrawal ?? 6);
+    const minimum = Math.max(6, number(settings.min_withdrawal ?? 6));
     if (value < minimum)
       return response.json({ ok: false, reason: "BELOW_MIN_WITHDRAWAL", minWithdrawal: minimum });
     const fee = Math.round(value * number(settings.withdrawal_fee_percent ?? 10)) / 100;
