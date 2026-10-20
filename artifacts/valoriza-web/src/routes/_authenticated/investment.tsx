@@ -6,12 +6,9 @@ import { toast } from "sonner";
 import {
   Calendar,
   Check,
-  CheckCircle2,
   Clock,
-  Coins,
   Crown,
   Lock,
-  ShieldCheck,
   Sparkles,
   Timer,
   TrendingUp,
@@ -28,7 +25,6 @@ import {
   purchaseVip,
   investInSavingsFund,
 } from "@/lib/valoriza-pages.functions";
-import { getMockInvestmentData } from "@/lib/mock-data";
 import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/investment")({
@@ -47,11 +43,29 @@ export const Route = createFileRoute("/_authenticated/investment")({
 });
 
 const money = (n: number) => `$${n.toFixed(2)}`;
+const vipMoney = (n: number) =>
+  `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(n)}`;
+
+type InvestmentPageData = {
+  wallet?: { balance?: number } | null;
+  walletBalance?: number;
+  profile?: {
+    vipLevel?: number;
+    vip_level?: number;
+    trialActive?: boolean;
+    trial_active?: boolean;
+  } | null;
+  funds?: any[];
+  packages?: any[];
+  vipPackages?: any[];
+  userInvestments?: any[];
+  investments?: any[];
+};
 
 function InvestmentPage() {
   const qc = useQueryClient();
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<"funds" | "vip">("funds");
+  const [activeTab, setActiveTab] = useState<"funds" | "vip">("vip");
   const [selectedFund, setSelectedFund] = useState<any | null>(null);
   const [investAmount, setInvestAmount] = useState<string>("5");
 
@@ -60,10 +74,11 @@ function InvestmentPage() {
   const buy = useServerFn(purchaseVip);
   const invest = useServerFn(investInSavingsFund);
 
-  const { data = getMockInvestmentData() } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery<InvestmentPageData>({
     queryKey: ["investment"],
-    queryFn: () => fetchData(),
-    initialData: getMockInvestmentData,
+    queryFn: async () => (await fetchData()) as InvestmentPageData,
+    staleTime: 30_000,
+    refetchOnMount: "always",
   });
 
   const balance = data?.wallet?.balance ?? (data as any)?.walletBalance ?? 0;
@@ -213,7 +228,9 @@ function InvestmentPage() {
               <p className="text-xs text-muted-foreground font-bold">
                 {t("investment.availableBalance")}
               </p>
-              <p className="text-2xl font-black text-gold-gradient">{money(balance)}</p>
+                <p className="text-2xl font-black text-gold-gradient">
+                  {isLoading || isError ? "—" : money(balance)}
+                </p>
             </div>
           </div>
 
@@ -221,13 +238,31 @@ function InvestmentPage() {
             <p className="text-xs text-muted-foreground">{t("investment.activeVip")}</p>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface border border-gold px-3 py-1 text-xs font-black text-gold shadow-sm mt-0.5">
               <Crown className="h-3.5 w-3.5 fill-gold text-gold" />
-              <span>VIP {userVipLevel}</span>
+              <span>{isLoading || isError ? "—" : `VIP ${userVipLevel}`}</span>
             </span>
           </div>
         </section>
 
+        {isError && (
+          <div
+            role="alert"
+            className="flex flex-col gap-2 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-center sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p className="text-sm font-bold text-foreground">
+              تعذّر تحميل بيانات الاستثمار الحقيقية. أعد المحاولة بعد التأكد من اتصال الخادم.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="shrink-0 rounded-xl border border-border bg-surface px-4 py-2 text-xs font-black text-foreground"
+            >
+              إعادة المحاولة
+            </button>
+          </div>
+        )}
+
         {/* Trial Banner if VIP 0 */}
-        {!isTrialActive && userVipLevel === 0 && (
+        {!!data && !isTrialActive && userVipLevel === 0 && (
           <div className="rounded-2xl border border-cyan-glow/40 bg-surface/80 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
             <div className="flex items-center gap-3 text-start">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-cyan-glow/20 text-cyan-glow">
@@ -407,98 +442,106 @@ function InvestmentPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {packagesList.map((pkg: any) => {
-                const isCurrent = userVipLevel === pkg.level;
-                const isOwned = userVipLevel >= pkg.level;
-                const isLocked = !pkg.isActive || pkg.level === 7;
-
-                const vipColors: Record<number, string> = {
-                  1: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
-                  2: "border-sky-500/40 text-sky-400 bg-sky-500/10",
-                  3: "border-purple-500/40 text-purple-400 bg-purple-500/10",
-                  4: "border-gold/50 text-gold bg-gold/10",
-                  5: "border-pink-500/40 text-pink-400 bg-pink-500/10",
-                  6: "border-teal-500/40 text-teal-400 bg-teal-500/10",
-                  7: "border-zinc-500/40 text-zinc-400 bg-zinc-500/10",
-                };
-
-                const colorClass = vipColors[pkg.level] || "border-border text-foreground";
-
-                return (
+            {isLoading ? (
+              <div className="grid grid-cols-2 gap-3 min-[430px]:grid-cols-4">
+                {Array.from({ length: 7 }, (_, index) => (
                   <div
-                    key={pkg.id}
-                    className={`surface-card p-4 transition-all relative overflow-hidden flex flex-col justify-between gap-3 ${
-                      isCurrent
-                        ? "border-cyan-glow shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
-                        : isLocked
-                          ? "opacity-60"
-                          : "hover:border-border"
-                    }`}
-                  >
-                    {isCurrent && (
-                      <span className="absolute top-2 left-2 rtl:left-auto rtl:right-2 rounded-full bg-cyan-glow text-navy-deep px-2.5 py-0.5 text-[10px] font-black shadow">
-                        {t("investment.currentTier")}
-                      </span>
-                    )}
+                    key={index}
+                    className="surface-card h-48 animate-pulse rounded-2xl border border-border/60"
+                  />
+                ))}
+              </div>
+            ) : packagesList.length === 0 ? (
+              <div className="surface-card rounded-2xl p-6 text-center text-sm font-bold text-muted-foreground">
+                {isError
+                  ? "تعذّر جلب باقات VIP من الخادم."
+                  : "لا توجد باقات VIP متاحة حالياً."}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2.5 min-[430px]:grid-cols-4 sm:gap-4">
+                {packagesList.map((pkg: any) => {
+                  const isCurrent = userVipLevel === pkg.level;
+                  const isOwned = userVipLevel >= pkg.level;
+                  const isLocked = !pkg.isActive && !isOwned;
 
-                    <div className="flex items-start justify-between gap-3 text-start">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${colorClass} shadow-glow`}
-                        >
-                          <Crown className="h-6 w-6" />
-                        </div>
+                  const vipColors: Record<number, string> = {
+                    1: "border-emerald-500/40 text-emerald-400 bg-emerald-500/10",
+                    2: "border-sky-500/40 text-sky-400 bg-sky-500/10",
+                    3: "border-purple-500/40 text-purple-400 bg-purple-500/10",
+                    4: "border-gold/50 text-gold bg-gold/10",
+                    5: "border-pink-500/40 text-pink-400 bg-pink-500/10",
+                    6: "border-teal-500/40 text-teal-400 bg-teal-500/10",
+                    7: "border-zinc-500/40 text-zinc-400 bg-zinc-500/10",
+                  };
 
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-black text-foreground">{pkg.name}</h3>
-                            {isLocked && (
-                              <span className="rounded-full bg-surface border border-border px-2 py-0.5 text-[10px] font-bold text-muted-foreground flex items-center gap-1">
-                                <Lock className="h-2.5 w-2.5" /> {t("investment.locked")}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {t("investment.dailyProfit")}:{" "}
-                            <span className="font-black text-gold">{money(pkg.dailyProfit)}</span> •{" "}
-                            {pkg.dailyTasks} {t("investment.tasksCount")}
-                          </p>
-                          <p className="text-[11px] text-cyan-glow mt-0.5">
-                            {t("investment.taskReward")}: {money(pkg.taskReward)}
-                          </p>
-                        </div>
+                  const colorClass = vipColors[pkg.level] || "border-border text-foreground";
+
+                  return (
+                    <div
+                      key={pkg.id}
+                      className={`surface-card relative flex min-h-52 flex-col gap-2 overflow-hidden rounded-2xl border p-2.5 text-center transition-all sm:min-h-60 sm:p-3 ${
+                        isCurrent
+                          ? "border-cyan-glow shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
+                          : isLocked
+                            ? "opacity-65"
+                            : "hover:-translate-y-0.5 hover:border-gold/60"
+                      }`}
+                    >
+                      {isCurrent && (
+                        <span className="absolute right-1 top-1 rounded-full bg-cyan-glow px-1.5 py-0.5 text-[8px] font-black text-navy-deep shadow sm:right-2 sm:top-2 sm:px-2 sm:text-[10px]">
+                          {t("investment.currentTier")}
+                        </span>
+                      )}
+
+                      <div
+                        className={`mt-1 inline-flex min-h-8 items-center justify-center gap-1 self-center rounded-full border px-2 py-1 sm:mt-2 ${colorClass}`}
+                      >
+                        <Crown className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
+                        <h3 className="text-xs font-black sm:text-sm">{pkg.name}</h3>
                       </div>
 
-                      <div className="text-end shrink-0">
-                        <span className="text-xs text-muted-foreground block">
+                      {isLocked && (
+                        <span className="flex items-center justify-center gap-1 text-[9px] font-bold text-muted-foreground sm:text-[10px]">
+                          <Lock className="h-3 w-3" /> {t("investment.locked")}
+                        </span>
+                      )}
+
+                      <div className="rounded-xl border border-gold/25 bg-gold/5 px-1.5 py-1.5">
+                        <span className="block text-[9px] font-bold text-muted-foreground sm:text-[10px]">
                           {t("investment.price")}
                         </span>
-                        <span className="text-xl font-black text-gold-gradient">
-                          {money(pkg.price)}
+                        <span className="block text-base font-black text-gold-gradient sm:text-xl">
+                          {vipMoney(pkg.price)}
                         </span>
                       </div>
-                    </div>
 
-                    <div className="pt-3 border-t border-border/50 flex items-center justify-between gap-2">
-                      <div className="text-[11px] text-muted-foreground">
-                        {t("investment.validityYear")}
+                      <div className="rounded-xl border border-border/60 bg-surface/70 px-1 py-1.5">
+                        <span className="block text-[9px] font-bold text-muted-foreground sm:text-[10px]">
+                          {t("investment.dailyProfit")}
+                        </span>
+                        <span className="block text-sm font-black text-gold sm:text-lg">
+                          {vipMoney(pkg.dailyProfit)}
+                        </span>
+                      </div>
+
+                      <div className="mt-auto text-[9px] font-bold text-muted-foreground sm:text-[11px]">
+                        {pkg.dailyTasks} {t("investment.tasksCount")}
                       </div>
 
                       {isLocked ? (
                         <button
                           type="button"
                           disabled
-                          className="rounded-xl border border-border/60 bg-surface/50 px-4 py-2 text-xs font-bold text-muted-foreground cursor-not-allowed"
+                          className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-border/60 bg-surface/50 px-1.5 py-2 text-[9px] font-bold text-muted-foreground cursor-not-allowed sm:text-xs"
                         >
-                          {t("investment.unavailable")}
+                          <Lock className="h-3 w-3" /> {t("investment.unavailable")}
                         </button>
                       ) : isCurrent ? (
-                        <span className="rounded-xl bg-success/20 border border-success/40 px-4 py-1.5 text-xs font-bold text-success flex items-center gap-1">
+                        <span className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-success/40 bg-success/20 px-1.5 py-2 text-[9px] font-bold text-success sm:text-xs">
                           <Check className="h-3.5 w-3.5" /> {t("investment.activePackage")}
                         </span>
                       ) : isOwned ? (
-                        <span className="rounded-xl bg-surface border border-border px-4 py-1.5 text-xs font-bold text-muted-foreground">
+                        <span className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-border bg-surface px-1.5 py-2 text-[9px] font-bold text-muted-foreground sm:text-xs">
                           {t("investment.previouslyOwned")}
                         </span>
                       ) : (
@@ -506,18 +549,18 @@ function InvestmentPage() {
                           type="button"
                           disabled={buyMutation.isPending}
                           onClick={() => buyMutation.mutate({ id: pkg.id, level: pkg.level })}
-                          className="rounded-xl brand-gradient px-4 sm:px-5 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
+                          className="mt-1 inline-flex w-full items-center justify-center rounded-xl brand-gradient px-1.5 py-2 text-[9px] font-black text-primary-foreground shadow-glow active:scale-95 transition-all sm:text-xs"
                         >
                           {buyMutation.isPending
                             ? t("common.loading")
-                            : `${t("investment.upgradeTo")} ${pkg.name}`}
+                            : t("investment.investNow")}
                         </button>
                       )}
-                    </div>
                   </div>
                 );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         )}
       </main>

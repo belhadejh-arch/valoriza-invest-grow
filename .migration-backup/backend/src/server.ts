@@ -999,7 +999,7 @@ app.get("/api/app/investment", async (request, response, next) => {
         "SELECT i.*, f.code, f.name_ar, f.name_en FROM investments i JOIN investment_funds f ON f.id = i.fund_id WHERE i.user_id = $1 ORDER BY i.created_at DESC",
         [user.id],
       ),
-      query("SELECT * FROM vip_packages WHERE is_active = true ORDER BY level"),
+      query("SELECT * FROM vip_packages WHERE is_active = true OR level = 7 ORDER BY level"),
       query(
         "SELECT vip_level,trial_active,trial_started_at,trial_expires_at FROM profiles WHERE id = $1",
         [user.id],
@@ -1040,7 +1040,7 @@ app.get("/api/app/vip-plans", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const [plans, profile, wallet] = await Promise.all([
-      query("SELECT * FROM vip_packages WHERE is_active=true ORDER BY level"),
+      query("SELECT * FROM vip_packages WHERE is_active=true OR level=7 ORDER BY level"),
       query(
         "SELECT vip_level,trial_active,trial_started_at,trial_expires_at FROM profiles WHERE id=$1",
         [user.id],
@@ -2611,22 +2611,45 @@ async function initDatabase() {
     const vipCount = await query("SELECT count(*)::int as count FROM vip_packages");
     if ((vipCount.rows[0]?.count ?? 0) === 0) {
       const vip = [
-        [1, "VIP 1", 13, 0.5, 2, 0.25, "green"],
-        [2, "VIP 2", 27, 1.2, 3, 0.4, "blue"],
-        [3, "VIP 3", 61, 2.9, 4, 0.725, "purple"],
-        [4, "VIP 4", 131, 6.4, 5, 1.28, "gold"],
-        [5, "VIP 5", 273, 13.5, 6, 2.25, "pink"],
-        [6, "VIP 6", 403, 20, 7, 2.857, "emerald"],
-        [7, "VIP 7", 540, 26.85, 8, 3.356, "silver"],
+        [1, "VIP 1", 13, 0.5, 2, 0.25, "green", true],
+        [2, "VIP 2", 27, 1.2, 3, 0.4, "blue", true],
+        [3, "VIP 3", 61, 2.9, 4, 0.725, "purple", true],
+        [4, "VIP 4", 131, 6.45, 5, 1.29, "gold", true],
+        [5, "VIP 5", 273, 13.5, 6, 2.25, "pink", true],
+        [6, "VIP 6", 403, 20, 7, 2.857, "emerald", true],
+        [7, "VIP 7", 540, 26.85, 8, 3.356, "silver", false],
       ];
       for (const plan of vip) {
         await query(
-          `INSERT INTO vip_packages (level, name, price, daily_profit, daily_tasks, task_reward, accent)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (level) DO NOTHING`,
+          `INSERT INTO vip_packages (level, name, price, daily_profit, daily_tasks, task_reward, accent, is_active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (level) DO NOTHING`,
           plan,
         );
       }
     }
+
+    await withTransaction(async (client) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS valoriza_data_migrations (
+          name text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      const migration = await client.query(
+        `INSERT INTO valoriza_data_migrations (name)
+         VALUES ('vip-plan-reference-values-v1')
+         ON CONFLICT (name) DO NOTHING
+         RETURNING name`,
+      );
+      if (migration.rowCount) {
+        await client.query(
+          `UPDATE vip_packages
+           SET daily_profit = 6.45, task_reward = 1.29
+           WHERE level = 4 AND daily_profit = 6.4 AND task_reward = 1.28`,
+        );
+        await client.query("UPDATE vip_packages SET is_active = false WHERE level = 7");
+      }
+    });
 
     // Seed default platform settings if empty or missing new settings
     const settings: [string, string, string, boolean][] = [
