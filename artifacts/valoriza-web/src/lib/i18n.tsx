@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { storedLanguage, translateLegacyText } from "./legacy-i18n";
 
-export type LanguageCode = "ar" | "en" | "fr" | "es";
+export type LanguageCode = "ar" | "en";
 
 export interface LanguageOption {
   code: LanguageCode;
@@ -12,6 +13,7 @@ export interface LanguageOption {
 
 export const LANGUAGES: LanguageOption[] = [
   { code: "ar", name: "العربية", nativeName: "العربية", flag: "🇸🇦", dir: "rtl" },
+  { code: "en", name: "English", nativeName: "English", flag: "🇬🇧", dir: "ltr" },
 ];
 
 export const translations = {
@@ -113,6 +115,24 @@ export const translations = {
     "home.totalPayouts": "إجمالي السحوبات المدفوعة",
     "home.recentTransactions": "أحدث العمليات",
     "home.upgradeVip": "ترقية الباقة",
+    "home.savingsFund": "صندوق التوفير",
+    "home.savingsDesc": "ادّخر اليوم واستلم رأس المال مع الربح عند الاستحقاق",
+    "home.support247": "دعم متواصل على مدار الساعة",
+    "home.minWithdraw": "الحد الأدنى للسحب: 6 دولارات",
+    "home.minDeposit": "الحد الأدنى للإيداع: 10 دولارات",
+    "home.availableBalance": "الرصيد المتاح",
+    "home.claimedDaily": "تم استلام المكافأة اليومية",
+    "home.profits": "الأرباح",
+    "home.invested": "المبلغ المستثمر",
+    "home.accountBalance": "رصيد الحساب",
+    "home.support": "خدمة العملاء",
+    "wheel.title": "عجلة الحظ",
+    "wheel.subtitle": "أدر العجلة واربح جوائز نقدية",
+    "wheel.spinsLeft": "المحاولات المتبقية",
+    "wheel.spinBtn": "أدر العجلة",
+    "wheel.spinning": "جارٍ التدوير...",
+    "wheel.spinsCost": "تكلفة المحاولة",
+    "wheel.noSpins": "لا توجد محاولات متاحة",
 
     // Investment
     "invest.title": "باقات الاستثمار وصناديق التوفير",
@@ -417,14 +437,31 @@ export const translations = {
     "status.not_started": "لم يبدأ بعد",
   },
   en: {} as Record<string, string>,
-  fr: {} as Record<string, string>,
-  es: {} as Record<string, string>,
 };
 
-// Guarantee 100% Arabic unification across all dictionaries
-translations.en = translations.ar;
-translations.fr = translations.ar;
-translations.es = translations.ar;
+translations.en = Object.fromEntries(
+  Object.entries(translations.ar).map(([key, value]) => [key, translateLegacyText(value, [], "en")]),
+);
+Object.assign(translations.en, {
+  "home.savingsFund": "Savings fund",
+  "home.savingsDesc": "Save today and receive your capital and profit at maturity",
+  "home.support247": "Support around the clock",
+  "home.minWithdraw": "Minimum withdrawal: $6",
+  "home.minDeposit": "Minimum deposit: $10",
+  "home.availableBalance": "Available balance",
+  "home.claimedDaily": "Daily reward claimed",
+  "home.profits": "Profits",
+  "home.invested": "Invested",
+  "home.accountBalance": "Account balance",
+  "home.support": "Customer support",
+  "wheel.title": "Lucky wheel",
+  "wheel.subtitle": "Spin the wheel and win cash prizes",
+  "wheel.spinsLeft": "Spins remaining",
+  "wheel.spinBtn": "Spin the wheel",
+  "wheel.spinning": "Spinning...",
+  "wheel.spinsCost": "Cost per spin",
+  "wheel.noSpins": "No spins available",
+});
 
 export type TranslationKey = keyof typeof translations.ar | (string & {});
 
@@ -443,40 +480,33 @@ const I18nContext = createContext<I18nContextType | null>(null);
 const STORAGE_KEY = "valoriza_language";
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<LanguageCode>("ar");
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, "ar");
-    } catch {
-      // ignore
-    }
-    setLangState("ar");
-  }, []);
-
-  const currentLanguage = LANGUAGES[0]!;
-  const dir = "rtl" as const;
-  const isRTL = true;
+  const [lang] = useState<LanguageCode>(storedLanguage);
+  const currentLanguage = LANGUAGES.find((option) => option.code === lang)!;
+  const dir = currentLanguage.dir;
+  const isRTL = dir === "rtl";
 
   useEffect(() => {
     if (typeof document !== "undefined") {
-      document.documentElement.lang = "ar";
-      document.documentElement.dir = "rtl";
+      document.documentElement.lang = lang;
+      document.documentElement.dir = dir;
     }
-  }, []);
+  }, [lang, dir]);
 
-  const setLang = (_newLang: LanguageCode) => {
-    setLangState("ar");
+  const setLang = (newLang: LanguageCode) => {
+    if (!LANGUAGES.some((option) => option.code === newLang) || newLang === lang) return;
     try {
-      localStorage.setItem(STORAGE_KEY, "ar");
+      localStorage.setItem(STORAGE_KEY, newLang);
     } catch {
-      // ignore
+      return;
     }
+    // Reinitialize legacy module-level labels as well as React context, so the
+    // entire application switches together instead of leaving stale mixed copy.
+    window.location.reload();
   };
 
   const t = (key: TranslationKey, fallback?: string): string => {
-    const fallbackDict = translations.ar as Record<string, string>;
-    return fallbackDict[key] || fallback || key;
+    const dictionary = translations[lang] as Record<string, string>;
+    return dictionary[key] || (fallback ? translateLegacyText(fallback, [], lang) : key);
   };
 
   return (

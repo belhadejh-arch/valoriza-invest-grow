@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
+import legacyI18n from './legacy-i18n-plugin';
 
 const rawPort = process.env.PORT;
 
@@ -32,6 +33,7 @@ const outputDir = process.env.VERCEL_OUTPUT_DIR ?? 'dist/public';
 export default defineConfig({
   base: basePath,
   plugins: [
+    legacyI18n(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),

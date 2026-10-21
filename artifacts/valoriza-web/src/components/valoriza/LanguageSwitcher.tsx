@@ -1,4 +1,4 @@
-import { Globe, Check } from "lucide-react";
+import { Globe } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export function LanguageSwitcher({
@@ -8,26 +8,22 @@ export function LanguageSwitcher({
   compact?: boolean;
   className?: string;
 }) {
-  const { currentLanguage } = useI18n();
+  const { lang, setLang, languages, t } = useI18n();
 
   return (
     <div className={`relative inline-block text-right ${className}`}>
-      <div
-        id="language-switcher-indicator"
-        title="اللغة الرسمية الموحدة: العربية"
-        aria-label="اللغة الموحدة: العربية"
+      <label
+        id="language-switcher"
+        title={t("common.language")}
         className="flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-bold text-foreground shadow-sm select-none"
       >
         <Globe className="h-3.5 w-3.5 text-cyan-glow" />
-        <span className="text-[13px] leading-none">{currentLanguage.flag}</span>
-        {!compact && (
-          <span className="font-bold text-foreground">{currentLanguage.nativeName}</span>
-        )}
-        <span className="hidden sm:inline-flex items-center gap-0.5 rounded-full bg-cyan-glow/15 px-1.5 py-0.2 text-[9px] font-bold text-cyan-glow">
-          <Check className="h-2.5 w-2.5" />
-          <span>موحدة</span>
-        </span>
-      </div>
+        <select aria-label={t("common.language")} value={lang}
+          onChange={(event) => setLang(event.target.value as "ar" | "en")}
+          className={`bg-transparent text-foreground outline-none cursor-pointer ${compact ? "max-w-20" : ""}`}>
+          {languages.map((language) => <option className="bg-background text-foreground" key={language.code} value={language.code}>{language.nativeName}</option>)}
+        </select>
+      </label>
     </div>
   );
 }

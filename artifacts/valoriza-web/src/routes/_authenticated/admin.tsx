@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -29,6 +29,7 @@ import { AdminWheelTab } from "@/components/valoriza/admin/AdminWheelTab";
 import { AdminSettingsTab } from "@/components/valoriza/admin/AdminSettingsTab";
 import { AdminBroadcastTab } from "@/components/valoriza/admin/AdminBroadcastTab";
 import { AdminAuditLogsTab } from "@/components/valoriza/admin/AdminAuditLogsTab";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   head: () => ({
@@ -41,9 +42,21 @@ export const Route = createFileRoute("/_authenticated/admin")({
 });
 
 function AdminDashboardPage() {
+  const { dir } = useI18n();
   const [activeTab, setActiveTab] = useState<string>("overview");
   const queryClient = useQueryClient();
   const [isRefreshingGlobal, setIsRefreshingGlobal] = useState(false);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) {
+        void queryClient.invalidateQueries({
+          predicate: (query) => String(query.queryKey[0]).startsWith("admin-"),
+          refetchType: "active",
+        });
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [queryClient]);
 
   const handleGlobalRefresh = async () => {
     setIsRefreshingGlobal(true);
@@ -79,7 +92,7 @@ function AdminDashboardPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-navy-night pb-16 text-foreground" dir="rtl">
+    <div className="min-h-screen bg-navy-night pb-16 text-foreground" dir={dir}>
       {/* Admin Top Bar */}
       <header className="sticky top-0 z-40 border-b border-border/80 bg-navy-deep/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">

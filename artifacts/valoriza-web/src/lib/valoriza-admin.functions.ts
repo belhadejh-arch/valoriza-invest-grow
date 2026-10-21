@@ -1,14 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { serverBackendRequest } from "@/lib/backend-server";
 
-const adminGet = (path: string) =>
-  createServerFn({ method: "GET" }).handler(() => serverBackendRequest(path));
-const adminPost = <T>(path: string) =>
-  createServerFn({ method: "POST" })
-    .validator((data: T) => data)
-    .handler(({ data }) =>
-      serverBackendRequest(path, { method: "POST", body: JSON.stringify(data) }),
-    );
+const adminGet = <T = any[]>(path: string) => () => serverBackendRequest<T>(path);
+// Both React Query mutations (plain input) and server-function callers ({data})
+// are used by the existing admin screens.
+const adminPost = <T>(path: string) => {
+  function request(input: { data: T }): Promise<any>;
+  function request(input: T): Promise<any>;
+  function request(input: T | { data: T }): Promise<any> {
+    const data = input && typeof input === "object" && "data" in input ? input.data : input;
+    return serverBackendRequest<any>(path, { method: "POST", body: JSON.stringify(data) });
+  }
+  return request;
+};
 
 export interface AdminOverviewData {
   usersCount: number;
@@ -32,6 +36,9 @@ export const getAdminOverview = createServerFn({ method: "GET" }).handler(() =>
   serverBackendRequest<AdminOverviewData>("/api/admin/overview"),
 );
 export const getAdminUsers = adminGet("/api/admin/users");
+export const resetUserPassword = adminPost<{ userId: string; newPassword: string }>(
+  "/api/admin/users/password",
+);
 export const toggleUserBlock = adminPost<{ userId: string; isBlocked: boolean }>(
   "/api/admin/users/block",
 );
@@ -60,12 +67,14 @@ export const reviewDeposit = adminPost<{
   depositId: string;
   action: "approve" | "reject";
   rejectReason?: string;
+  adminNote?: string;
 }>("/api/admin/deposits/review");
 export const getAdminWithdrawals = adminGet("/api/admin/withdrawals");
 export const reviewWithdrawal = adminPost<{
   withdrawalId: string;
   action: "approve" | "reject";
   rejectReason?: string;
+  adminNote?: string;
 }>("/api/admin/withdrawals/review");
 export const getAdminFunds = adminGet("/api/admin/funds");
 export const saveInvestmentFund = adminPost<Record<string, unknown>>("/api/admin/funds/save");
@@ -78,7 +87,7 @@ export const toggleTaskStatus = adminPost<{ taskId: string; isActive: boolean }>
 );
 export const getAdminWheelPrizes = adminGet("/api/admin/wheel");
 export const saveWheelPrize = adminPost<Record<string, unknown>>("/api/admin/wheel/save");
-export const getAdminSettings = adminGet("/api/admin/settings");
+export const getAdminSettings = adminGet<Record<string, any>>("/api/admin/settings");
 export const saveAdminSettings = adminPost<Record<string, unknown>>("/api/admin/settings/save");
 export const broadcastNotification = adminPost<Record<string, unknown>>("/api/admin/notifications");
 export const getAdminAuditLogs = adminGet("/api/admin/audit-logs");

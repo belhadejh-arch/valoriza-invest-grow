@@ -22,6 +22,7 @@ import {
   Link as LinkIcon,
   Check,
   Save,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -32,12 +33,30 @@ import {
   toggleUserWithdrawal,
   updateUserWithdrawalAddress,
   addFreeWheelSpin,
+  resetUserPassword,
 } from "@/lib/valoriza-admin.functions";
 
 export function AdminUsersTab() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const passwordBytes = new TextEncoder().encode(newPassword).length;
+  const validPassword = newPassword.length >= 8 && passwordBytes <= 72 && newPassword === confirmPassword;
+  const passwordMutation = useMutation({
+    mutationFn: ({ userId, newPassword }: { userId: string; newPassword: string }) =>
+      resetUserPassword({ data: { userId, newPassword } }),
+    onSuccess: () => {
+      setPasswordOpen(false);
+      setNewPassword("");
+      setConfirmPassword("");
+      toast.success("تم تغيير كلمة المرور وإلغاء جلسات المستخدم السابقة.");
+      queryClient.invalidateQueries({ queryKey: ["admin-audit-logs"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   // Modals state
   const [previewUserModalOpen, setPreviewUserModalOpen] = useState(false);
@@ -262,7 +281,7 @@ export function AdminUsersTab() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface/50">
-          <table className="w-full text-right text-xs">
+          <table className="w-full text-start text-xs">
             <thead className="border-b border-border/80 bg-surface/80 text-[11px] font-bold text-muted-foreground">
               <tr>
                 <th className="p-3">المستخدم</th>
@@ -300,13 +319,13 @@ export function AdminUsersTab() {
                     <span
                       title="عدد أعضاء الفريق الحاصلين على المستويات المميزة من ١ إلى ٧ فقط"
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-black border transition-all ${
-                        (user.teamVipCount ?? user.teamCount ?? 0) > 0
+                        (user.teamVipCount ?? 0) > 0
                           ? "bg-cyan-glow/15 border-cyan-glow/40 text-cyan-glow"
                           : "bg-surface border-border/80 text-muted-foreground"
                       }`}
                     >
                       <Users className="h-3 w-3" />
-                      <span>{user.teamVipCount ?? user.teamCount ?? 0}</span>
+                      <span>{user.teamVipCount ?? 0}</span>
                       <span className="text-[9px] font-normal opacity-75">عضو مميز</span>
                     </span>
                   </td>
@@ -354,7 +373,7 @@ export function AdminUsersTab() {
                     ${user.totalDeposited.toFixed(2)}
                   </td>
                   <td className="p-3 font-bold text-amber-400/90 text-xs">
-                    ${(user.userWithdrawn ?? user.totalWithdrawn ?? 0).toFixed(2)}
+                    ${(user.userWithdrawn ?? 0).toFixed(2)}
                   </td>
 
                   {/* Wheel Spins with Quick Add Button */}
@@ -385,6 +404,20 @@ export function AdminUsersTab() {
                   </td>
                   <td className="p-3">
                     <div className="flex items-center justify-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setNewPassword("");
+                          setConfirmPassword("");
+                          setPasswordOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-cyan-glow/40 bg-surface p-1.5 text-cyan-glow hover:bg-cyan-glow/10 whitespace-nowrap"
+                        title="تغيير كلمة السر"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                        <span>تغيير كلمة السر</span>
+                      </button>
                       {/* Preview User Account Button */}
                       <button
                         type="button"
@@ -464,6 +497,43 @@ export function AdminUsersTab() {
       )}
 
       {/* USER ACCOUNT PREVIEW MODAL (معاينة حساب المستخدم) */}
+      {passwordOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-password-title"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (validPassword && !passwordMutation.isPending) {
+                passwordMutation.mutate({ userId: selectedUser.id, newPassword });
+              }
+            }}
+            className="w-full max-w-md space-y-4 rounded-3xl border border-cyan-glow/40 bg-navy-deep p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h3 id="admin-password-title" className="font-bold">تغيير كلمة السر</h3>
+              <button type="button" aria-label="إغلاق" disabled={passwordMutation.isPending} onClick={() => {
+                setPasswordOpen(false); setNewPassword(""); setConfirmPassword("");
+              }}><X className="h-5 w-5" /></button>
+            </div>
+            <p className="text-sm">{selectedUser.username}</p>
+            <p className="break-all text-xs text-muted-foreground" dir="ltr">{selectedUser.email}</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">سيتم تسجيل خروج المستخدم من جلساته السابقة. لا يمكن عرض كلمة السر الحالية.</p>
+            <label className="block text-xs">كلمة المرور الجديدة
+              <input autoFocus autoComplete="new-password" type="password" minLength={8} maxLength={72} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="mt-2 w-full rounded-xl border border-border bg-surface p-3" />
+            </label>
+            <label className="block text-xs">تأكيد كلمة المرور الجديدة
+              <input autoComplete="new-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="mt-2 w-full rounded-xl border border-border bg-surface p-3" />
+            </label>
+            <p className="text-xs text-muted-foreground">ثمانية أحرف على الأقل، وبحد أقصى 72 بايتًا.</p>
+            {confirmPassword && newPassword !== confirmPassword && <p className="text-xs text-danger">كلمتا المرور غير متطابقتين</p>}
+            <button type="submit" disabled={!validPassword || passwordMutation.isPending} className="w-full rounded-xl brand-gradient p-3 text-sm font-bold text-primary-foreground disabled:opacity-50">
+              {passwordMutation.isPending ? "جارٍ الحفظ..." : "حفظ كلمة المرور"}
+            </button>
+          </form>
+        </div>
+      )}
       {previewUserModalOpen && selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
           <div className="w-full max-w-lg rounded-3xl border border-cyan-glow/40 bg-navy-deep p-6 shadow-2xl my-6">

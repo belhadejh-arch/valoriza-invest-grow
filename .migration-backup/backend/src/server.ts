@@ -300,7 +300,8 @@ async function applyTeamMilestonesForUser(
     `SELECT count(DISTINCT p.id)::int AS count
      FROM referrals r
      JOIN profiles p ON p.id=r.referred_id
-     WHERE r.referrer_id=$1 AND p.vip_level>0`,
+     WHERE r.referrer_id=$1 AND r.level=1 AND p.vip_level BETWEEN 1 AND 7
+       AND (p.vip_expires_at IS NULL OR p.vip_expires_at > now())`,
     [userId],
   );
   const qualifiedMembers = Number(count.rows[0]?.count ?? 0);
@@ -1676,7 +1677,7 @@ app.get("/api/app/team", async (request, response, next) => {
     ] = await Promise.all([
       query("SELECT id,username,email,referral_code,vip_level FROM profiles WHERE id=$1", [user.id]),
       query(
-        `SELECT p.id, p.username, p.email, p.vip_level, p.created_at, r.level
+        `SELECT p.id, p.username, p.email, p.vip_level, p.vip_expires_at, p.created_at, r.level
          FROM referrals r
          JOIN profiles p ON p.id = r.referred_id
          WHERE r.referrer_id = $1
@@ -1765,6 +1766,7 @@ app.get("/api/app/team", async (request, response, next) => {
         email: row.email,
         level: row.level,
         vipLevel: row.vip_level,
+        vipExpiresAt: row.vip_expires_at,
         createdAt: row.created_at,
       })),
       commissions: commissions.rows,

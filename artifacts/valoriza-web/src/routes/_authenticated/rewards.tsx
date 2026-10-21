@@ -13,7 +13,7 @@ import {
   Filter,
   CheckCircle2,
   ArrowRight,
-  TrendingUp,
+  Coins,
   ChevronRight,
   CircleCheck,
 } from "lucide-react";
@@ -29,6 +29,9 @@ import {
 } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
+import giftImg from "@/assets/rewards-gift.webp";
+import teamImg from "@/assets/rewards-team.webp";
+import "./rewards.css";
 
 export const Route = createFileRoute("/_authenticated/rewards")({
   head: () => ({
@@ -42,13 +45,32 @@ export const Route = createFileRoute("/_authenticated/rewards")({
   component: RewardsPage,
 });
 
-const money = (n: number) =>
-  `${new Intl.NumberFormat("ar", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n)} دولار`;
-const milestoneMoney = (n: number) =>
-  `${new Intl.NumberFormat("ar", { maximumFractionDigits: 2 }).format(n)} دولار`;
+const COPY = {
+  ar: {
+    title: "صفحة المكافآت", tagline: "دعوة الأعضاء .. مكافآت حقيقية",
+    intro: "كلما زاد عدد الأعضاء المؤهلين الذين يقومون بتفعيل VIP، ارتفع رصيد مكافآتك!",
+    panelTitle: "مكافآت المدعوين المباشرين الذين فعّلوا VIP", qualified: "المؤهلون",
+    teamError: "تعذر تحميل عدد الأعضاء المؤهلين — أعد المحاولة",
+    settleError: "تعذر تحديث مكافآت الفريق. أعد المحاولة لاحقًا.",
+    when: (n: number) => `عند وصول العدد التراكمي إلى ${n} عضو مؤهل`,
+    getReward: "احصل على مكافأة", remaining: (n: number) => `المتبقي ${n}`,
+    unverified: "تعذر التحقق من التقدم", credited: "أُضيفت المكافأة إلى المحفظة",
+    upgradedTo: "تمت الترقية إلى VIP", vipMax: "أنت في أعلى مستوى VIP", reached: "تم بلوغ هذا المستوى",
+    upgrade: "ترقية", vipLabel: "ترقية VIP", cash: "مكافأة نقدية", myTeam: "فريقي", vipUpgradeRow: "ترقية VIP",
+  },
+  en: {
+    title: "Rewards Page", tagline: "Invite members .. real rewards",
+    intro: "The more qualified members who activate VIP, the higher your reward balance!",
+    panelTitle: "Rewards for direct invitees who activated VIP", qualified: "Qualified",
+    teamError: "Couldn't load qualified members — tap to retry",
+    settleError: "Couldn't refresh team rewards. Please try again later.",
+    when: (n: number) => `When your total reaches ${n} qualified members`,
+    getReward: "Get reward", remaining: (n: number) => `${n} to go`,
+    unverified: "Couldn't verify progress", credited: "Reward added to wallet",
+    upgradedTo: "Upgraded to VIP", vipMax: "You're at the top VIP level", reached: "Level reached",
+    upgrade: "Upgrade", vipLabel: "VIP upgrade", cash: "Cash reward", myTeam: "My team", vipUpgradeRow: "VIP upgrade",
+  },
+};
 
 type RewardSource = "all" | "daily_login" | "task_reward" | "lucky_wheel" | "referral" | "vip";
 
@@ -63,7 +85,13 @@ const TEAM_REWARD_TIERS = [
 ] as const;
 
 function RewardsPage() {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, lang } = useI18n();
+  const isAr = lang === "ar";
+  const c = isAr ? COPY.ar : COPY.en;
+  const nf = (n: number, min: number) =>
+    new Intl.NumberFormat(isAr ? "ar" : "en-US", { minimumFractionDigits: min, maximumFractionDigits: 2 }).format(n);
+  const money = (n: number) => (isAr ? `${nf(n, 2)} دولار` : `$${nf(n, 2)}`);
+  const usd = (n: number) => `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n)}`;
   const qc = useQueryClient();
   const fetchData = useServerFn(getRewardsData);
   const claim = useServerFn(claimDailyLoginReward);
@@ -89,8 +117,9 @@ function RewardsPage() {
 
   useEffect(() => {
     if (settlementQuery.isError) {
-      toast.error("تعذر تحديث مكافآت الفريق. ستظل بيانات الفريق متاحة، أعد المحاولة لاحقًا.");
+      toast.error(c.settleError);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settlementQuery.isError]);
 
   const {
@@ -125,7 +154,11 @@ function RewardsPage() {
     refetchOnMount: "always",
   });
   const qualifiedMembers =
-    teamData?.members?.filter((member) => Number(member.vipLevel ?? 0) > 0).length ?? 0;
+    teamData?.members?.filter((member) => {
+      const v = Number(member.vipLevel ?? 0);
+      return member.level === 1 && v >= 1 && v <= 7 &&
+        (!member.vipExpiresAt || new Date(member.vipExpiresAt).getTime() > Date.now());
+    }).length ?? 0;
 
   const claimMutation = useMutation({
     mutationFn: async () => (await claim()) as { ok: boolean; amount?: number },
@@ -201,12 +234,12 @@ function RewardsPage() {
 
   return (
     <div
-      className="min-h-screen bg-background pb-28 md:pb-12 text-foreground"
+      className="rw-page min-h-screen bg-background pb-28 md:pb-12 text-foreground"
       dir={isRTL ? "rtl" : "ltr"}
     >
       <AppHeader balance={data?.balance} showAbout={true} />
 
-      <main className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="rw-main mx-auto w-full max-w-5xl px-3 sm:px-6 lg:px-8 py-3">
         {/* Top Bento Section (2 Columns on desktop) */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
           {/* Total Rewards Hero Card */}
@@ -289,141 +322,70 @@ function RewardsPage() {
           </section>
         </div>
 
-        <section className="space-y-3" aria-labelledby="team-rewards-title">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-start">
-              <h2
-                id="team-rewards-title"
-                className="flex items-center gap-2 text-base sm:text-lg font-black text-foreground"
-              >
-                <Users className="h-5 w-5 text-cyan-glow" />
-                مكافآت الفريق
-              </h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                زد أعضاء العضوية المميزة في فريقك لفتح المكافآت التالية.
-              </p>
+        <section className="rw-surround space-y-3" aria-labelledby="team-rewards-title">
+          <div className="rw-banner">
+            <img src={giftImg} alt="" className="h-24 w-24 sm:h-28 sm:w-28 shrink-0 object-contain drop-shadow-xl" />
+            <div className="min-w-0 flex-1 text-center">
+              <h1 id="team-rewards-title" className="text-2xl sm:text-3xl font-black text-white">{c.title}</h1>
+              <p className="mt-1 text-sm font-bold text-[#ffe08a]">{c.tagline}</p>
+              <p className="mt-2 text-[11px] sm:text-xs leading-relaxed text-white/85">{c.intro}</p>
             </div>
-            <Link
-              to="/team"
-              className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-cyan-glow/40 bg-cyan-glow/10 px-3 py-2 text-xs font-bold text-cyan-glow hover:bg-cyan-glow/15"
-            >
-              فريقي
-              <ChevronRight className={`h-4 w-4 ${isRTL ? "rotate-180" : ""}`} />
-            </Link>
+            <svg viewBox="0 0 64 72" className="h-16 w-14 shrink-0" fill="none" stroke="#f5c84c" strokeWidth="3" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10 22 L18 6 L32 18 L46 6 L54 22 Z" fill="#f5c84c33" />
+              <circle cx="24" cy="40" r="7" /><path d="M10 66c0-9 6-15 14-15s14 6 14 15" />
+              <circle cx="42" cy="38" r="6" /><path d="M36 51c2-2 4-3 6-3 7 0 12 6 12 14" />
+            </svg>
           </div>
 
-          <div className="surface-card glow-border rounded-3xl p-3 sm:p-4">
-            <div className="mb-3 flex items-center justify-between rounded-2xl border border-border/70 bg-surface/70 px-3 py-2.5 text-xs">
-              <span className="text-muted-foreground">
-                الأعضاء المؤهلون حاليًا
-              </span>
-              <span className="font-black text-cyan-glow">
-                {isTeamLoading ? "…" : isTeamError ? "—" : qualifiedMembers}
+          <div className="rw-panel">
+            <div className="mb-2 flex items-center justify-between gap-2 px-1 text-xs font-bold">
+              <span className="text-white/90">{c.panelTitle}</span>
+              <span className="shrink-0 text-[#ffe08a]">
+                {c.qualified}: {isTeamLoading ? "…" : isTeamError ? "—" : qualifiedMembers}
               </span>
             </div>
             {isTeamError && (
-              <button
-                type="button"
-                onClick={() => void refetchTeam()}
-                className="mb-3 w-full rounded-xl border border-border bg-background/70 px-3 py-2 text-xs font-bold text-muted-foreground hover:text-foreground"
-              >
-                تعذر تحميل عدد الأعضاء المؤهلين من قاعدة البيانات — أعد المحاولة
+              <button type="button" onClick={() => void refetchTeam()} className="mb-2 w-full rounded-xl border border-white/20 bg-white/5 px-3 py-2 text-xs font-bold text-white/80">
+                {c.teamError}
               </button>
             )}
-
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {TEAM_REWARD_TIERS.map((tier) => {
-                const claim = teamData?.milestones?.find((milestone) => milestone.members === tier.members);
+                const claim = teamData?.milestones?.find((m) => m.members === tier.members);
                 const reached = !isTeamError && Boolean(teamData) && qualifiedMembers >= tier.members;
                 const unlocked = reached || Boolean(claim);
-                const progress = isTeamError
-                  ? 0
-                  : Math.min((qualifiedMembers / tier.members) * 100, 100);
-                const isVipReward = tier.kind === "vip";
+                const progress = isTeamError ? 0 : Math.min((qualifiedMembers / tier.members) * 100, 100);
+                const isVip = tier.kind === "vip";
                 const remaining = Math.max(tier.members - qualifiedMembers, 0);
-                const vipAtMaximum =
-                  isVipReward &&
-                  reached &&
-                  !claim &&
-                  teamData?.maxVipLevel != null &&
-                  (teamData.userVipLevel ?? 0) >= teamData.maxVipLevel;
-
+                const vipAtMax = isVip && reached && !claim && teamData?.maxVipLevel != null && (teamData.userVipLevel ?? 0) >= teamData.maxVipLevel;
+                const status = isTeamError ? c.unverified : claim?.kind === "cash" ? c.credited : claim?.kind === "vip" ? `${c.upgradedTo} ${claim.vipLevel ?? ""}` : vipAtMax ? c.vipMax : unlocked ? c.reached : `${c.getReward} · ${c.remaining(remaining)}`;
                 return (
-                  <article
-                    key={tier.members}
-                    className={`relative overflow-hidden rounded-2xl border p-3 transition-colors sm:px-4 ${
-                      isVipReward
-                        ? "border-gold/70 bg-gradient-to-r from-gold/15 via-surface to-surface shadow-[0_0_14px_rgba(245,190,70,0.12)]"
-                        : unlocked
-                          ? "border-cyan-glow/50 bg-cyan-glow/[0.07]"
-                          : "border-border/80 bg-surface/70"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
-                          isVipReward
-                            ? "border-gold/40 bg-gold/15 text-gold"
-                            : "border-cyan-glow/30 bg-cyan-glow/10 text-cyan-glow"
-                        }`}
-                      >
-                        {isVipReward ? <Crown className="h-5 w-5" /> : <Users className="h-5 w-5" />}
-                      </div>
-
-                      <div className="min-w-0 flex-1 text-start">
-                        <p className="text-xs sm:text-sm font-bold text-foreground">
-                          عند وصول العدد التراكمي إلى {tier.members} عضوًا مؤهلًا
-                        </p>
-                        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                          {unlocked ? (
-                            <CircleCheck className="h-3.5 w-3.5 text-emerald-400" />
-                          ) : (
-                            <TrendingUp className="h-3.5 w-3.5 text-cyan-glow" />
-                          )}
-                          <span>
-                            {isTeamError
-                              ? "تعذر التحقق من التقدم"
-                              : claim?.kind === "cash"
-                                ? "أُضيفت المكافأة إلى المحفظة"
-                                : claim?.kind === "vip"
-                                  ? `تمت الترقية إلى المستوى المميز ${claim.vipLevel ?? ""}`
-                                  : vipAtMaximum
-                                    ? "أنت في أعلى مستوى للعضوية المميزة"
-                                    : unlocked
-                                      ? "تم بلوغ هذا المستوى"
-                                      : `المتبقي ${remaining} عضوًا`}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div
-                        className={`shrink-0 rounded-xl border px-3 py-2 text-center ${
-                          isVipReward
-                            ? "border-gold/60 bg-gold/15 text-gold"
-                            : "border-cyan-glow/40 bg-cyan-glow/10 text-foreground"
-                        }`}
-                      >
-                        <p className="text-lg leading-none font-black">
-                          {isVipReward ? "ترقية" : milestoneMoney(tier.reward ?? 0)}
-                        </p>
-                        <p className="mt-1 text-[9px] font-semibold text-muted-foreground">
-                          {isVipReward ? "العضوية المميزة" : "مكافأة نقدية"}
-                        </p>
+                  <article key={tier.members} className={`rw-tier ${isVip ? "rw-tier-vip" : ""}`}>
+                    <img src={teamImg} alt="" className="h-14 w-14 shrink-0 object-contain" />
+                    <div className="min-w-0 flex-1 text-start">
+                      <p className="text-xs sm:text-sm font-black leading-snug text-white">{c.when(tier.members)}</p>
+                      <p className={`mt-1 flex items-center gap-1 text-[11px] font-bold ${unlocked ? "text-emerald-300" : "text-[#7fd8ff]"}`}>
+                        {unlocked && <CircleCheck className="h-3.5 w-3.5" />}{status}
+                      </p>
+                      <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-black/30">
+                        <div className={`h-full rounded-full ${isVip ? "bg-[#f5c84c]" : "bg-[#5fd4ff]"}`} style={{ width: `${progress}%` }} />
                       </div>
                     </div>
-
-                    <div className="mt-3 h-1 overflow-hidden rounded-full bg-background/80">
-                      <div
-                        className={`h-full rounded-full transition-[width] duration-500 ${
-                          isVipReward ? "bg-gold" : "bg-cyan-glow"
-                        }`}
-                        style={{ width: `${progress}%` }}
-                      />
+                    <div className={`rw-pill ${isVip ? "rw-pill-vip" : ""}`}>
+                      <p className="flex items-center justify-center gap-1 text-lg leading-none font-black">
+                        <Coins className="h-4 w-4 text-[#f5c84c]" />
+                        {isVip ? c.upgrade : usd(tier.reward ?? 0)}
+                      </p>
+                      <p className="mt-1 text-[9px] font-bold opacity-80">{isVip ? c.vipLabel : c.cash}</p>
                     </div>
+                    <ChevronRight className={`h-4 w-4 shrink-0 text-white/70 ${isRTL ? "rotate-180" : ""}`} />
                   </article>
                 );
               })}
             </div>
+            <Link to="/team" className="mt-3 flex items-center justify-center gap-1 rounded-xl border border-white/20 bg-white/5 py-2 text-xs font-bold text-white">
+              {c.myTeam}<ChevronRight className={`h-4 w-4 ${isRTL ? "rotate-180" : ""}`} />
+            </Link>
           </div>
         </section>
 
@@ -511,10 +473,10 @@ function RewardsPage() {
                           </span>
                         </div>
                         <p className="mt-1 truncate text-xs font-black text-foreground">
-                          {r.description?.replace(/\bVIP\b/gi, "العضوية المميزة") || info.label}
+                          {r.description || info.label}
                         </p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {new Date(r.createdAt).toLocaleDateString("ar-DZ", {
+                          {new Date(r.createdAt).toLocaleDateString(isAr ? "ar-DZ" : "en-US", {
                             month: "short",
                             day: "numeric",
                             hour: "2-digit",
@@ -527,7 +489,7 @@ function RewardsPage() {
                     <div className="shrink-0 text-end">
                       <span className="text-sm sm:text-base font-black text-emerald-400">
                         {r.source === "vip_upgrade"
-                            ? "ترقية العضوية المميزة"
+                            ? c.vipUpgradeRow
                           : `+${money(r.amount)}`}
                       </span>
                     </div>

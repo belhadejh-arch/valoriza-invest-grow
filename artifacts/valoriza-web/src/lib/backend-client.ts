@@ -1,3 +1,5 @@
+import { localizeResponse, translateLegacyText } from "./legacy-i18n";
+
 export function hasConfiguredBackend(): boolean {
   return true;
 }
@@ -73,9 +75,9 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}): P
   const data = (await response.json().catch(() => ({}))) as T;
   if (!response.ok) {
     const errorMsg = (data as any)?.message || `Request failed with status ${response.status}`;
-    throw new Error(errorMsg);
+    throw new Error(translateLegacyText(errorMsg));
   }
-  return data;
+  return localizeResponse(data);
 }
 
 export function browserBackendUrl() {

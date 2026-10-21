@@ -34,6 +34,7 @@ export interface TeamPageData {
     email?: string | null;
     level: number;
     vipLevel?: number | null;
+    vipExpiresAt?: string | null;
     createdAt?: string;
   }>;
   milestones?: Array<{
