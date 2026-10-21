@@ -219,9 +219,14 @@ CREATE TABLE IF NOT EXISTS rewards (
   source text NOT NULL,
   amount numeric(18,4) NOT NULL,
   description_ar text,
-  reference_id uuid,
+  reference_id text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Transaction IDs can be UUIDs or legacy BIGINTs, so keep reward references
+-- as text to support both without rewriting or discarding existing values.
+ALTER TABLE rewards
+  ALTER COLUMN reference_id TYPE text USING reference_id::text;
 
 CREATE TABLE IF NOT EXISTS referrals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -236,11 +241,62 @@ CREATE TABLE IF NOT EXISTS referral_commissions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   referrer_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   referred_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  source_transaction_id uuid REFERENCES transactions(id),
   level integer NOT NULL,
   amount numeric(18,4) NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Match the source key to the actual transactions.id type. Some deployments
+-- already use BIGINT transaction IDs, while fresh installs use UUIDs.
+DO $migration$
+DECLARE
+  transaction_id_type text;
+  source_transaction_id_type text;
+BEGIN
+  SELECT format_type(attribute.atttypid, attribute.atttypmod)
+    INTO transaction_id_type
+    FROM pg_attribute AS attribute
+   WHERE attribute.attrelid = 'transactions'::regclass
+     AND attribute.attname = 'id'
+     AND NOT attribute.attisdropped;
+
+  SELECT format_type(attribute.atttypid, attribute.atttypmod)
+    INTO source_transaction_id_type
+    FROM pg_attribute AS attribute
+   WHERE attribute.attrelid = 'referral_commissions'::regclass
+     AND attribute.attname = 'source_transaction_id'
+     AND NOT attribute.attisdropped;
+
+  IF transaction_id_type IS NULL THEN
+    RAISE EXCEPTION 'Could not determine transactions.id type';
+  END IF;
+
+  IF source_transaction_id_type IS NULL THEN
+    EXECUTE format(
+      'ALTER TABLE referral_commissions ADD COLUMN source_transaction_id %s',
+      transaction_id_type
+    );
+    source_transaction_id_type := transaction_id_type;
+  ELSIF source_transaction_id_type <> transaction_id_type THEN
+    RAISE EXCEPTION
+      'referral_commissions.source_transaction_id is %, but transactions.id is %; reconcile these columns before startup',
+      source_transaction_id_type,
+      transaction_id_type;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conrelid = 'referral_commissions'::regclass
+       AND conname = 'referral_commissions_source_transaction_id_fkey'
+  ) THEN
+    EXECUTE
+      'ALTER TABLE referral_commissions
+         ADD CONSTRAINT referral_commissions_source_transaction_id_fkey
+         FOREIGN KEY (source_transaction_id) REFERENCES transactions(id)';
+  END IF;
+END
+$migration$;
 
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
