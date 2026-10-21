@@ -18,6 +18,7 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { ErrorState } from "@/components/valoriza/StatusStates";
 
 export const Route = createFileRoute("/_authenticated/support")({
   head: () => ({
@@ -37,42 +38,12 @@ export const Route = createFileRoute("/_authenticated/support")({
 export function SupportPage() {
   const { t, isRTL } = useI18n();
   const fetchSettings = useServerFn(getCompanySettingsAndSupport);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["support-links"],
     queryFn: () => fetchSettings(),
   });
 
-  const settings = data?.settings || {};
-  const links = data?.supportLinks ?? [
-    {
-      id: "sup-1",
-      label: "خدمة العملاء",
-      sublabel: "على تيليجرام (دعم فني)",
-      platform: "telegram",
-      url: settings.telegram_support_url || "https://t.me/valoriza_support",
-    },
-    {
-      id: "sup-2",
-      label: "خدمة العملاء",
-      sublabel: "على واتساب (دعم فني)",
-      platform: "whatsapp",
-      url: settings.whatsapp_support_url || "https://wa.me/34600000000",
-    },
-    {
-      id: "sup-3",
-      label: "المجموعة الرسمية",
-      sublabel: "مجموعة تيليجرام الرسمية",
-      platform: "telegram",
-      url: settings.telegram_group_url || "https://t.me/valoriza_official",
-    },
-    {
-      id: "sup-4",
-      label: "المجموعة الرسمية",
-      sublabel: "مجموعة واتساب الرسمية",
-      platform: "whatsapp",
-      url: settings.whatsapp_group_url || "https://chat.whatsapp.com/valoriza",
-    },
-  ];
+  const links = data?.supportLinks ?? [];
 
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const Chevron = isRTL ? ChevronLeft : ChevronRight;
@@ -122,11 +93,17 @@ export function SupportPage() {
 
         {/* 4 Glowing Cards in Responsive Grid (1 column on mobile, 2 columns on tablet/desktop) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {isLoading ? (
+          {isError ? (
+            <div className="col-span-full"><ErrorState onRetry={() => void refetch()} /></div>
+          ) : isLoading ? (
             <div className="col-span-full py-16 text-center text-xs text-muted-foreground">
               <div className="h-7 w-7 mx-auto animate-spin rounded-full border-2 border-cyan-glow border-t-transparent mb-2" />
               <p>{t("common.loading")}</p>
             </div>
+          ) : links.length === 0 ? (
+            <p className="col-span-full surface-card p-6 text-center text-sm text-muted-foreground">
+              لم تُضبط قنوات الدعم بعد. يرجى مراجعة الإدارة.
+            </p>
           ) : (
             links.map((item) => {
               const isTelegram = item.platform === "telegram";

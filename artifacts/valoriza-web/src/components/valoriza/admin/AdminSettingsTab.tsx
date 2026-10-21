@@ -39,6 +39,10 @@ export function AdminSettingsTab() {
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
       queryClient.invalidateQueries({ queryKey: ["home"] });
       queryClient.invalidateQueries({ queryKey: ["account-data"] });
+      queryClient.invalidateQueries({ queryKey: ["platform-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["support-links"] });
+      queryClient.invalidateQueries({ queryKey: ["withdrawal-info"] });
+      queryClient.invalidateQueries({ queryKey: ["about"] });
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -137,8 +141,8 @@ export function AdminSettingsTab() {
             </label>
             <input
               type="text"
-              value={form["deposit_address_trc20"] || ""}
-              onChange={(e) => handleChange("deposit_address_trc20", e.target.value)}
+              value={form["deposit_address_TRC20"] || ""}
+              onChange={(e) => handleChange("deposit_address_TRC20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
           </div>
@@ -149,8 +153,8 @@ export function AdminSettingsTab() {
             </label>
             <input
               type="text"
-              value={form["deposit_address_bep20"] || ""}
-              onChange={(e) => handleChange("deposit_address_bep20", e.target.value)}
+              value={form["deposit_address_BEP20"] || ""}
+              onChange={(e) => handleChange("deposit_address_BEP20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
           </div>
@@ -161,8 +165,8 @@ export function AdminSettingsTab() {
             </label>
             <input
               type="text"
-              value={form["deposit_address_erc20"] || ""}
-              onChange={(e) => handleChange("deposit_address_erc20", e.target.value)}
+              value={form["deposit_address_ERC20"] || ""}
+              onChange={(e) => handleChange("deposit_address_ERC20", e.target.value)}
               className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none font-mono"
             />
           </div>

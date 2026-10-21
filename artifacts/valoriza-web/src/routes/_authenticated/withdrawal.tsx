@@ -107,7 +107,7 @@ function WithdrawalPage() {
     onSuccess: (res) => {
       if (res.ok) {
         toast.success(
-          `${t("withdraw.receivable")}: ${money(res.netAmount)}. (${t("withdraw.fee")}: ${feePercent}%)`,
+          `${t("withdraw.receivable")}: ${money(res.netAmount ?? netAmount)}. (${t("withdraw.fee")}: ${feePercent}%)`,
         );
         setAmount("");
         qc.invalidateQueries({ queryKey: ["withdrawal-info"] });

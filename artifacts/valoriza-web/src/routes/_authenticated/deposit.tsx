@@ -64,19 +64,18 @@ function DepositPage() {
 
   const depositAddresses: Record<NetworkType, string> = {
     "USDT-ERC20":
-      configData?.settings?.["deposit_address_ERC20"] ||
-      "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
+      configData?.settings?.["deposit_address_ERC20"] || "",
     "USDT-BEP20":
-      configData?.settings?.["deposit_address_BEP20"] ||
-      "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b2",
+      configData?.settings?.["deposit_address_BEP20"] || "",
     "USDT-TRC20":
-      configData?.settings?.["deposit_address_TRC20"] || "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+      configData?.settings?.["deposit_address_TRC20"] || "",
   };
 
   const currentAddress = depositAddresses[network];
   const minDeposit = Number(configData?.settings?.["min_deposit"] ?? "10");
 
   const copyAddress = async () => {
+    if (!currentAddress) return;
     try {
       await navigator.clipboard.writeText(currentAddress);
       setCopied(true);
@@ -144,6 +143,10 @@ function DepositPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentAddress) {
+      toast.error(t("common.error"));
+      return;
+    }
     const num = parseFloat(amount);
 
     if (isNaN(num) || num < minDeposit) {
@@ -252,7 +255,7 @@ function DepositPage() {
                     className="truncate text-xs font-mono text-foreground text-start px-2"
                     dir="ltr"
                   >
-                    {currentAddress}
+                    {currentAddress || "عنوان الإيداع غير متوفر لهذه الشبكة حالياً، يرجى التواصل مع الإدارة."}
                   </p>
                 </div>
                 <button
@@ -268,13 +271,14 @@ function DepositPage() {
               <button
                 type="button"
                 onClick={() => setShowQrModal(!showQrModal)}
+                disabled={!currentAddress}
                 className="flex items-center justify-center gap-2 w-full text-center text-xs font-bold text-cyan-glow hover:underline cursor-pointer pt-1"
               >
                 <QrCode className="h-4 w-4" />
                 <span>{t("deposit.scanQr")}</span>
               </button>
 
-              {showQrModal && (
+              {showQrModal && currentAddress && (
                 <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white text-black max-w-[220px] mx-auto animate-in fade-in duration-200 shadow-xl border border-border">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(
@@ -383,7 +387,7 @@ function DepositPage() {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={depositMutation.isPending || !screenshotPreview || !amount}
+                disabled={depositMutation.isPending || !currentAddress || !screenshotPreview || !amount}
                 className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl text-sm font-black text-primary-foreground brand-gradient shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all cursor-pointer"
               >
                 <Send className="h-4 w-4 rtl:rotate-180" />
@@ -426,7 +430,7 @@ function DepositPage() {
             </div>
 
             {/* Persistent QR Code Preview Card */}
-            <div className="surface-card glow-border p-6 rounded-3xl text-center space-y-3">
+            {currentAddress && <div className="surface-card glow-border p-6 rounded-3xl text-center space-y-3">
               <h4 className="text-xs font-black text-foreground">{t("deposit.scanQr")}</h4>
               <div className="p-3 bg-white rounded-2xl inline-block shadow-md">
                 <img
@@ -438,7 +442,7 @@ function DepositPage() {
                 />
               </div>
               <p className="text-xs font-mono text-muted-foreground font-bold">{network}</p>
-            </div>
+            </div>}
           </div>
         </div>
       </main>

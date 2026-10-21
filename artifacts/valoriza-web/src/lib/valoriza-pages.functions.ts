@@ -60,13 +60,77 @@ export interface RewardsPageData {
   dailyRewardAmount: number;
 }
 
+export interface SupportLink {
+  id: string;
+  label: string;
+  sublabel: string;
+  platform: "telegram" | "whatsapp";
+  url: string;
+}
+
+export interface CompanyData {
+  settings: Record<string, string>;
+  supportLinks: SupportLink[];
+}
+
+export interface ActionResult {
+  ok: boolean;
+  reason?: string;
+  message?: string;
+  amount?: number;
+  netAmount?: number;
+  level?: number;
+  vipLevel?: number;
+}
+
+export interface FinancialRecord {
+  id: string;
+  amount: number;
+  status: string;
+  createdAt: string;
+  network?: string;
+  address?: string;
+  fee?: number;
+  netAmount?: number;
+  description?: string;
+  balanceAfter?: number;
+}
+
+async function companyData(path: string): Promise<CompanyData> {
+  const response = await serverBackendRequest<{
+    settings: Record<string, string>;
+    links?: Array<SupportLink & { label_ar?: string; sublabel_ar?: string }>;
+    supportLinks?: SupportLink[];
+  }>(path);
+  const settings = response.settings ?? {};
+  const links = response.supportLinks ?? response.links ?? [];
+  const supportLinks = links.map((link) => ({
+    ...link,
+    label: link.label ?? ("label_ar" in link ? String(link.label_ar ?? "") : ""),
+    sublabel: link.sublabel ?? ("sublabel_ar" in link ? String(link.sublabel_ar ?? "") : ""),
+  })).filter((link) => /^https:\/\//i.test(link.url));
+  if (!supportLinks.length) {
+    for (const [key, label, platform] of [
+      ["telegram_support_url", "Telegram", "telegram"],
+      ["whatsapp_support_url", "WhatsApp", "whatsapp"],
+      ["telegram_group_url", "Telegram", "telegram"],
+      ["whatsapp_group_url", "WhatsApp", "whatsapp"],
+    ] as const) {
+      if (/^https:\/\//i.test(settings[key] ?? "")) {
+        supportLinks.push({ id: key, label, sublabel: "", platform, url: settings[key] });
+      }
+    }
+  }
+  return { settings, supportLinks };
+}
+
 const get = (path: string) =>
-  createServerFn({ method: "GET" }).handler(() => serverBackendRequest(path));
+  createServerFn({ method: "GET" }).handler(() => serverBackendRequest<any>(path));
 const post = <T>(path: string, fallback?: (data: T) => string) =>
   createServerFn({ method: "POST" })
     .validator((data: T) => data)
     .handler(({ data }) =>
-      serverBackendRequest(fallback ? fallback(data) : path, {
+      serverBackendRequest<ActionResult>(fallback ? fallback(data) : path, {
         method: "POST",
         body: JSON.stringify(data),
       }),
@@ -91,10 +155,21 @@ export const getRewardsData = createServerFn({ method: "GET" }).handler(() =>
 export const getAccountData = createServerFn({ method: "GET" }).handler(() =>
   serverBackendRequest<AccountPageData>("/api/app/account"),
 );
-export const getAboutData = get("/api/public/about");
-export const getCompanySettingsAndSupport = get("/api/app/settings");
+export const getAboutData = createServerFn({ method: "GET" }).handler(() =>
+  companyData("/api/public/about"),
+);
+export const getCompanySettingsAndSupport = createServerFn({ method: "GET" }).handler(() =>
+  companyData("/api/app/settings"),
+);
 export const getWithdrawalInfo = get("/api/app/withdrawal");
-export const getUserFinancialRecords = get("/api/app/records");
+export const getUserFinancialRecords = createServerFn({ method: "GET" }).handler(() =>
+  serverBackendRequest<{
+    transactions: FinancialRecord[];
+    deposits: FinancialRecord[];
+    withdrawals: Array<FinancialRecord & { netAmount: number; fee: number }>;
+    rewards: FinancialRecord[];
+  }>("/api/app/records"),
+);
 
 export const bindWithdrawalAddress = post<{
   network: "ERC20" | "BEP20" | "TRC20";

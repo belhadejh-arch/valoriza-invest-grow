@@ -81,10 +81,10 @@ function AboutPage() {
   const goalsText =
     s.platform_goals ||
     "تنمية الثروات الفردية وتوفير دخل يومي مستدام، حماية رؤوس الأموال، وتقديم حلول مالية مبتكرة تدعم الاستقرار المالي.";
-  const membersCount = s.members_count || "75,000";
-  const establishedYear = s.established_year || "2018";
+  const membersCount = s.members_count ?? "—";
+  const establishedYear = s.established_year || "—";
   const headquarters = s.headquarters || "مدريد، إسبانيا";
-  const fundsCount = s.funds_count || "4 صناديق استثمارية";
+  const fundsCount = s.funds_count ?? "—";
 
   return (
     <div id="about-page" className="min-h-screen bg-background" dir="rtl">

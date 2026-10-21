@@ -42,15 +42,16 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
   if (!isOpen) return null;
 
   const defaultAddresses: Record<string, string> = {
-    ERC20: "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b",
-    BEP20: "0x71a9c2e4d8b6f9a5c1e2d3f4a5b6c7d8e9f0a1b",
-    TRC20: "TQn9Y2khDD95J42FQtQTdwVVRZq5YxZ8Xk",
+    ERC20: "",
+    BEP20: "",
+    TRC20: "",
     ...addresses,
   };
 
-  const currentAddress = defaultAddresses[network] || defaultAddresses.ERC20;
+  const currentAddress = defaultAddresses[network] || "";
 
   const handleCopy = () => {
+    if (!currentAddress) return;
     navigator.clipboard.writeText(currentAddress);
     setCopied(true);
     toast.success("تم نسخ عنوان الإيداع بنجاح");
@@ -59,6 +60,10 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentAddress) {
+      toast.error("عنوان الإيداع غير متوفر لهذه الشبكة حالياً، يرجى التواصل مع الإدارة.");
+      return;
+    }
     const num = parseFloat(amount);
     if (isNaN(num) || num < 10) {
       toast.error("الحد الأدنى للإيداع هو 10 دولارات");
@@ -160,7 +165,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
           </div>
           <div className="mt-2 flex items-center justify-between gap-2 rounded-xl bg-navy-deep border border-border/70 p-2.5">
             <code className="text-[11px] text-foreground font-mono truncate select-all" dir="ltr">
-              {currentAddress}
+              {currentAddress || "عنوان الإيداع غير متوفر لهذه الشبكة حالياً، يرجى التواصل مع الإدارة."}
             </code>
             <button
               id="copy-deposit-addr-btn"
@@ -204,7 +209,7 @@ export function DepositModal({ isOpen, onClose, addresses }: DepositModalProps) 
           <button
             id="submit-deposit-btn"
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !currentAddress}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
             {submitting ? "جاري التقديم..." : "تقديم طلب الإيداع ✈"}

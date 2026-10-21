@@ -18,6 +18,7 @@ import { AppHeader } from "@/components/valoriza/AppHeader";
 import { BottomNav } from "@/components/valoriza/BottomNav";
 import { getUserFinancialRecords } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { ErrorState } from "@/components/valoriza/StatusStates";
 
 type RecordsTab = "deposits" | "withdrawals" | "transactions" | "rewards";
 
@@ -45,7 +46,7 @@ function RecordsPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const fetchRecords = useServerFn(getUserFinancialRecords);
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["financial-records"],
     queryFn: () => fetchRecords(),
   });
@@ -112,7 +113,9 @@ function RecordsPage() {
 
         {/* Content list */}
         <div>
-          {isLoading ? (
+          {isError ? (
+            <ErrorState onRetry={() => void refetch()} />
+          ) : isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-3">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-glow border-t-transparent" />
               <p className="text-sm font-medium text-muted-foreground">{t("common.loading")}</p>

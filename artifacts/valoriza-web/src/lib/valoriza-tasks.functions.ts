@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { serverBackendRequest } from "@/lib/backend-server";
+import type { ActionResult } from "@/lib/valoriza-pages.functions";
 
 export type TaskStatus = "LOCKED" | "AVAILABLE" | "WATCHING" | "COMPLETED" | "REWARDED";
 export type TaskItem = {
@@ -41,7 +42,7 @@ export const getTasksData = createServerFn({ method: "GET" }).handler(() =>
 export const completeTask = createServerFn({ method: "POST" })
   .validator((data: { taskId: string; watchedSeconds: number; startedAt?: string }) => data)
   .handler(({ data }) =>
-    serverBackendRequest("/api/app/tasks/complete", {
+    serverBackendRequest<ActionResult>("/api/app/tasks/complete", {
       method: "POST",
       body: JSON.stringify(data),
     }),

@@ -61,7 +61,8 @@ function TasksPage() {
   });
 
   const completeMutation = useMutation({
-    mutationFn: completeTask,
+    mutationFn: (data: { taskId: string; watchedSeconds: number; startedAt?: string }) =>
+      completeTask({ data }),
     onSuccess: (result) => {
       if (result.ok) {
         toast.success(t("tasks.completeSuccess"));

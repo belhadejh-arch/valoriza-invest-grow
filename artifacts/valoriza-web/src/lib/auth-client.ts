@@ -21,7 +21,7 @@ async function request<T>(
     if (token && !headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 45_000);
     let response: Response;
     try {
       response = await fetch(buildApiUrl(path), {

@@ -5,7 +5,8 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
-import { applySafeDatabaseSchema } from "./safe-schema.js";
+import { applySafeDatabaseSchema, ensureTeamMilestoneSchema } from "./safe-schema.js";
+import { referralRate } from "./referral-rates.js";
 import {
   clearSessionCookie,
   createSession,
@@ -500,9 +501,9 @@ async function distributeReferralCommissions(
   if (baseAmount <= 0) return;
   const settings = await getSettings();
   const rates: Record<number, number> = {
-    1: number(settings.referral_rate_l1 ?? 0.08),
-    2: number(settings.referral_rate_l2 ?? 0.04),
-    3: number(settings.referral_rate_l3 ?? 0.01),
+    1: referralRate(settings.referral_rate_l1, 0.08),
+    2: referralRate(settings.referral_rate_l2, 0.04),
+    3: referralRate(settings.referral_rate_l3, 0.01),
   };
 
   const refs = await client.query<{ referrer_id: string; level: number }>(
@@ -1002,19 +1003,32 @@ app.get("/api/app/settings", async (_request, response, next) => {
 app.get("/api/app/records", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    const result = await query(
-      `SELECT id, type, amount, status, description, created_at FROM transactions WHERE user_id = $1
-       UNION ALL SELECT id, 'deposit' AS type, amount, status, 'طلب إيداع' AS description, created_at FROM deposits WHERE user_id = $1
-       UNION ALL SELECT id, 'withdrawal' AS type, amount, status, 'طلب سحب' AS description, created_at FROM withdrawals WHERE user_id = $1
-       ORDER BY created_at DESC LIMIT 100`,
-      [user.id],
-    );
+    const [transactions, deposits, withdrawals, rewards] = await Promise.all([
+      query("SELECT * FROM transactions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
+      query("SELECT * FROM deposits WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
+      query("SELECT * FROM withdrawals WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
+      query("SELECT * FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
+    ]);
+    const transactionItems = transactions.rows.map((row) => ({
+      ...row, amount: number(row.amount), balanceAfter: number(row.balance_after), createdAt: row.created_at,
+    }));
+    const depositItems = deposits.rows.map((row) => ({
+      ...row, amount: number(row.amount), address: row.deposit_address, createdAt: row.created_at,
+    }));
+    const withdrawalItems = withdrawals.rows.map((row) => ({
+      ...row, amount: number(row.amount), fee: number(row.fee), netAmount: number(row.net_amount),
+      rejectReason: row.reject_reason, createdAt: row.created_at,
+    }));
+    const rewardItems = rewards.rows.map((row) => ({
+      ...row, amount: number(row.amount), createdAt: row.created_at,
+    }));
     response.json({
-      records: result.rows.map((row) => ({
-        ...row,
-        amount: number(row.amount),
-        createdAt: row.created_at,
-      })),
+      transactions: transactionItems, deposits: depositItems, withdrawals: withdrawalItems, rewards: rewardItems,
+      records: [
+        ...transactionItems,
+        ...depositItems.map((row) => ({ ...row, type: "deposit" })),
+        ...withdrawalItems.map((row) => ({ ...row, type: "withdrawal" })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 100),
     });
   } catch (error) {
     next(error);
@@ -1206,13 +1220,21 @@ app.post("/api/app/deposit", async (request, response, next) => {
 
 app.get("/api/public/about", async (_request, response, next) => {
   try {
-    const [settings, links] = await Promise.all([
+    const [settings, links, statistics] = await Promise.all([
       getSettings(true),
       query(
         "SELECT id,label_ar,sublabel_ar,platform,url FROM customer_service_links WHERE is_active=true ORDER BY sort_order",
       ),
+      query(`SELECT
+        (SELECT count(*) FROM profiles WHERE vip_level BETWEEN 1 AND 7
+          AND (vip_expires_at IS NULL OR vip_expires_at > now()))::int AS members_count,
+        (SELECT count(*) FROM investment_funds WHERE is_active=true)::int AS funds_count`),
     ]);
-    response.json({ settings, links: links.rows });
+    response.json({
+      settings: { ...settings, members_count: String(statistics.rows[0].members_count),
+        funds_count: String(statistics.rows[0].funds_count) },
+      links: links.rows,
+    });
   } catch (error) {
     next(error);
   }
@@ -1677,11 +1699,21 @@ app.get("/api/app/team", async (request, response, next) => {
     ] = await Promise.all([
       query("SELECT id,username,email,referral_code,vip_level FROM profiles WHERE id=$1", [user.id]),
       query(
-        `SELECT p.id, p.username, p.email, p.vip_level, p.vip_expires_at, p.created_at, r.level
-         FROM referrals r
-         JOIN profiles p ON p.id = r.referred_id
-         WHERE r.referrer_id = $1
-         ORDER BY r.created_at DESC`,
+        `WITH RECURSIVE profile_team AS (
+           SELECT id, 1 AS level, ARRAY[$1::uuid, id] AS visited
+           FROM profiles WHERE referred_by=$1 AND id<>$1
+           UNION ALL
+           SELECT p.id, t.level+1, t.visited || p.id
+           FROM profiles p JOIN profile_team t ON p.referred_by=t.id
+           WHERE t.level<3 AND NOT p.id=ANY(t.visited)
+         ), members AS (
+           SELECT referred_id AS id, level FROM referrals
+           WHERE referrer_id=$1 AND level BETWEEN 1 AND 3 AND referred_id<>$1
+           UNION ALL SELECT id, level FROM profile_team
+         )
+         SELECT p.id,p.username,p.email,p.vip_level,p.vip_expires_at,p.created_at,min(m.level)::int AS level
+         FROM members m JOIN profiles p ON p.id=m.id
+         GROUP BY p.id ORDER BY p.created_at DESC`,
         [user.id],
       ),
       query("SELECT team_income FROM wallets WHERE user_id=$1", [user.id]),
@@ -1719,18 +1751,18 @@ app.get("/api/app/team", async (request, response, next) => {
       ),
     ]);
 
-    const l1Members = referrals.rows.filter((r) => r.level === 1);
-    const l2Members = referrals.rows.filter((r) => r.level === 2);
-    const l3Members = referrals.rows.filter((r) => r.level === 3);
+    const l1Members = referrals.rows.filter((r) => Number(r.level) === 1);
+    const l2Members = referrals.rows.filter((r) => Number(r.level) === 2);
+    const l3Members = referrals.rows.filter((r) => Number(r.level) === 3);
     const earningsForLevel = (level: number) =>
       number(commissionTotals.rows.find((row) => Number(row.level) === level)?.total);
     const l1Earnings = earningsForLevel(1);
     const l2Earnings = earningsForLevel(2);
     const l3Earnings = earningsForLevel(3);
 
-    const r1 = number(settings.referral_rate_l1 ?? 0.08);
-    const r2 = number(settings.referral_rate_l2 ?? 0.04);
-    const r3 = number(settings.referral_rate_l3 ?? 0.01);
+    const r1 = referralRate(settings.referral_rate_l1, 0.08);
+    const r2 = referralRate(settings.referral_rate_l2, 0.04);
+    const r3 = referralRate(settings.referral_rate_l3, 0.01);
 
     response.json({
       referralCode: profile.rows[0]?.referral_code || "",
@@ -1764,8 +1796,8 @@ app.get("/api/app/team", async (request, response, next) => {
         id: row.id,
         username: row.username,
         email: row.email,
-        level: row.level,
-        vipLevel: row.vip_level,
+        level: Number(row.level),
+        vipLevel: number(row.vip_level),
         vipExpiresAt: row.vip_expires_at,
         createdAt: row.created_at,
       })),
@@ -2611,6 +2643,9 @@ async function initDatabase() {
     throw new Error("No POSTGRES_URL or DATABASE_URL provided; backend cannot start.");
   }
   try {
+    // Required by team/rewards queries in every runtime, including serverless.
+    // Additive and idempotent: never delete or re-create existing customer data.
+    await ensureTeamMilestoneSchema();
     // Ensure default primary admin user exists and is linked
     const adminEmail = (process.env.ADMIN_EMAIL || "superadmin@valoriza.com").trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD;
@@ -2867,7 +2902,7 @@ if (!process.env.VERCEL) {
   server.listen(port, "0.0.0.0", async () => {
     console.log(`Valoriza backend listening on port ${port}`);
     try {
-      if (process.env.NODE_ENV === "production" && process.env.POSTGRES_URL) {
+      if (process.env.NODE_ENV === "production" && (process.env.POSTGRES_URL || process.env.DATABASE_URL)) {
         await applySafeDatabaseSchema();
       }
       await initDatabase();

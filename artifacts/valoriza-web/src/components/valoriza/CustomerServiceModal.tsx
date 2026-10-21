@@ -24,40 +24,17 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
   const { data } = useQuery({
     queryKey: ["support-links"],
     queryFn: () => fetchSettings(),
-    enabled: isOpen,
+    enabled: isOpen && customLinks === undefined,
   });
 
   if (!isOpen) return null;
 
-  const settings = (data as any)?.settings || {};
-  const defaultLinks: CustomerSupportLink[] = [
-    {
-      title: "خدمة العملاء",
-      subtitle: "على تيليجرام (دعم فني)",
-      platform: "telegram",
-      url: settings.telegram_support_url || "https://t.me/valoriza_support",
-    },
-    {
-      title: "خدمة العملاء",
-      subtitle: "على واتساب (دعم فني)",
-      platform: "whatsapp",
-      url: settings.whatsapp_support_url || "https://wa.me/34600000000",
-    },
-    {
-      title: "المجموعة الرسمية",
-      subtitle: "مجموعة تيليجرام الرسمية",
-      platform: "telegram",
-      url: settings.telegram_group_url || "https://t.me/valoriza_official",
-    },
-    {
-      title: "المجموعة الرسمية",
-      subtitle: "مجموعة واتساب الرسمية",
-      platform: "whatsapp",
-      url: settings.whatsapp_group_url || "https://chat.whatsapp.com/valoriza",
-    },
-  ];
-
-  const links = customLinks && customLinks.length > 0 ? customLinks : defaultLinks;
+  const links = customLinks ?? (data?.supportLinks ?? []).map((link) => ({
+    title: link.label,
+    subtitle: link.sublabel,
+    platform: link.platform,
+    url: link.url,
+  }));
 
   return (
     <div
@@ -116,6 +93,11 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
 
         {/* Support channels list matching Page 10 */}
         <div className="mt-4 space-y-2.5">
+          {links.length === 0 && (
+            <p className="surface-card p-4 text-center text-sm text-muted-foreground">
+              لم تُضبط قنوات الدعم بعد. يرجى مراجعة الإدارة.
+            </p>
+          )}
           {links.map((link, idx) => {
             const isTelegram = link.platform === "telegram";
             return (

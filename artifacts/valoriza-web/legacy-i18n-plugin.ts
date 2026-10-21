@@ -53,7 +53,11 @@ export default function legacyI18n(): Plugin {
         if (ts.isStringLiteral(node) && (
           (ts.isPropertyAssignment(node.parent) && node.parent.name === node) ||
           ts.isElementAccessExpression(node.parent) ||
-          ts.isBinaryExpression(node.parent) ||
+          (ts.isBinaryExpression(node.parent) && ![
+            ts.SyntaxKind.BarBarToken,
+            ts.SyntaxKind.QuestionQuestionToken,
+            ts.SyntaxKind.AmpersandAmpersandToken,
+          ].includes(node.parent.operatorToken.kind)) ||
           ts.isImportDeclaration(node.parent)
         )) return;
         if (ts.isTemplateExpression(node)) {

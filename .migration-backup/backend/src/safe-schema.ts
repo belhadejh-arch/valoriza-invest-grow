@@ -4,6 +4,7 @@ import { pool } from "./db.js";
 
 async function readBaselineMigration(): Promise<string> {
   const candidates = [
+    path.resolve(process.cwd(), "migrations/001_init.sql"),
     path.resolve(process.cwd(), "backend/migrations/001_init.sql"),
     path.resolve(process.cwd(), ".migration-backup/backend/migrations/001_init.sql"),
     path.resolve(process.cwd(), "../.migration-backup/backend/migrations/001_init.sql"),
@@ -23,6 +24,7 @@ async function readBaselineMigration(): Promise<string> {
 
 async function readTeamMilestoneMigration(): Promise<string> {
   const candidates = [
+    path.resolve(process.cwd(), "migrations/004_team_milestone_claims.sql"),
     path.resolve(process.cwd(), "backend/migrations/004_team_milestone_claims.sql"),
     path.resolve(process.cwd(), ".migration-backup/backend/migrations/004_team_milestone_claims.sql"),
     path.resolve(process.cwd(), "../.migration-backup/backend/migrations/004_team_milestone_claims.sql"),
@@ -38,6 +40,10 @@ async function readTeamMilestoneMigration(): Promise<string> {
   }
 
   throw new Error("Could not locate backend/migrations/004_team_milestone_claims.sql.");
+}
+
+export async function ensureTeamMilestoneSchema(): Promise<void> {
+  await pool.query(await readTeamMilestoneMigration());
 }
 
 export async function applySafeDatabaseSchema(): Promise<void> {

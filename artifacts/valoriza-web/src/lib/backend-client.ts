@@ -62,22 +62,23 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}): P
   const url = buildApiUrl(path);
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-  const response = await fetch(url, {
-    ...init,
-    headers,
-    credentials: "include",
-    signal: controller.signal,
-  });
-  clearTimeout(timeoutId);
-
-  const data = (await response.json().catch(() => ({}))) as T;
-  if (!response.ok) {
-    const errorMsg = (data as any)?.message || `Request failed with status ${response.status}`;
-    throw new Error(translateLegacyText(errorMsg));
+  const timeoutId = setTimeout(() => controller.abort(), 45_000);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers,
+      credentials: "include",
+      signal: controller.signal,
+    });
+    const data = await response.json() as T;
+    if (!response.ok) {
+      const errorMsg = (data as any)?.message || `Request failed with status ${response.status}`;
+      throw new Error(translateLegacyText(errorMsg));
+    }
+    return localizeResponse(data);
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return localizeResponse(data);
 }
 
 export function browserBackendUrl() {
