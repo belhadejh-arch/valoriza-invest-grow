@@ -712,6 +712,10 @@ app.post("/api/auth/login", async (request, response, next) => {
           .toLowerCase(),
       ],
     );
+    if (!result.rows.length) {
+      console.warn("[AUTH_LOGIN_REJECTED] account_not_found");
+      return response.status(401).json({ message: "INVALID_CREDENTIALS" });
+    }
     const matching = [];
     let unreadableHash = false;
     for (const candidate of result.rows) {
@@ -723,7 +727,11 @@ app.post("/api/auth/login", async (request, response, next) => {
       if (await verifyPassword(password, candidate.password_hash)) matching.push(candidate);
     }
     if (!matching.length) {
-      if (unreadableHash) return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
+      if (unreadableHash) {
+        console.error("[AUTH_LOGIN_BLOCKED] stored_password_hash_unreadable");
+        return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
+      }
+      console.warn("[AUTH_LOGIN_REJECTED] password_mismatch");
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
     // Never select the first row arbitrarily when old accounts differ only
@@ -732,7 +740,10 @@ app.post("/api/auth/login", async (request, response, next) => {
       return response.status(409).json({ message: "ACCOUNT_EMAIL_CONFLICT" });
     }
     const row = matching[0];
-    if (!row.profile_id) return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
+    if (!row.profile_id) {
+      console.error("[AUTH_LOGIN_BLOCKED] account_profile_missing");
+      return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
+    }
     if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
     const userProfile = await query<{ username: string; email: string; role: string }>(
       `SELECT p.username, p.email,
