@@ -18,3 +18,9 @@ Registration must work with a valid referral code or without a code. Do not work
 **Why:** The user repeatedly reported that valid referral codes prevented new-account registration and explicitly required registration with or without referrals.
 
 **How to apply:** Verify both successful registration and the resulting sponsor linkage. Compilation and a successful signup response alone do not establish that referral attribution works; use disposable development accounts, not customer records.
+
+The database is authoritative for credentials and sessions. Never convert database/network errors into “wrong password,” or let an old cookie override the bearer token selected by the browser; preserve existing account data when legacy identities collide.
+
+**Why:** The user requires accounts to keep working after logout and login, and false credential errors were reported repeatedly.
+
+**How to apply:** Test create → logout → login against stored hashes, password whitespace, legacy email case variants, stale cookie/bearer combinations, password changes, and rejected-session reuse using temporary development accounts.
