@@ -71,10 +71,23 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- Existing Render tables are not upgraded by CREATE TABLE IF NOT EXISTS.
--- Leave historical snapshots unknown rather than inventing old balances.
+-- Cover the entire ledger write/read contract, not only the first missing
+-- column reported by PostgreSQL. Unknown historical values remain NULL.
 ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS user_id uuid,
+  ADD COLUMN IF NOT EXISTS type text,
+  ADD COLUMN IF NOT EXISTS status text,
+  ADD COLUMN IF NOT EXISTS amount numeric(18,4),
   ADD COLUMN IF NOT EXISTS balance_before numeric(18,4),
-  ADD COLUMN IF NOT EXISTS balance_after numeric(18,4);
+  ADD COLUMN IF NOT EXISTS balance_after numeric(18,4),
+  ADD COLUMN IF NOT EXISTS reference_id uuid,
+  ADD COLUMN IF NOT EXISTS description text,
+  ADD COLUMN IF NOT EXISTS created_at timestamptz;
+
+-- Defaults apply to future writes only; do not fabricate old timestamps/statuses.
+ALTER TABLE transactions
+  ALTER COLUMN status SET DEFAULT 'completed',
+  ALTER COLUMN created_at SET DEFAULT now();
 
 CREATE TABLE IF NOT EXISTS deposits (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -360,7 +373,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 -- Legacy deployments may already have these tables without the ownership
 -- column. Add it as nullable so existing rows remain untouched; new inserts
 -- can use the user_id field expected by the current API.
-ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id uuid;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS user_id uuid;
 ALTER TABLE investments ADD COLUMN IF NOT EXISTS user_id uuid;
 

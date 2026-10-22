@@ -20,3 +20,9 @@ Missing historical financial snapshots must remain unknown, not be backfilled wi
 **Why:** Older Render transaction records may predate balance snapshots. Invented values would misrepresent financial history even when they make a schema migration easier.
 
 **How to apply:** Upgrade old ledgers additively and preserve existing entries. New transactions must record their actual before/after balances atomically; legacy entries may retain null snapshots.
+
+Compatibility checks must exercise the complete production SQL against a minimal legacy table, not a simplified INSERT or a fixture that already includes newer fields.
+
+**Why:** A snapshot-only migration passed a reduced test but production subsequently failed on another missing ledger field. Fixing the first reported column alone did not cover the real write contract.
+
+**How to apply:** Audit every field read or written by the affected flow together, run the actual statement for both daily and task rewards, and verify repeated migrations preserve historical records.
