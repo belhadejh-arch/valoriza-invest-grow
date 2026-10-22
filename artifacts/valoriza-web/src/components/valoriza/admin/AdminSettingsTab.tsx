@@ -11,9 +11,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAdminSettings, saveAdminSettings } from "@/lib/valoriza-admin.functions";
+import { useI18n } from "@/lib/i18n";
 
 export function AdminSettingsTab() {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   const {
     data: initialSettings,
@@ -43,6 +45,7 @@ export function AdminSettingsTab() {
       queryClient.invalidateQueries({ queryKey: ["support-links"] });
       queryClient.invalidateQueries({ queryKey: ["withdrawal-info"] });
       queryClient.invalidateQueries({ queryKey: ["about"] });
+      queryClient.invalidateQueries({ queryKey: ["team"] });
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -67,6 +70,40 @@ export function AdminSettingsTab() {
 
   return (
     <form onSubmit={handleSave} className="space-y-5">
+      <section className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
+        <h3 className="pb-3 text-xs font-extrabold text-foreground border-b border-border/60">
+          {t("admin.referralRates")}
+        </h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[0.08, 0.04, 0.01].map((fallback, index) => {
+            const level = index + 1;
+            const key = `referral_rate_l${level}`;
+            const rate = Number(form[key] ?? fallback);
+            const percent = rate >= 1 ? rate : Number((rate * 100).toFixed(4));
+            return (
+              <div key={key}>
+                <label htmlFor={key} className="text-[10px] font-bold text-muted-foreground">
+                  {t(`admin.referralLevel${level}`)}
+                </label>
+                <input
+                  id={key}
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  required
+                  value={form[key] === "" ? "" : percent}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    handleChange(key, value === "" ? "" : Number(value) === 100 ? "100" : String(Number(value) / 100));
+                  }}
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-foreground focus:border-cyan-glow focus:outline-none"
+                />
+              </div>
+            );
+          })}
+        </div>
+      </section>
       {/* Financial Limits Section */}
       <div className="rounded-2xl border border-border bg-surface/70 p-4 shadow-sm">
         <h3 className="text-xs font-extrabold text-foreground flex items-center gap-1.5 pb-3 border-b border-border/60">

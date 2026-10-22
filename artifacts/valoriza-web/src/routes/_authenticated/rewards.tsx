@@ -70,6 +70,18 @@ const COPY = {
     upgradedTo: "Upgraded to VIP", vipMax: "You're at the top VIP level", reached: "Level reached",
     upgrade: "Upgrade", vipLabel: "VIP upgrade", cash: "Cash reward", myTeam: "My team", vipUpgradeRow: "VIP upgrade",
   },
+  es: {
+    title: "Recompensas", tagline: "Invita a miembros y gana recompensas reales",
+    intro: "¡Cuantos más miembros aptos activen VIP, mayor será tu saldo de recompensas!",
+    panelTitle: "Recompensas por invitados directos que activaron VIP", qualified: "Miembros aptos",
+    teamError: "No se pudieron cargar los miembros aptos. Vuelve a intentarlo.",
+    settleError: "No se pudieron actualizar las recompensas del equipo. Inténtalo más tarde.",
+    when: (n: number) => `Cuando tu total alcance ${n} miembros aptos`,
+    getReward: "Obtener recompensa", remaining: (n: number) => `Faltan ${n}`,
+    unverified: "No se pudo verificar el progreso", credited: "Recompensa añadida a la cartera",
+    upgradedTo: "Ascenso a VIP", vipMax: "Ya tienes el nivel VIP más alto", reached: "Nivel alcanzado",
+    upgrade: "Ascender", vipLabel: "Ascenso VIP", cash: "Recompensa en efectivo", myTeam: "Mi equipo", vipUpgradeRow: "Ascenso VIP",
+  },
 };
 
 type RewardSource = "all" | "daily_login" | "task_reward" | "lucky_wheel" | "referral" | "vip";
@@ -87,9 +99,9 @@ const TEAM_REWARD_TIERS = [
 function RewardsPage() {
   const { t, isRTL, lang } = useI18n();
   const isAr = lang === "ar";
-  const c = isAr ? COPY.ar : COPY.en;
+  const c = COPY[lang];
   const nf = (n: number, min: number) =>
-    new Intl.NumberFormat(isAr ? "ar" : "en-US", { minimumFractionDigits: min, maximumFractionDigits: 2 }).format(n);
+    new Intl.NumberFormat(isAr ? "ar" : lang === "es" ? "es-ES" : "en-US", { minimumFractionDigits: min, maximumFractionDigits: 2 }).format(n);
   const money = (n: number) => (isAr ? `${nf(n, 2)} دولار` : `$${nf(n, 2)}`);
   const usd = (n: number) => `$${new Intl.NumberFormat("en-US", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 }).format(n)}`;
   const qc = useQueryClient();

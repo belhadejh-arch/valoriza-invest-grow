@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { storedLanguage, translateLegacyText } from "./legacy-i18n";
 
-export type LanguageCode = "ar" | "en";
+export type LanguageCode = "ar" | "en" | "es";
 
 export interface LanguageOption {
   code: LanguageCode;
@@ -14,6 +14,7 @@ export interface LanguageOption {
 export const LANGUAGES: LanguageOption[] = [
   { code: "ar", name: "العربية", nativeName: "العربية", flag: "🇸🇦", dir: "rtl" },
   { code: "en", name: "English", nativeName: "English", flag: "🇬🇧", dir: "ltr" },
+  { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸", dir: "ltr" },
 ];
 
 export const translations = {
@@ -239,6 +240,9 @@ export const translations = {
     "team.copyLink": "نسخ الرابط",
     "team.shareLink": "مشاركة الرابط",
     "team.totalMembers": "إجمالي الفريق",
+    "team.fromLevel1": "من المستوى الأول",
+    "team.fromLevel2": "من المستوى الثاني",
+    "team.fromLevel3": "من المستوى الثالث",
     "team.teamRewards": "مكافآت الفريق",
     "team.teamIncome": "إجمالي دخل الفريق",
     "team.totalCommission": "أرباح الإحالة الإجمالية",
@@ -420,6 +424,10 @@ export const translations = {
     "admin.wheel": "عجلة الحظ",
     "admin.broadcast": "الإشعارات الجماعية",
     "admin.settings": "إعدادات المنصة",
+    "admin.referralRates": "نسب مكافآت الإحالة",
+    "admin.referralLevel1": "مكافأة إحالة المستوى الأول (%)",
+    "admin.referralLevel2": "مكافأة إحالة المستوى الثاني (%)",
+    "admin.referralLevel3": "مكافأة إحالة المستوى الثالث (%)",
     "admin.audit": "سجلات التدقيق",
     "admin.approve": "موافقة وقبول",
     "admin.reject": "رفض الطلب",
@@ -437,12 +445,23 @@ export const translations = {
     "status.not_started": "لم يبدأ بعد",
   },
   en: {} as Record<string, string>,
+  es: {} as Record<string, string>,
 };
 
 translations.en = Object.fromEntries(
   Object.entries(translations.ar).map(([key, value]) => [key, translateLegacyText(value, [], "en")]),
 );
+translations.es = Object.fromEntries(
+  Object.entries(translations.ar).map(([key, value]) => [key, translateLegacyText(value, [], "es")]),
+);
 Object.assign(translations.en, {
+  "team.fromLevel1": "From level one",
+  "team.fromLevel2": "From level two",
+  "team.fromLevel3": "From level three",
+  "admin.referralRates": "Referral reward rates",
+  "admin.referralLevel1": "Level one referral reward (%)",
+  "admin.referralLevel2": "Level two referral reward (%)",
+  "admin.referralLevel3": "Level three referral reward (%)",
   "home.savingsFund": "Savings fund",
   "home.savingsDesc": "Save today and receive your capital and profit at maturity",
   "home.support247": "Support around the clock",
@@ -461,6 +480,27 @@ Object.assign(translations.en, {
   "wheel.spinning": "Spinning...",
   "wheel.spinsCost": "Cost per spin",
   "wheel.noSpins": "No spins available",
+});
+
+Object.assign(translations.es, {
+  "home.savingsFund": "Fondo de ahorro",
+  "home.savingsDesc": "Ahorra hoy y recibe tu capital y beneficio al vencimiento",
+  "home.support247": "Atención las 24 horas",
+  "home.minWithdraw": "Retiro mínimo: 6 $",
+  "home.minDeposit": "Depósito mínimo: 10 $",
+  "home.availableBalance": "Saldo disponible",
+  "home.claimedDaily": "Recompensa diaria recibida",
+  "home.profits": "Beneficios",
+  "home.invested": "Invertido",
+  "home.accountBalance": "Saldo de la cuenta",
+  "home.support": "Atención al cliente",
+  "wheel.title": "Ruleta de la suerte",
+  "wheel.subtitle": "Gira la ruleta y gana premios en efectivo",
+  "wheel.spinsLeft": "Giros restantes",
+  "wheel.spinBtn": "Girar la ruleta",
+  "wheel.spinning": "Girando...",
+  "wheel.spinsCost": "Coste por giro",
+  "wheel.noSpins": "No hay giros disponibles",
 });
 
 export type TranslationKey = keyof typeof translations.ar | (string & {});

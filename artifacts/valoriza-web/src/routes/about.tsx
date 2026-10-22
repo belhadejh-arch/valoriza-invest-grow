@@ -81,7 +81,7 @@ function AboutPage() {
   const goalsText =
     s.platform_goals ||
     "تنمية الثروات الفردية وتوفير دخل يومي مستدام، حماية رؤوس الأموال، وتقديم حلول مالية مبتكرة تدعم الاستقرار المالي.";
-  const membersCount = s.members_count ?? "—";
+  const membersCount = "75205";
   const establishedYear = s.established_year || "—";
   const headquarters = s.headquarters || "مدريد، إسبانيا";
   const fundsCount = s.funds_count ?? "—";
@@ -166,7 +166,7 @@ function AboutPage() {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground font-semibold">الأعضاء النشطون</p>
-                <p className="text-base font-black text-cyan-glow">+{membersCount}</p>
+                <p className="text-base font-black text-cyan-glow">{membersCount}</p>
               </div>
             </div>
 

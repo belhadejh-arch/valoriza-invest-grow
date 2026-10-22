@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -26,7 +26,7 @@ import { BottomNav } from "@/components/valoriza/BottomNav";
 import { ErrorState, LoadingState } from "@/components/valoriza/StatusStates";
 import { LuckyWheel } from "@/components/valoriza/LuckyWheel";
 import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal";
-import { DepositModal, WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
+import { WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
 import heroCityImg from "@/assets/hero-city.jpg";
@@ -88,7 +88,7 @@ function HomePage() {
   const [slideIndex, setSlideIndex] = useState(0);
 
   // Quick Action Modal states
-  const [depositOpen, setDepositOpen] = useState(false);
+  const navigate = useNavigate();
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
@@ -148,7 +148,7 @@ function HomePage() {
   const currentSlide = HERO_SLIDES[slideIndex];
   const settings = data.settings;
   const companyInfo = settings.about_company || "—";
-  const membersCount = settings.members_count || "—";
+  const membersCount = "75205";
 
   return (
     <div
@@ -160,7 +160,7 @@ function HomePage() {
         vipLevel={data.profile.vipLevel}
         username={data.profile.username}
         balance={data.wallet.balance}
-        onOpenDeposit={() => setDepositOpen(true)}
+        onOpenDeposit={() => void navigate({ to: "/deposit" })}
         onOpenWithdraw={() => setWithdrawalOpen(true)}
         onOpenSupport={() => setSupportOpen(true)}
       />
@@ -322,7 +322,7 @@ function HomePage() {
             <button
               id="quick-action-deposit"
               type="button"
-              onClick={() => setDepositOpen(true)}
+              onClick={() => void navigate({ to: "/deposit" })}
               className="group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-[#78350f] via-[#b45309] to-[#451a03] shadow-[0_4px_16px_-4px_rgba(180,83,9,0.4)] text-start transition-all duration-200 active:scale-95 hover:border-amber-400 hover:shadow-lg"
             >
               <div className="flex items-center justify-between w-full">
@@ -478,7 +478,7 @@ function HomePage() {
                     {t("team.title")}
                   </span>
                   <span className="block text-xl sm:text-2xl font-black text-foreground tracking-wide">
-                    +{membersCount}
+                    {membersCount}
                   </span>
                   <span className="block text-[10px] text-cyan-glow font-medium">
                     مستثمر نشط حول العالم
@@ -498,16 +498,6 @@ function HomePage() {
       </main>
 
       {/* Floating Customer Service & Quick Action Modals */}
-      <DepositModal
-        isOpen={depositOpen}
-        onClose={() => setDepositOpen(false)}
-        addresses={{
-          ERC20: settings.deposit_address_ERC20,
-          BEP20: settings.deposit_address_BEP20,
-          TRC20: settings.deposit_address_TRC20,
-        }}
-      />
-
       <WithdrawalModal
         isOpen={withdrawalOpen}
         onClose={() => setWithdrawalOpen(false)}

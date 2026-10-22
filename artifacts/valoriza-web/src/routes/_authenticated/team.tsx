@@ -103,7 +103,7 @@ function TeamPage() {
       earnings: Number(apiLevel?.earnings ?? 0),
       ratePercent:
         apiLevel?.ratePercent ??
-        (configuredRate === undefined ? "—" : `${Math.round(configuredRate * 100)}%`),
+        (configuredRate === undefined ? "—" : `${Number((configuredRate * 100).toFixed(4))}%`),
     };
   });
   const filteredMembers =
@@ -224,6 +224,19 @@ function TeamPage() {
           </button>
         </section>
 
+        <section
+          aria-live="polite"
+          className="flex items-center justify-between rounded-2xl border border-amber-400/40 bg-slate-900 px-5 py-4"
+        >
+          <div className="flex items-center gap-2 font-bold text-slate-200">
+            <Users className="h-5 w-5 text-amber-300" />
+            <span>{t("team.totalMembers")}</span>
+          </div>
+          <span id="team-member-count" className="text-3xl font-black tabular-nums text-amber-300">
+            {isLoading || isError ? "—" : totalMembers}
+          </span>
+        </section>
+
         {isError && (
           <div
             role="alert"
@@ -318,7 +331,7 @@ function TeamPage() {
                     className={`${theme.rate} flex min-h-12 flex-col items-center justify-center rounded-xl px-1.5 py-2 text-center text-white shadow`}
                   >
                     <span className="text-[9px] font-semibold leading-tight sm:text-[11px]">
-                      من {t(levelKey(level.level))}
+                      {t(`team.fromLevel${level.level}`)}
                     </span>
                     <span className="text-sm font-black sm:text-base">
                       {level.ratePercent}

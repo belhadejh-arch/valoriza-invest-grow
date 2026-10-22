@@ -1195,10 +1195,13 @@ app.post("/api/app/deposit", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const { amount, screenshotUrl, txHash } = request.body ?? {};
+    if (typeof screenshotUrl !== "string" || !screenshotUrl.trim()) {
+      return response.json({ ok: false, reason: "SCREENSHOT_REQUIRED" });
+    }
     const network = String(request.body?.network ?? "").replace(/^USDT-/, "");
     const settings = await getSettings();
     const value = Number(amount);
-    if (value < number(settings.min_deposit ?? 10))
+    if (!Number.isFinite(value) || value < number(settings.min_deposit ?? 10))
       return response.json({ ok: false, reason: "BELOW_MIN_DEPOSIT" });
     const address = settings[`deposit_address_${network}`] ?? "";
     if (!String(address).trim()) {
@@ -1210,7 +1213,7 @@ app.post("/api/app/deposit", async (request, response, next) => {
     }
     const result = await query(
       "INSERT INTO deposits (user_id,amount,network,deposit_address,screenshot_url,tx_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-      [user.id, value, String(address), String(screenshotUrl ?? ""), txHash ?? null],
+      [user.id, value, network, String(address), screenshotUrl.trim(), txHash ?? null],
     );
     response.json({ ok: true, depositId: result.rows[0].id });
   } catch (error) {
@@ -1777,19 +1780,19 @@ app.get("/api/app/team", async (request, response, next) => {
           level: 1,
           members: l1Members.length,
           earnings: l1Earnings,
-          ratePercent: `${Math.round(r1 * 100)}%`,
+          ratePercent: `${Number((r1 * 100).toFixed(4))}%`,
         },
         {
           level: 2,
           members: l2Members.length,
           earnings: l2Earnings,
-          ratePercent: `${Math.round(r2 * 100)}%`,
+          ratePercent: `${Number((r2 * 100).toFixed(4))}%`,
         },
         {
           level: 3,
           members: l3Members.length,
           earnings: l3Earnings,
-          ratePercent: `${Math.round(r3 * 100)}%`,
+          ratePercent: `${Number((r3 * 100).toFixed(4))}%`,
         },
       ],
       members: referrals.rows.map((row) => ({

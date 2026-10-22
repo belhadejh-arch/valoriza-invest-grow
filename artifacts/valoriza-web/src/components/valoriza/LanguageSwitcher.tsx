@@ -1,5 +1,5 @@
 import { Globe } from "lucide-react";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type LanguageCode } from "@/lib/i18n";
 
 export function LanguageSwitcher({
   compact = false,
@@ -19,7 +19,7 @@ export function LanguageSwitcher({
       >
         <Globe className="h-3.5 w-3.5 text-cyan-glow" />
         <select aria-label={t("common.language")} value={lang}
-          onChange={(event) => setLang(event.target.value as "ar" | "en")}
+          onChange={(event) => setLang(event.target.value as LanguageCode)}
           className={`bg-transparent text-foreground outline-none cursor-pointer ${compact ? "max-w-20" : ""}`}>
           {languages.map((language) => <option className="bg-background text-foreground" key={language.code} value={language.code}>{language.nativeName}</option>)}
         </select>
