@@ -348,6 +348,13 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Legacy deployments may already have these tables without the ownership
+-- column. Add it as nullable so existing rows remain untouched; new inserts
+-- can use the user_id field expected by the current API.
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE investments ADD COLUMN IF NOT EXISTS user_id uuid;
+
 CREATE INDEX IF NOT EXISTS transactions_user_created_idx ON transactions(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS notifications_user_created_idx ON notifications(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS deposits_status_created_idx ON deposits(status, created_at DESC);
