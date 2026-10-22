@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
 import { applySafeDatabaseSchema, ensureTeamMilestoneSchema } from "./safe-schema.js";
 import { referralRate } from "./referral-rates.js";
+import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import {
   clearSessionCookie,
   createSession,
@@ -577,18 +578,13 @@ app.post("/api/auth/register", async (request, response, next) => {
       return response.status(400).json({ message: "INVALID_REFERRAL_CODE" });
     }
     const emailValue = email.trim().toLowerCase();
-    const referralCodeValue = typeof referralCode === "string" ? referralCode.trim().toUpperCase() : "";
+    const referralCodeValue = normalizeReferralCode(referralCode ?? "");
     const passwordHash = await hashPassword(password);
     const result = await withTransaction(async (client) => {
-      const referral = referralCodeValue
-        ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE referral_code = $1", [
-            referralCodeValue,
-          ])
-        : { rows: [] as { id: string }[] };
-      if (referralCodeValue && !referral.rows[0]) {
+      const referrerL1Id = await findReferralOwner(client, referralCodeValue);
+      if (referralCodeValue && !referrerL1Id) {
         throw Object.assign(new Error("INVALID_REFERRAL_CODE"), { code: "INVALID_REFERRAL_CODE" });
       }
-      const referrerL1Id = referral.rows[0]?.id ?? null;
       const user = await client.query<{ id: string }>(
         "INSERT INTO users (email, password_hash) VALUES ($1,$2) RETURNING id",
         [emailValue, passwordHash],

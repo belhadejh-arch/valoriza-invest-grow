@@ -12,3 +12,9 @@ Login forms must submit the browser's actual form values (for example, through `
 **Why:** The local fallback accepted credentials without creating server sessions, so signed-in users could not access authenticated app data and API failures were hidden.
 
 **How to apply:** Keep browser sign-in and registration tied to `/api/auth/*`; show backend/network errors rather than manufacturing an account. Use the configured local API origin for server-side requests, preserve per-session JWT uniqueness, and read submitted credential values from the form itself.
+
+Registration must work with a valid referral code or without a code. Do not work around referral lookup failures by silently creating an account without its sponsor.
+
+**Why:** The user repeatedly reported that valid referral codes prevented new-account registration and explicitly required registration with or without referrals.
+
+**How to apply:** Verify both successful registration and the resulting sponsor linkage. Compilation and a successful signup response alone do not establish that referral attribution works; use disposable development accounts, not customer records.
