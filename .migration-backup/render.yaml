@@ -22,11 +22,11 @@ services:
       - key: ADMIN_EMAIL
         value: admin@valoriza.com
       - key: ADMIN_PASSWORD
-        value: ValorizaAdmin2025!
+        sync: false
       - key: USER_EMAIL
         value: user@valoriza.com
       - key: USER_PASSWORD
-        value: ValorizaUser2025!
+        sync: false
 
 databases:
   - name: valoriza-postgres

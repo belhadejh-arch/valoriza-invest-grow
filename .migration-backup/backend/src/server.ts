@@ -2704,9 +2704,20 @@ async function initDatabase() {
     // Ensure default primary admin user exists and is linked
     const adminEmail = (process.env.ADMIN_EMAIL || "superadmin@valoriza.com").trim().toLowerCase();
     const adminPassword = process.env.ADMIN_PASSWORD;
-    const adminCheck = await query<{ id: string }>("SELECT id FROM users WHERE email = $1", [
-      adminEmail,
-    ]);
+    const syncAdminPassword = process.env.ADMIN_PASSWORD_SYNC === "true";
+    if (syncAdminPassword && !adminPassword) {
+      throw new Error("ADMIN_PASSWORD_SYNC requires ADMIN_PASSWORD to be configured.");
+    }
+    if (syncAdminPassword && adminPassword && Buffer.byteLength(adminPassword, "utf8") > 72) {
+      throw new Error("ADMIN_PASSWORD_SYNC requires an ADMIN_PASSWORD of at most 72 UTF-8 bytes.");
+    }
+    const adminCheck = await query<{ id: string; password_hash: string }>(
+      "SELECT id, password_hash FROM users WHERE lower(btrim(email)) = $1",
+      [adminEmail],
+    );
+    if (adminCheck.rows.length > 1) {
+      throw new Error("Primary admin email matches multiple accounts; refusing password sync.");
+    }
     let adminId = adminCheck.rows[0]?.id;
 
     if (!adminId && adminPassword) {
@@ -2738,6 +2749,23 @@ async function initDatabase() {
     } else if (!adminId) {
       console.warn("Primary admin provisioning skipped because ADMIN_PASSWORD is not configured.");
     } else {
+      if (
+        syncAdminPassword &&
+        adminPassword &&
+        !(await verifyPassword(adminPassword, adminCheck.rows[0].password_hash).catch(() => false))
+      ) {
+        const adminHash = await hashPassword(adminPassword);
+        await withTransaction(async (client) => {
+          await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+            adminHash,
+            adminId,
+          ]);
+          await client.query("DELETE FROM sessions WHERE user_id = $1", [adminId]);
+        });
+        console.warn(
+          "[AUTH_ADMIN_PASSWORD_SYNC] configured primary admin password applied; sessions revoked",
+        );
+      }
       await query(
         "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
         [adminId],

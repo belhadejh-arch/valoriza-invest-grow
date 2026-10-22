@@ -3,10 +3,13 @@ import { closeDb, query, withTransaction } from "./db.js";
 import { hashPassword } from "./auth.js";
 
 const adminEmail = (process.env.ADMIN_EMAIL || "superadmin@valoriza.com").trim().toLowerCase();
-const adminPassword = process.env.ADMIN_PASSWORD || "ValorizaAdmin2025!";
+const adminPassword = process.env.ADMIN_PASSWORD;
 const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();
-const userPassword = process.env.USER_PASSWORD || "ValorizaUser2025!";
+const userPassword = process.env.USER_PASSWORD;
 
+if (!adminPassword || !userPassword) {
+  throw new Error("Set ADMIN_PASSWORD and USER_PASSWORD through the secure environment settings.");
+}
 if (adminPassword.length < 12 || userPassword.length < 12) {
   throw new Error("Seed passwords must be at least 12 characters");
 }
