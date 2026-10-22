@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS transactions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Existing Render tables are not upgraded by CREATE TABLE IF NOT EXISTS.
+-- Leave historical snapshots unknown rather than inventing old balances.
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS balance_before numeric(18,4),
+  ADD COLUMN IF NOT EXISTS balance_after numeric(18,4);
+
 CREATE TABLE IF NOT EXISTS deposits (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,

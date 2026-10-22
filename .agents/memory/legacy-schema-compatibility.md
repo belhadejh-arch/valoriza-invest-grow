@@ -14,3 +14,9 @@ Existing tables can also lack unique constraints expected by newer `ON CONFLICT 
 **Why:** Referral registration failed against a legacy `referrals` table without the composite unique constraint defined in the new baseline.
 
 **How to apply:** Do not assume `CREATE TABLE IF NOT EXISTS` adds missing constraints. For deployment-critical writes, make the SQL compatible with the observed legacy schema without deleting or silently rewriting existing records.
+
+Missing historical financial snapshots must remain unknown, not be backfilled with zero or the customer's current balance.
+
+**Why:** Older Render transaction records may predate balance snapshots. Invented values would misrepresent financial history even when they make a schema migration easier.
+
+**How to apply:** Upgrade old ledgers additively and preserve existing entries. New transactions must record their actual before/after balances atomically; legacy entries may retain null snapshots.
