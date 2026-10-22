@@ -18,7 +18,7 @@ import { Logo } from "@/components/valoriza/Logo";
 import { LanguageSwitcher } from "@/components/valoriza/LanguageSwitcher";
 import { ThemeToggle } from "@/components/valoriza/ThemeToggle";
 import { useI18n } from "@/lib/i18n";
-import heroCity from "@/assets/hero-city.jpg";
+import heroCity from "@/assets/hero-city.webp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -102,23 +102,32 @@ function AuthPage() {
     if (loading) return;
     setLoading(true);
     try {
+      const submitted = new FormData(e.currentTarget as HTMLFormElement);
+      const submittedValues = {
+        username: String(submitted.get("username") ?? form.username),
+        email: String(submitted.get("email") ?? form.email),
+        phone: String(submitted.get("phone") ?? form.phone),
+        password: String(submitted.get("password") ?? form.password),
+        referral: String(submitted.get("referral") ?? form.referral),
+      };
+
       if (mode === "register") {
-        if (form.username.trim().length < 3) {
+        if (submittedValues.username.trim().length < 3) {
           toast.error(t("auth.errUsernameLen"));
           return;
         }
-        if (form.password.length < 6) {
+        if (submittedValues.password.length < 6) {
           toast.error(t("auth.errPasswordLen"));
           return;
         }
         const { error } = await auth.signUp({
-          email: form.email.trim(),
-          password: form.password,
+          email: submittedValues.email.trim(),
+          password: submittedValues.password,
           options: {
             data: {
-              username: form.username.trim(),
-              phone: form.phone.trim(),
-              referral_code: form.referral.trim().toUpperCase(),
+              username: submittedValues.username.trim(),
+              phone: submittedValues.phone.trim(),
+              referral_code: submittedValues.referral.trim().toUpperCase(),
             },
           },
         });
@@ -130,8 +139,8 @@ function AuthPage() {
         navigate({ to: "/home", replace: true });
       } else {
         const { error } = await auth.signInWithPassword({
-          email: form.email.trim(),
-          password: form.password,
+          email: submittedValues.email.trim(),
+          password: submittedValues.password,
         });
         if (error) {
           toast.error(getFriendlyErrorMessage(error.message));
@@ -180,6 +189,8 @@ function AuthPage() {
                 alt="المقر الرئيسي لشركة فالوريزا في مدريد"
                 width={1280}
                 height={720}
+                loading="lazy"
+                decoding="async"
                 className="h-64 lg:h-72 w-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/60 to-transparent" />
@@ -253,6 +264,8 @@ function AuthPage() {
                   <Field
                     id="auth-field-username"
                     icon={User}
+                  name="username"
+                  autoComplete="username"
                     placeholder={t("auth.username")}
                     value={form.username}
                     onChange={set("username")}
@@ -264,6 +277,8 @@ function AuthPage() {
                   id="auth-field-email"
                   icon={Mail}
                   type="email"
+                  name="email"
+                  autoComplete="email"
                   placeholder={t("auth.email")}
                   value={form.email}
                   onChange={set("email")}
@@ -274,6 +289,8 @@ function AuthPage() {
                   <Field
                     id="auth-field-phone"
                     icon={Phone}
+                    name="phone"
+                    autoComplete="tel"
                     placeholder={t("auth.phone")}
                     value={form.phone}
                     onChange={set("phone")}
@@ -284,6 +301,8 @@ function AuthPage() {
                   id="auth-field-password"
                   icon={Lock}
                   type="password"
+                  name="password"
+                  autoComplete={mode === "login" ? "current-password" : "new-password"}
                   placeholder={t("auth.password")}
                   value={form.password}
                   onChange={set("password")}
@@ -294,6 +313,7 @@ function AuthPage() {
                   <Field
                     id="auth-field-referral"
                     icon={Ticket}
+                    name="referral"
                     placeholder={t("auth.referral")}
                     value={form.referral}
                     onChange={set("referral")}

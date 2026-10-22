@@ -676,7 +676,12 @@ app.post("/api/auth/login", async (request, response, next) => {
   try {
     const { email, password } = request.body ?? {};
     const result = await query<{ id: string; password_hash: string; is_blocked: boolean }>(
-      `SELECT u.id, u.password_hash, p.is_blocked FROM users u JOIN profiles p ON p.id = u.id WHERE u.email = $1`,
+      `SELECT u.id, u.password_hash, COALESCE(p.is_blocked, false) AS is_blocked
+       FROM users u
+       JOIN profiles p ON p.id = u.id
+       WHERE lower(btrim(u.email)) = $1
+       ORDER BY (u.email = $1) DESC
+       LIMIT 1`,
       [
         String(email ?? "")
           .trim()

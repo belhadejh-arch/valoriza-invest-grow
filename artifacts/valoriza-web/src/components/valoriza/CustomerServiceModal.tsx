@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Headphones, MessageCircle, Send, X } from "lucide-react";
-import supportAgentImg from "@/assets/images/support_agent_1789808781142.jpg";
+import supportAgentImg from "@/assets/images/support-agent.webp";
 import { getCompanySettingsAndSupport } from "@/lib/valoriza-pages.functions";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -77,6 +77,8 @@ export function CustomerServiceModal({ isOpen, onClose, customLinks }: CustomerS
               <img
                 src={supportAgentImg}
                 alt="خدمة العملاء"
+                loading="lazy"
+                decoding="async"
                 className="h-20 w-20 rounded-full object-cover border-2 border-cyan-glow shadow-[0_0_16px_oklch(0.82_0.14_205/0.4)]"
               />
               <span className="absolute bottom-0 right-1 flex h-4 w-4">

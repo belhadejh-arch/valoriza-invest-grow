@@ -29,8 +29,8 @@ import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal
 import { WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
-import heroCityImg from "@/assets/hero-city.jpg";
-import madridHQImg from "@/assets/images/madrid_hq_1789808765652.jpg";
+import heroCityImg from "@/assets/hero-city.webp";
+import madridHQImg from "@/assets/images/madrid-hq.webp";
 
 export const Route = createFileRoute("/_authenticated/home")({
   head: () => ({
