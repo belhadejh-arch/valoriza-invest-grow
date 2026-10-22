@@ -88,6 +88,7 @@ export const translations = {
     "auth.errInvalidCreds": "بيانات الدخول غير صحيحة، تأكد من البريد وكلمة المرور",
     "auth.errUsernameLen": "اسم المستخدم يجب ألا يقل عن 3 أحرف",
     "auth.errPasswordLen": "كلمة المرور يجب ألا تقل عن 6 أحرف",
+    "auth.errInvalidReferral": "رمز الإحالة غير صحيح. تحقق منه أو اترك الحقل فارغًا للتسجيل بدونه.",
 
     // Home
     "home.walletBalance": "رصيد المحفظة",
@@ -456,6 +457,7 @@ translations.es = Object.fromEntries(
   Object.entries(translations.ar).map(([key, value]) => [key, translateLegacyText(value, [], "es")]),
 );
 Object.assign(translations.en, {
+  "auth.errInvalidReferral": "That referral code is not valid. Check it or leave the field blank to register without a referral.",
   "team.fromLevel1": "From level one",
   "team.fromLevel2": "From level two",
   "team.fromLevel3": "From level three",
@@ -484,6 +486,7 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations.es, {
+  "auth.errInvalidReferral": "El código de referido no es válido. Compruébelo o deje el campo vacío para registrarse sin referido.",
   "home.savingsFund": "Fondo de ahorro",
   "home.savingsDesc": "Ahorra hoy y recibe tu capital y beneficio al vencimiento",
   "home.support247": "Atención las 24 horas",

@@ -573,21 +573,27 @@ app.post("/api/auth/register", async (request, response, next) => {
     ) {
       return response.status(400).json({ message: "INVALID_REGISTRATION" });
     }
+    if (referralCode != null && typeof referralCode !== "string") {
+      return response.status(400).json({ message: "INVALID_REFERRAL_CODE" });
+    }
     const emailValue = email.trim().toLowerCase();
+    const referralCodeValue = typeof referralCode === "string" ? referralCode.trim().toUpperCase() : "";
     const passwordHash = await hashPassword(password);
     const result = await withTransaction(async (client) => {
+      const referral = referralCodeValue
+        ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE referral_code = $1", [
+            referralCodeValue,
+          ])
+        : { rows: [] as { id: string }[] };
+      if (referralCodeValue && !referral.rows[0]) {
+        throw Object.assign(new Error("INVALID_REFERRAL_CODE"), { code: "INVALID_REFERRAL_CODE" });
+      }
+      const referrerL1Id = referral.rows[0]?.id ?? null;
       const user = await client.query<{ id: string }>(
         "INSERT INTO users (email, password_hash) VALUES ($1,$2) RETURNING id",
         [emailValue, passwordHash],
       );
       const userId = user.rows[0].id;
-      const referral =
-        typeof referralCode === "string" && referralCode.trim()
-          ? await client.query<{ id: string }>("SELECT id FROM profiles WHERE referral_code = $1", [
-              referralCode.trim().toUpperCase(),
-            ])
-          : { rows: [] };
-      const referrerL1Id = referral.rows[0]?.id ?? null;
       await client.query(
         `INSERT INTO profiles (id, username, email, phone, referral_code, referred_by)
          VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -604,7 +610,7 @@ app.post("/api/auth/register", async (request, response, next) => {
       if (referrerL1Id) {
         // Level 1
         await client.query(
-          "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,1) ON CONFLICT (referrer_id, referred_id) DO NOTHING",
+          "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,1) ON CONFLICT DO NOTHING",
           [referrerL1Id, userId],
         );
         // Level 2
@@ -615,7 +621,7 @@ app.post("/api/auth/register", async (request, response, next) => {
         const referrerL2Id = l2.rows[0]?.referred_by;
         if (referrerL2Id) {
           await client.query(
-            "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,2) ON CONFLICT (referrer_id, referred_id) DO NOTHING",
+            "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,2) ON CONFLICT DO NOTHING",
             [referrerL2Id, userId],
           );
           // Level 3
@@ -626,7 +632,7 @@ app.post("/api/auth/register", async (request, response, next) => {
           const referrerL3Id = l3.rows[0]?.referred_by;
           if (referrerL3Id) {
             await client.query(
-              "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,3) ON CONFLICT (referrer_id, referred_id) DO NOTHING",
+              "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1,$2,3) ON CONFLICT DO NOTHING",
               [referrerL3Id, userId],
             );
           }
@@ -649,6 +655,8 @@ app.post("/api/auth/register", async (request, response, next) => {
       },
     });
   } catch (error) {
+    if ((error as { code?: string }).code === "INVALID_REFERRAL_CODE")
+      return response.status(400).json({ message: "INVALID_REFERRAL_CODE" });
     if ((error as { code?: string }).code === "23505")
       return response.status(409).json({ message: "ACCOUNT_EXISTS" });
     return next(error);

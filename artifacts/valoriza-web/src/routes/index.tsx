@@ -87,6 +87,9 @@ function AuthPage() {
     if (rawMsg.includes("INVALID_REGISTRATION")) {
       return "بيانات التسجيل غير مكتملة، كلمة المرور يجب أن تكون 6 أحرف على الأقل.";
     }
+    if (rawMsg.includes("INVALID_REFERRAL_CODE")) {
+      return t("auth.errInvalidReferral");
+    }
     if (
       rawMsg.includes("fetch") ||
       rawMsg.includes("Failed to fetch") ||
