@@ -33,11 +33,13 @@ export const Route = createFileRoute("/_authenticated/team")({
   component: TeamPage,
 });
 
-const money = (n: number) =>
-  `${new Intl.NumberFormat("ar", {
+const money = (n: number, language: "ar" | "en" | "es") =>
+  new Intl.NumberFormat(({ ar: "ar-DZ", en: "en-US", es: "es-ES" })[language], {
+    style: "currency",
+    currency: "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(n)} دولار`;
+  }).format(n);
 
 const levelThemes: Record<
   number,
@@ -70,7 +72,7 @@ const levelKey = (level: number) =>
   level === 1 ? "team.level1" : level === 2 ? "team.level2" : "team.level3";
 
 function TeamPage() {
-  const { t, isRTL } = useI18n();
+  const { t, isRTL, lang } = useI18n();
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<number | null>(null);
@@ -111,6 +113,7 @@ function TeamPage() {
       ? members
       : members.filter((member) => Number(member.level) === selectedLevelFilter);
   const totalMembers = Number(data?.totalMembers ?? members.length);
+  const totalTeamRewards = Number(data?.teamRewards ?? data?.teamIncome ?? 0);
 
   async function copyCode() {
     if (!referralCode) return;
@@ -224,17 +227,31 @@ function TeamPage() {
           </button>
         </section>
 
-        <section
-          aria-live="polite"
-          className="flex items-center justify-between rounded-2xl border border-amber-400/40 bg-slate-900 px-5 py-4"
-        >
-          <div className="flex items-center gap-2 font-bold text-slate-200">
-            <Users className="h-5 w-5 text-amber-300" />
-            <span>{t("team.totalMembers")}</span>
+        <section className="grid grid-cols-2 gap-3">
+          <div
+            aria-live="polite"
+            className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-2xl border border-amber-400/40 bg-slate-900 px-3 py-3 sm:min-h-20 sm:flex-row sm:items-center sm:px-5 sm:py-4"
+          >
+            <div className="flex min-w-0 items-center gap-2 font-bold text-slate-200">
+              <Users className="h-5 w-5 shrink-0 text-amber-300" />
+              <span className="text-xs sm:text-sm">{t("team.totalMembers")}</span>
+            </div>
+            <span id="team-member-count" className="self-end text-2xl font-black tabular-nums text-amber-300 sm:self-auto sm:text-3xl">
+              {isLoading || isError ? "—" : totalMembers}
+            </span>
           </div>
-          <span id="team-member-count" className="text-3xl font-black tabular-nums text-amber-300">
-            {isLoading || isError ? "—" : totalMembers}
-          </span>
+          <div
+            aria-live="polite"
+            className="flex min-h-24 flex-col items-start justify-between gap-2 rounded-2xl border border-emerald-400/40 bg-slate-900 px-3 py-3 sm:min-h-20 sm:flex-row sm:items-center sm:px-5 sm:py-4"
+          >
+            <div className="flex min-w-0 items-center gap-2 font-bold text-slate-200">
+              <Gift className="h-5 w-5 shrink-0 text-emerald-300" />
+              <span className="text-xs sm:text-sm">{t("team.totalTeamRewards")}</span>
+            </div>
+            <span id="team-total-rewards" className="self-end text-sm font-black tabular-nums text-emerald-300 sm:self-auto sm:text-xl">
+              {isLoading || isError ? "—" : money(totalTeamRewards, lang)}
+            </span>
+          </div>
         </section>
 
         {isError && (
@@ -308,7 +325,7 @@ function TeamPage() {
                             إجمالي الأرباح
                           </div>
                           <div className="text-sm font-black sm:text-base">
-                            {money(level.earnings)}
+                            {money(level.earnings, lang)}
                           </div>
                         </div>
                       </div>
