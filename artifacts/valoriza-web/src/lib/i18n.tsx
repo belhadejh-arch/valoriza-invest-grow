@@ -89,6 +89,8 @@ export const translations = {
     "auth.errUsernameLen": "اسم المستخدم يجب ألا يقل عن 3 أحرف",
     "auth.errPasswordLen": "كلمة المرور يجب ألا تقل عن 6 أحرف",
     "auth.errInvalidReferral": "رمز الإحالة غير صحيح. تحقق منه أو اترك الحقل فارغًا للتسجيل بدونه.",
+    "auth.errUnavailable": "تعذر التحقق من الحساب لدى الخادم. حاول مجددًا؛ هذا الخطأ لا يعني أن كلمة المرور غير صحيحة.",
+    "auth.errEmailConflict": "يوجد أكثر من حساب قديم بنفس البريد وبيانات الدخول. تواصل مع إدارة المنصة لاستعادة الحساب دون فقد بياناته.",
 
     // Home
     "home.walletBalance": "رصيد المحفظة",
@@ -457,6 +459,8 @@ translations.es = Object.fromEntries(
   Object.entries(translations.ar).map(([key, value]) => [key, translateLegacyText(value, [], "es")]),
 );
 Object.assign(translations.en, {
+  "auth.errUnavailable": "The server could not verify your account. Please try again; this does not mean your password is incorrect.",
+  "auth.errEmailConflict": "Multiple legacy accounts share this email and login details. Contact the platform administrator to recover your account without losing its data.",
   "auth.errInvalidReferral": "That referral code is not valid. Check it or leave the field blank to register without a referral.",
   "team.fromLevel1": "From level one",
   "team.fromLevel2": "From level two",
@@ -486,6 +490,8 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations.es, {
+  "auth.errUnavailable": "El servidor no pudo verificar tu cuenta. Inténtalo de nuevo; esto no significa que tu contraseña sea incorrecta.",
+  "auth.errEmailConflict": "Varias cuentas antiguas comparten este correo y los datos de acceso. Contacta con la administración de la plataforma para recuperar tu cuenta sin perder sus datos.",
   "auth.errInvalidReferral": "El código de referido no es válido. Compruébelo o deje el campo vacío para registrarse sin referido.",
   "home.savingsFund": "Fondo de ahorro",
   "home.savingsDesc": "Ahorra hoy y recibe tu capital y beneficio al vencimiento",

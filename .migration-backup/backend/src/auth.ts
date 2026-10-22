@@ -36,7 +36,19 @@ export function setSessionCookie(response: Response, token: string) {
 }
 
 export function clearSessionCookie(response: Response) {
-  response.clearCookie(SESSION_COOKIE, { path: "/" });
+  response.clearCookie(SESSION_COOKIE, {
+    path: "/",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  });
+}
+
+function requestToken(request: Request): string | undefined {
+  // The browser explicitly sends its current token. An older proxy cookie
+  // must never override it or silently select a different account.
+  return request.header("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1]
+    || request.cookies?.[SESSION_COOKIE];
 }
 
 export async function createSession(userId: string, response: Response) {
@@ -55,19 +67,24 @@ export async function createSession(userId: string, response: Response) {
 }
 
 export async function destroySession(request: Request, response: Response) {
-  const token = request.cookies?.[SESSION_COOKIE];
+  const token = requestToken(request);
   if (token) await query("DELETE FROM sessions WHERE token_hash = $1", [hashToken(token)]);
   clearSessionCookie(response);
 }
 
 export async function getAuthUser(request: Request): Promise<AuthUser | null> {
-  const token =
-    request.cookies?.[SESSION_COOKIE] || request.header("authorization")?.replace(/^Bearer /, "");
+  const token = requestToken(request);
   if (!token) return null;
+  let userId: string;
   try {
     const payload = jwt.verify(token, JWT_SECRET) as { sub?: string };
     if (!payload.sub) return null;
-    const result = await query<AuthUser>(
+    userId = payload.sub;
+  } catch {
+    return null;
+  }
+  // A database outage is a service error, not an invalid password/session.
+  const result = await query<AuthUser>(
       `SELECT u.id, u.email, p.username,
               CASE
                 WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND role = 'admin')
@@ -81,12 +98,9 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
        FROM users u JOIN profiles p ON p.id = u.id
        JOIN sessions s ON s.user_id = u.id
        WHERE u.id = $1 AND s.token_hash = $2 AND s.expires_at > now()`,
-      [payload.sub, hashToken(token)],
+      [userId, hashToken(token)],
     );
-    return result.rows[0] ?? null;
-  } catch {
-    return null;
-  }
+  return result.rows[0] ?? null;
 }
 
 export async function requireAuth(request: Request): Promise<AuthUser> {

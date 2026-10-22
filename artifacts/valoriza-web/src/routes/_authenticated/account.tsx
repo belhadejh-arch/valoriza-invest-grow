@@ -108,9 +108,11 @@ function AccountPage() {
   }
 
   async function signOut() {
-    await qc.cancelQueries();
-    qc.clear();
-    await auth.signOut();
+    const result = await auth.signOut();
+    if (result.error) {
+      toast.error(t("auth.errUnavailable"));
+      return;
+    }
     navigate({ to: "/", replace: true });
   }
 

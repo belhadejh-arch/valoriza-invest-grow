@@ -71,6 +71,8 @@ function AuthPage() {
 
   function getFriendlyErrorMessage(rawMsg: string): string {
     if (!rawMsg) return "حدث خطأ غير متوقع أثناء معالجة الطلب";
+    if (rawMsg.includes("AUTH_UNAVAILABLE")) return t("auth.errUnavailable");
+    if (rawMsg.includes("ACCOUNT_EMAIL_CONFLICT")) return t("auth.errEmailConflict");
     if (
       rawMsg.includes("ACCOUNT_EXISTS") ||
       rawMsg.includes("already registered") ||

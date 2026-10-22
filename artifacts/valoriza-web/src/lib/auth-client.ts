@@ -28,6 +28,7 @@ async function request<T>(
         ...init,
         headers,
         credentials: "include",
+        cache: "no-store",
         signal: controller.signal,
       });
     } finally {
@@ -37,7 +38,7 @@ async function request<T>(
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const message =
-        data?.message ||
+        (response.status >= 500 ? "AUTH_UNAVAILABLE" : data?.message) ||
         (response.status === 401
           ? "INVALID_CREDENTIALS"
           : response.status === 403
@@ -84,6 +85,9 @@ export const auth = {
         }),
       },
     );
+    if (!result.error && (!result.data?.ok || !result.data.token || !result.data.user)) {
+      return { data: null, error: new Error("AUTH_UNAVAILABLE") };
+    }
     if (!result.error && result.data?.ok && result.data.user) {
       if (result.data.token) setStoredToken(result.data.token);
       listeners.forEach((listener) => listener("SIGNED_IN", result.data));
@@ -118,6 +122,9 @@ export const auth = {
         }),
       },
     );
+    if (!result.error && (!result.data?.ok || !result.data.token || !result.data.user)) {
+      return { data: null, error: new Error("AUTH_UNAVAILABLE") };
+    }
     if (!result.error && result.data?.ok && result.data.user) {
       if (result.data.token) setStoredToken(result.data.token);
       listeners.forEach((listener) => listener("SIGNED_IN", result.data));
@@ -134,7 +141,9 @@ export const auth = {
   },
 
   async signOut() {
-    await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+    const result = await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+    if (result.error) return result;
+    if (!result.data?.ok) return { data: null, error: new Error("AUTH_UNAVAILABLE") };
     setStoredToken(null);
     listeners.forEach((listener) => listener("SIGNED_OUT", null));
     return { data: { ok: true }, error: null };

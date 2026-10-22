@@ -73,11 +73,15 @@ export function AppHeader({
 
   const handleLogout = async () => {
     try {
-      await auth.signOut();
+      const result = await auth.signOut();
+      if (result.error) {
+        toast.error(t("auth.errUnavailable"));
+        return;
+      }
       toast.success(t("common.success"));
       navigate({ to: "/", replace: true });
     } catch {
-      navigate({ to: "/", replace: true });
+      toast.error(t("auth.errUnavailable"));
     }
   };
 

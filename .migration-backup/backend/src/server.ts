@@ -9,8 +9,8 @@ import { applySafeDatabaseSchema, ensureTeamMilestoneSchema } from "./safe-schem
 import { referralRate } from "./referral-rates.js";
 import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import {
-  clearSessionCookie,
   createSession,
+  destroySession,
   getAuthUser,
   hashPassword,
   requireAdmin,
@@ -53,6 +53,10 @@ app.use((request, response, next) => {
   return jsonBodyParser(request, response, next);
 });
 app.use(cookieParser());
+app.use("/api/auth", (_request, response, next) => {
+  response.set("Cache-Control", "no-store");
+  next();
+});
 
 app.get("/health", async (_request, response) => {
   try {
@@ -581,6 +585,16 @@ app.post("/api/auth/register", async (request, response, next) => {
     const referralCodeValue = normalizeReferralCode(referralCode ?? "");
     const passwordHash = await hashPassword(password);
     const result = await withTransaction(async (client) => {
+      // Legacy raw-email uniqueness is case-sensitive. Serialize registrations
+      // for the same normalized identity without rewriting existing accounts.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [emailValue]);
+      const existing = await client.query(
+        "SELECT id FROM users WHERE lower(btrim(email))=$1 LIMIT 1",
+        [emailValue],
+      );
+      if (existing.rowCount) {
+        throw Object.assign(new Error("ACCOUNT_EXISTS"), { code: "ACCOUNT_EXISTS" });
+      }
       const referrerL1Id = await findReferralOwner(client, referralCodeValue);
       if (referralCodeValue && !referrerL1Id) {
         throw Object.assign(new Error("INVALID_REFERRAL_CODE"), { code: "INVALID_REFERRAL_CODE" });
@@ -653,7 +667,7 @@ app.post("/api/auth/register", async (request, response, next) => {
   } catch (error) {
     if ((error as { code?: string }).code === "INVALID_REFERRAL_CODE")
       return response.status(400).json({ message: "INVALID_REFERRAL_CODE" });
-    if ((error as { code?: string }).code === "23505")
+    if (["23505", "ACCOUNT_EXISTS"].includes((error as { code?: string }).code ?? ""))
       return response.status(409).json({ message: "ACCOUNT_EXISTS" });
     return next(error);
   }
@@ -679,25 +693,47 @@ app.post("/api/auth/change-password", async (request, response, next) => {
 app.post("/api/auth/login", async (request, response, next) => {
   try {
     const { email, password } = request.body ?? {};
-    const result = await query<{ id: string; password_hash: string; is_blocked: boolean }>(
-      `SELECT u.id, u.password_hash, COALESCE(p.is_blocked, false) AS is_blocked
+    if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
+      return response.status(401).json({ message: "INVALID_CREDENTIALS" });
+    }
+    const result = await query<{
+      id: string;
+      password_hash: string;
+      profile_id: string | null;
+      is_blocked: boolean;
+    }>(
+      `SELECT u.id, u.password_hash, p.id AS profile_id, COALESCE(p.is_blocked, false) AS is_blocked
        FROM users u
-       JOIN profiles p ON p.id = u.id
-       WHERE lower(btrim(u.email)) = $1
-       ORDER BY (u.email = $1) DESC
-       LIMIT 1`,
+       LEFT JOIN profiles p ON p.id = u.id
+       WHERE lower(btrim(u.email)) = $1`,
       [
         String(email ?? "")
           .trim()
           .toLowerCase(),
       ],
     );
-    const row = result.rows[0];
-    if (!row || !(await verifyPassword(String(password ?? ""), row.password_hash))) {
+    const matching = [];
+    let unreadableHash = false;
+    for (const candidate of result.rows) {
+      if (typeof candidate.password_hash !== "string"
+          || !/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(candidate.password_hash)) {
+        unreadableHash = true;
+        continue;
+      }
+      if (await verifyPassword(password, candidate.password_hash)) matching.push(candidate);
+    }
+    if (!matching.length) {
+      if (unreadableHash) return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
+    // Never select the first row arbitrarily when old accounts differ only
+    // in email capitalization. A password must identify exactly one account.
+    if (matching.length > 1) {
+      return response.status(409).json({ message: "ACCOUNT_EMAIL_CONFLICT" });
+    }
+    const row = matching[0];
+    if (!row.profile_id) return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
     if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
-    const token = await createSession(row.id, response);
     const userProfile = await query<{ username: string; email: string; role: string }>(
       `SELECT p.username, p.email,
               CASE
@@ -712,6 +748,7 @@ app.post("/api/auth/login", async (request, response, next) => {
        FROM profiles p WHERE p.id = $1`,
       [row.id],
     );
+    const token = await createSession(row.id, response);
     return response.json({
       ok: true,
       token,
@@ -729,12 +766,7 @@ app.post("/api/auth/login", async (request, response, next) => {
 
 app.post("/api/auth/logout", async (request, response, next) => {
   try {
-    const token = request.cookies?.valoriza_session;
-    if (token)
-      await query("DELETE FROM sessions WHERE token_hash = encode(digest($1, 'sha256'), 'hex')", [
-        token,
-      ]);
-    clearSessionCookie(response);
+    await destroySession(request, response);
     response.json({ ok: true });
   } catch (error) {
     next(error);
