@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -54,6 +54,7 @@ function TasksPage() {
   const [activeWatchTask, setActiveWatchTask] = useState<TaskItem | null>(null);
   const [secondsRemaining, setSecondsRemaining] = useState(10);
   const [watchedSeconds, setWatchedSeconds] = useState(0);
+  const autoClaimedTaskRef = useRef<string | null>(null);
 
   const { data, isLoading } = useQuery<TasksPageData>({
     queryKey: ["tasks-data"],
@@ -101,6 +102,7 @@ function TasksPage() {
     setActiveWatchTask(task);
     setSecondsRemaining(duration);
     setWatchedSeconds(0);
+    autoClaimedTaskRef.current = null;
   };
 
   useEffect(() => {
@@ -122,21 +124,39 @@ function TasksPage() {
     };
   }, [activeWatchTask, secondsRemaining]);
 
+  useEffect(() => {
+    if (
+      !activeWatchTask ||
+      secondsRemaining > 0 ||
+      watchedSeconds < activeWatchTask.durationSeconds ||
+      autoClaimedTaskRef.current === activeWatchTask.id
+    ) {
+      return;
+    }
+
+    autoClaimedTaskRef.current = activeWatchTask.id;
+    completeMutation.mutate({
+      taskId: activeWatchTask.id,
+      watchedSeconds,
+    });
+  }, [activeWatchTask, secondsRemaining, watchedSeconds, completeMutation.mutate]);
+
   const handleClaimReward = async () => {
     if (!activeWatchTask) return;
     if (secondsRemaining > 0) {
       return;
     }
+    autoClaimedTaskRef.current = activeWatchTask.id;
     await completeMutation.mutateAsync({
       taskId: activeWatchTask.id,
-      watchedSeconds: Math.max(watchedSeconds, 10),
+      watchedSeconds: Math.max(watchedSeconds, activeWatchTask.durationSeconds),
     });
   };
 
   const tasksList = data?.tasks ?? [];
   const vipLevel = data?.vipLevel ?? 2;
   const commission = data?.videoCommission ?? 0.4;
-  const remaining = data?.remainingTasks ?? 3;
+  const remaining = data?.remainingTasks ?? 0;
   const dailyLimit = data?.dailyLimit ?? 3;
   const durationSec = data?.videoDuration ?? 10;
 
@@ -223,10 +243,10 @@ function TasksPage() {
               </div>
               <div className="p-2 rounded-xl bg-black/20">
                 <p className="text-[10px] text-primary-foreground/70 font-semibold">
-                  {t("tasks.remaining")}
+                  {t("tasks.completedToday")}
                 </p>
                 <p className="mt-0.5 text-sm font-black text-primary-foreground">
-                  {remaining}/{dailyLimit}
+                  {data ? `${data.completedCount}/${dailyLimit}` : "—"}
                 </p>
               </div>
               <div className="p-2 rounded-xl bg-black/20">
