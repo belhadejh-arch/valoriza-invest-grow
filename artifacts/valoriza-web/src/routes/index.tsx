@@ -283,7 +283,11 @@ function AuthPage() {
                   icon={Mail}
                   type="email"
                   name="email"
+                  dir="ltr"
                   autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   placeholder={t("auth.email")}
                   value={form.email}
                   onChange={set("email")}

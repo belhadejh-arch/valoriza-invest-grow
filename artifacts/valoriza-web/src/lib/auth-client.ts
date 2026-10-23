@@ -10,6 +10,14 @@ export type AuthUser = {
 type AuthListener = (event: "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED", session: unknown) => void;
 const listeners = new Set<AuthListener>();
 
+function normalizeEmail(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -80,7 +88,7 @@ export const auth = {
       {
         method: "POST",
         body: JSON.stringify({
-          email: input.email.trim().toLowerCase(),
+          email: normalizeEmail(input.email),
           password: input.password,
         }),
       },
@@ -100,7 +108,7 @@ export const auth = {
     password: string;
     options?: { data?: Record<string, string> };
   }) {
-    const email = input.email.trim().toLowerCase();
+    const email = normalizeEmail(input.email);
     const metadata = input.options?.data ?? {};
     if (!email || !email.includes("@")) {
       return { data: null, error: new Error("يرجى إدخال بريد إلكتروني صالح.") };

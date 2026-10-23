@@ -14,6 +14,14 @@ const JWT_SECRET = getJwtSecret();
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 30);
 export const SESSION_COOKIE = "valoriza_session";
 
+export function normalizeEmail(value: string): string {
+  return value
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 export type AuthUser = {
   id: string;
   email: string;

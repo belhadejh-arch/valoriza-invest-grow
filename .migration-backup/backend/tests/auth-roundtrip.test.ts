@@ -33,7 +33,10 @@ test("database credentials survive logout, legacy email collisions, and password
     assert.equal((await api("/api/auth/logout", {}, bearer(originalToken))).status, 200);
     assert.equal((await api("/api/auth/session", undefined, bearer(originalToken))).data.session, null);
 
-    const login = await api("/api/auth/login", { email: ` ${email.toUpperCase()} `, password });
+    const login = await api("/api/auth/login", {
+      email: `\u200B ${email.toUpperCase()} \u2060`,
+      password,
+    });
     assert.equal(login.status, 200);
     assert.equal(login.data.user.id, ids[0]);
     assert.notEqual(login.data.token, originalToken);

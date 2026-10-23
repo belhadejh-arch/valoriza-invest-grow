@@ -13,6 +13,7 @@ import {
   destroySession,
   getAuthUser,
   hashPassword,
+  normalizeEmail,
   requireAdmin,
   requireAuth,
   verifyPassword,
@@ -581,7 +582,7 @@ app.post("/api/auth/register", async (request, response, next) => {
     if (referralCode != null && typeof referralCode !== "string") {
       return response.status(400).json({ message: "INVALID_REFERRAL_CODE" });
     }
-    const emailValue = email.trim().toLowerCase();
+    const emailValue = normalizeEmail(email);
     const referralCodeValue = normalizeReferralCode(referralCode ?? "");
     const passwordHash = await hashPassword(password);
     const result = await withTransaction(async (client) => {
@@ -693,9 +694,10 @@ app.post("/api/auth/change-password", async (request, response, next) => {
 app.post("/api/auth/login", async (request, response, next) => {
   try {
     const { email, password } = request.body ?? {};
-    if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
+    if (typeof email !== "string" || typeof password !== "string" || !normalizeEmail(email) || !password) {
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
+    const normalizedEmail = normalizeEmail(email);
     const result = await query<{
       id: string;
       password_hash: string;
@@ -707,13 +709,17 @@ app.post("/api/auth/login", async (request, response, next) => {
        LEFT JOIN profiles p ON p.id = u.id
        WHERE lower(btrim(u.email)) = $1`,
       [
-        String(email ?? "")
-          .trim()
-          .toLowerCase(),
+        normalizedEmail,
       ],
     );
     if (!result.rows.length) {
-      console.warn("[AUTH_LOGIN_REJECTED] account_not_found");
+      const configuredAdminEmail = process.env.ADMIN_EMAIL;
+      const matchesConfiguredAdmin =
+        typeof configuredAdminEmail === "string" &&
+        normalizeEmail(configuredAdminEmail) === normalizedEmail;
+      console.warn(
+        `[AUTH_LOGIN_REJECTED] account_not_found configured_admin_email_match=${matchesConfiguredAdmin}`,
+      );
       return response.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
     const matching = [];
@@ -765,7 +771,7 @@ app.post("/api/auth/login", async (request, response, next) => {
       token,
       user: {
         id: row.id,
-        email: userProfile.rows[0]?.email || String(email).trim().toLowerCase(),
+        email: userProfile.rows[0]?.email || normalizedEmail,
         username: userProfile.rows[0]?.username || "user",
         role: userProfile.rows[0]?.role || "user",
       },
@@ -2702,7 +2708,7 @@ async function initDatabase() {
     // Additive and idempotent: never delete or re-create existing customer data.
     await ensureTeamMilestoneSchema();
     // Ensure default primary admin user exists and is linked
-    const adminEmail = (process.env.ADMIN_EMAIL || "superadmin@valoriza.com").trim().toLowerCase();
+    const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "superadmin@valoriza.com");
     const adminPassword = process.env.ADMIN_PASSWORD;
     const syncAdminPassword = process.env.ADMIN_PASSWORD_SYNC === "true";
     if (syncAdminPassword && !adminPassword) {
