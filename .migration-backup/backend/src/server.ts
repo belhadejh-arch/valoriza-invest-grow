@@ -1333,6 +1333,7 @@ app.post("/api/app/invest", async (request, response, next) => {
 
 app.get("/api/app/withdrawal", async (request, response, next) => {
   try {
+    response.set("Cache-Control", "no-store");
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const [wallet, address, settings, prof] = await Promise.all([
       query("SELECT balance FROM wallets WHERE user_id = $1", [user.id]),
@@ -1374,22 +1375,39 @@ app.post("/api/app/withdrawal/address", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const { network, address } = request.body ?? {};
-    const current = await query<{ locked: boolean }>(
-      "SELECT locked FROM withdrawal_addresses WHERE user_id=$1",
-      [user.id],
-    );
-    if (current.rows[0]?.locked)
-      return response.json({
-        ok: false,
-        reason: "ADDRESS_LOCKED",
-        message: "عنوان السحب مقفل ومحمي بحسابك.",
-      });
-    await query(
-      `INSERT INTO withdrawal_addresses (user_id,network,address,locked) VALUES ($1,$2,$3,true)
-      ON CONFLICT (user_id) DO UPDATE SET network=EXCLUDED.network,address=EXCLUDED.address,locked=true`,
-      [user.id, network, String(address).trim()],
-    );
-    response.json({ ok: true, address: String(address).trim(), network });
+    const normalizedAddress = typeof address === "string" ? address.trim() : "";
+    if (!["ERC20", "BEP20", "TRC20"].includes(network) || normalizedAddress.length < 15) {
+      return response.status(400).json({ ok: false, reason: "INVALID_WITHDRAWAL_ADDRESS" });
+    }
+    const result = await withTransaction(async (client) => {
+      // Serialize first binds even where a legacy table lacks UNIQUE(user_id).
+      await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [user.id]);
+      const current = await client.query<{ locked: boolean; network: string; address: string }>(
+        "SELECT locked,network,address FROM withdrawal_addresses WHERE user_id=$1 FOR UPDATE",
+        [user.id],
+      );
+      const saved = current.rows[0];
+      if (saved?.locked) {
+        if (saved.network === network && saved.address === normalizedAddress) {
+          return { ok: true, boundAddress: saved, ...saved };
+        }
+        return { ok: false, reason: "ADDRESS_LOCKED", message: "عنوان السحب مقفل ومحمي بحسابك." };
+      }
+      if (saved) {
+        await client.query(
+          "UPDATE withdrawal_addresses SET network=$2,address=$3,locked=true WHERE user_id=$1",
+          [user.id, network, normalizedAddress],
+        );
+      } else {
+        await client.query(
+          "INSERT INTO withdrawal_addresses(user_id,network,address,locked) VALUES($1,$2,$3,true)",
+          [user.id, network, normalizedAddress],
+        );
+      }
+      const boundAddress = { network, address: normalizedAddress, locked: true };
+      return { ok: true, boundAddress, ...boundAddress };
+    });
+    response.json(result);
   } catch (error) {
     next(error);
   }
@@ -1425,17 +1443,23 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
     }
 
     const minimum = Math.max(6, number(settings.min_withdrawal ?? 6));
+    if (!Number.isFinite(value) || value <= 0)
+      return response.status(400).json({ ok: false, reason: "INVALID_AMOUNT" });
     if (value < minimum)
       return response.json({ ok: false, reason: "BELOW_MIN_WITHDRAWAL", minWithdrawal: minimum });
     const fee = Math.round(value * number(settings.withdrawal_fee_percent ?? 10)) / 100;
     const result = await withTransaction(async (client) => {
-      const locked = await client.query<{ address: string; network: string }>(
-        "SELECT address,network FROM withdrawal_addresses WHERE user_id=$1",
+      const locked = await client.query<{ address: string; network: string; locked: boolean }>(
+        "SELECT address,network,locked FROM withdrawal_addresses WHERE user_id=$1 FOR SHARE",
         [user.id],
       );
+      const saved = locked.rows[0];
+      if (!saved?.locked || !saved.address?.trim()) {
+        return { ok: false, reason: "ADDRESS_NOT_BOUND", message: "يرجى ربط عنوان السحب مرة واحدة قبل أول عملية سحب." };
+      }
       if (
-        locked.rows[0] &&
-        (locked.rows[0].address !== String(address).trim() || locked.rows[0].network !== network)
+        (address != null && saved.address !== String(address).trim()) ||
+        (network != null && saved.network !== network)
       )
         return {
           ok: false,
@@ -1444,7 +1468,7 @@ app.post("/api/app/withdrawal", async (request, response, next) => {
         };
       const withdrawal = await client.query<{ id: string }>(
         "INSERT INTO withdrawals (user_id,amount,fee,net_amount,network,address) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-        [user.id, value, fee, value - fee, network, String(address).trim()],
+        [user.id, value, fee, value - fee, saved.network, saved.address],
       );
       await changeBalance(client, user.id, -value, "withdrawal", "طلب سحب", withdrawal.rows[0].id);
       return { ok: true, withdrawalId: withdrawal.rows[0].id, netAmount: value - fee, fee };

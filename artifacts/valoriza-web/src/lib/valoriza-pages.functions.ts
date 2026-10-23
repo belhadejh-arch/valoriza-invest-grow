@@ -75,6 +75,7 @@ export interface CompanyData {
 
 export interface ActionResult {
   ok: boolean;
+  boundAddress?: { network: "ERC20" | "BEP20" | "TRC20"; address: string; locked: boolean };
   reason?: string;
   message?: string;
   amount?: number;
@@ -177,8 +178,8 @@ export const bindWithdrawalAddress = post<{
 }>("/api/app/withdrawal/address");
 
 export const requestWithdrawal = post<{
-  network: "ERC20" | "BEP20" | "TRC20";
-  address: string;
+  network?: "ERC20" | "BEP20" | "TRC20";
+  address?: string;
   amount: number;
 }>("/api/app/withdrawal");
 

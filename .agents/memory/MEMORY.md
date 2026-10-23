@@ -6,3 +6,4 @@
 - [Vercel function type checks](pnpm-root-dependencies.md) — root-level Vercel functions may not resolve Node built-in type imports; prefer locally typed runtime globals.
 - [لغة واجهة موحدة](arabic-language-policy.md) — العربية والإنجليزية والإسبانية حسب اختيار المستخدم، دون مزج اللغات في الواجهة.
 - [Real operational data](operational-data-policy.md) — show actual records and configured addresses; never make an unconfigured financial service look operational with sample data.
+- [Withdrawal address reuse](withdrawal-address-policy.md) — bind once per account and reuse the saved destination across withdrawals and sign-ins.

@@ -54,9 +54,10 @@ function WithdrawalPage() {
   const bindAddressFn = useServerFn(bindWithdrawalAddress);
   const submitWithdrawalFn = useServerFn(requestWithdrawal);
 
-  const { data: info } = useQuery({
+  const { data: info, isLoading: isInfoLoading, isError: isInfoError } = useQuery({
     queryKey: ["withdrawal-info"],
     queryFn: () => fetchWithdrawalInfo(),
+    refetchOnMount: "always",
   });
 
   const { data: recordsData } = useQuery({
@@ -90,9 +91,12 @@ function WithdrawalPage() {
   const bindMutation = useMutation({
     mutationFn: (vals: { network: "ERC20" | "BEP20" | "TRC20"; address: string }) =>
       bindAddressFn({ data: vals }),
-    onSuccess: (res) => {
+    onSuccess: (res, values) => {
       if (res.ok) {
         toast.success(t("withdraw.bindSuccess"));
+        qc.setQueryData(["withdrawal-info"], (previous: any) =>
+          previous ? { ...previous, boundAddress: res.boundAddress ?? { ...values, locked: true } } : previous,
+        );
         qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
       } else {
         toast.error(res.message || t("common.error"));
@@ -102,7 +106,7 @@ function WithdrawalPage() {
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: (vals: { network: "ERC20" | "BEP20" | "TRC20"; address: string; amount: number }) =>
+    mutationFn: (vals: { amount: number }) =>
       submitWithdrawalFn({ data: vals }),
     onSuccess: (res) => {
       if (res.ok) {
@@ -147,12 +151,16 @@ function WithdrawalPage() {
 
   const handleSubmitWithdraw = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isInfoLoading || isInfoError) {
+      toast.error(t("common.error"));
+      return;
+    }
     if (!isWithdrawalAllowed) {
       toast.error(info?.disabledReason || "السحب معطل حالياً بقرار من إدارة المنصة");
       return;
     }
-    if (!addressInput.trim()) {
-      toast.error(t("withdraw.addressPlaceholder"));
+    if (!isAddressLocked) {
+      toast.error(t("withdraw.bindingRequired"));
       return;
     }
     if (numAmount < minWithdrawal) {
@@ -164,8 +172,6 @@ function WithdrawalPage() {
       return;
     }
     withdrawMutation.mutate({
-      network,
-      address: addressInput.trim(),
       amount: numAmount,
     });
   };
@@ -265,7 +271,9 @@ function WithdrawalPage() {
                   <Lock className="h-4 w-4 text-gold" />
                   <span>{t("account.walletBind")}</span>
                 </span>
-                {isAddressLocked ? (
+                {isInfoLoading || isInfoError ? (
+                  <span className="text-xs text-muted-foreground">{isInfoLoading ? "..." : t("common.error")}</span>
+                ) : isAddressLocked ? (
                   <span className="rounded-full bg-success/20 border border-success/40 px-3 py-0.5 text-[10px] font-black text-success flex items-center gap-1">
                     <ShieldCheck className="h-3 w-3" /> {t("withdraw.walletLocked")}
                   </span>
@@ -291,11 +299,11 @@ function WithdrawalPage() {
                   dir="ltr"
                   className="flex-1 rounded-2xl border border-border bg-surface px-4 py-3 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:border-cyan-glow focus:outline-none disabled:opacity-80"
                 />
-                {!isAddressLocked ? (
+                {!isAddressLocked && !isInfoLoading && !isInfoError ? (
                   <button
                     id="btn-bind-wallet-address"
                     type="button"
-                    disabled={bindMutation.isPending}
+                    disabled={bindMutation.isPending || isInfoLoading || isInfoError}
                     onClick={handleBind}
                     className="shrink-0 rounded-2xl brand-gradient px-4 py-3 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all cursor-pointer"
                   >
@@ -370,7 +378,7 @@ function WithdrawalPage() {
               <button
                 id="submit-withdraw-button"
                 type="submit"
-                disabled={withdrawMutation.isPending || numAmount <= 0 || !isWithdrawalAllowed}
+                disabled={withdrawMutation.isPending || numAmount <= 0 || !isWithdrawalAllowed || !isAddressLocked || isInfoLoading || isInfoError}
                 className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-black text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {withdrawMutation.isPending
