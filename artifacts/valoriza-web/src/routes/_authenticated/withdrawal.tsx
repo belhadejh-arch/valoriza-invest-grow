@@ -113,6 +113,7 @@ function WithdrawalPage() {
         qc.invalidateQueries({ queryKey: ["withdrawal-info"] });
         qc.invalidateQueries({ queryKey: ["financial-records"] });
         qc.invalidateQueries({ queryKey: ["account"] });
+        qc.invalidateQueries({ queryKey: ["home"] });
       } else {
         if (res.message) {
           toast.error(res.message);

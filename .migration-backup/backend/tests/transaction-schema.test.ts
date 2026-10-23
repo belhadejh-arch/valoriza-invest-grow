@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { pool } from "../src/db.js";
+import { recordWalletChange, walletLedgerSchemaSql } from "../src/wallet-ledger.js";
 
 test("startup migration upgrades the full legacy ledger contract without changing history", async () => {
   const client = await pool.connect();
@@ -11,11 +12,6 @@ test("startup migration upgrades the full legacy ledger contract without changin
     new URL("../migrations/001_init.sql", import.meta.url),
     "utf8",
   );
-  const server = await readFile(new URL("../src/server.ts", import.meta.url), "utf8");
-  const ledgerInsert = server.match(
-    /`(INSERT INTO transactions \(user_id, type, amount,[^`]+RETURNING id)`/,
-  )?.[1];
-  assert.ok(ledgerInsert, "Exercise the actual changeBalance INSERT, including reference_id");
   try {
     await client.query("BEGIN");
     await client.query(`CREATE SCHEMA ${schema}`);
@@ -30,6 +26,7 @@ test("startup migration upgrades the full legacy ledger contract without changin
       INSERT INTO transactions (amount, legacy_note) VALUES (5, 'preserve history');
     `);
     await client.query(migration);
+    await client.query(walletLedgerSchemaSql);
     // Startup must remain safe on subsequent deployments.
     await client.query(migration);
     const historical = await client.query("SELECT * FROM transactions WHERE id=1");
@@ -48,16 +45,17 @@ test("startup migration upgrades the full legacy ledger contract without changin
     assert.equal(idType.rows[0].type, "bigint");
     const userId = randomUUID();
     const taskId = randomUUID();
-    // Run the real shared ledger INSERT for BOTH affected reward flows.
-    await client.query(ledgerInsert, [
-      userId, "daily_login_reward", 0.11, 0, 0.11, null, "daily reward",
-    ]);
-    await client.query(ledgerInsert, [
-      userId, "task_reward", 0.5, 0.11, 0.61, taskId, "video task reward",
-    ]);
+    // Wallet changes no longer require writing into this legacy cash ledger.
+    await client.query(
+      "INSERT INTO users(id,email,password_hash) VALUES($1,$2,'test-only')",
+      [userId, `schema-${userId}@example.invalid`],
+    );
+    await client.query("INSERT INTO wallets(user_id) VALUES($1)", [userId]);
+    await recordWalletChange(client, userId, 0.11, "admin_adjustment", "test credit");
+    await recordWalletChange(client, userId, 0.5, "task_reward", "video task reward", taskId);
     const credited = await client.query(`
       SELECT amount, balance_before, balance_after, reference_id, status, created_at
-      FROM transactions WHERE user_id=$1 ORDER BY id
+       FROM wallet_transactions WHERE user_id=$1 ORDER BY ctid
     `, [userId]);
     assert.equal(credited.rowCount, 2);
     assert.deepEqual({
@@ -74,7 +72,7 @@ test("startup migration upgrades the full legacy ledger contract without changin
     assert.equal(credited.rows[1].balance_after, "0.6100");
     assert.equal(credited.rows[1].status, "completed");
     assert.ok(credited.rows[1].created_at);
-    assert.equal((await client.query("SELECT count(*)::int AS n FROM transactions")).rows[0].n, 3);
+    assert.equal((await client.query("SELECT count(*)::int AS n FROM transactions")).rows[0].n, 1);
   } finally {
     // All test tables and rows are isolated and rolled back, never persisted.
     await client.query("ROLLBACK");

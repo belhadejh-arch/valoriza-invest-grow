@@ -59,6 +59,7 @@ function TasksPage() {
   const { data, isLoading } = useQuery<TasksPageData>({
     queryKey: ["tasks-data"],
     queryFn: () => getTasksData(),
+    refetchOnMount: "always",
   });
 
   const completeMutation = useMutation({
@@ -71,7 +72,10 @@ function TasksPage() {
         queryClient.invalidateQueries({ queryKey: ["investment"] });
         queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
         queryClient.invalidateQueries({ queryKey: ["investment-data"] });
-        queryClient.invalidateQueries({ queryKey: ["account-data"] });
+        queryClient.invalidateQueries({ queryKey: ["account"] });
+        queryClient.invalidateQueries({ queryKey: ["home"] });
+        queryClient.invalidateQueries({ queryKey: ["rewards"] });
+        queryClient.invalidateQueries({ queryKey: ["financial-records"] });
         setActiveWatchTask(null);
       } else {
         if (result.reason === "DAILY_LIMIT_REACHED") {

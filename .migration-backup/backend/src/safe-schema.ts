@@ -2,6 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pool } from "./db.js";
 import { dailyRewardSchemaSql } from "./daily-reward.js";
+import { walletLedgerSchemaSql } from "./wallet-ledger.js";
+
+export async function ensureWalletLedgerSchema() {
+  await pool.query(walletLedgerSchemaSql);
+}
 
 async function readBaselineMigration(): Promise<string> {
   const candidates = [

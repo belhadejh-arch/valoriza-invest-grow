@@ -102,6 +102,8 @@ function InvestmentPage() {
       if (res?.ok) {
         qc.invalidateQueries({ queryKey: ["investment"] });
         qc.invalidateQueries({ queryKey: ["home"] });
+        qc.invalidateQueries({ queryKey: ["tasks-data"] });
+        qc.invalidateQueries({ queryKey: ["account"] });
       } else {
         toast.error(
           res?.reason === "HAS_VIP"
@@ -120,6 +122,7 @@ function InvestmentPage() {
       if (res?.ok) {
         toast.success(`تمت ترقية حسابك إلى المستوى المميز ${res.level ?? res.vipLevel} بنجاح!`);
         qc.invalidateQueries({ queryKey: ["investment"] });
+        qc.invalidateQueries({ queryKey: ["tasks-data"] });
         qc.invalidateQueries({ queryKey: ["home"] });
         qc.invalidateQueries({ queryKey: ["account"] });
       } else {

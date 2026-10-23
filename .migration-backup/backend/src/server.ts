@@ -5,8 +5,9 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
-import { applySafeDatabaseSchema, ensureTeamMilestoneSchema, ensureDailyRewardSchema } from "./safe-schema.js";
+import { applySafeDatabaseSchema, ensureTeamMilestoneSchema, ensureDailyRewardSchema, ensureWalletLedgerSchema } from "./safe-schema.js";
 import { creditDailyReward } from "./daily-reward.js";
+import { recordWalletChange } from "./wallet-ledger.js";
 import { referralRate } from "./referral-rates.js";
 import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import { recoverPrimaryAdmin } from "./primary-admin-recovery.js";
@@ -130,7 +131,8 @@ export async function settleMaturedInvestments(batchSize = 100): Promise<number>
       // Legacy recovery: if a return ledger row already exists, never credit it
       // again. This also repairs its completion status without another payout.
       const priorReturn = await client.query(
-        "SELECT id FROM transactions WHERE type='investment_return' AND reference_id=$1 LIMIT 1",
+        `SELECT id::text FROM transactions WHERE type='investment_return' AND reference_id::text=$1
+         UNION ALL SELECT id::text FROM wallet_transactions WHERE type='investment_return' AND reference_id=$1 LIMIT 1`,
         [investment.id],
       );
       if (priorReturn.rowCount) {
@@ -159,7 +161,7 @@ export async function settleMaturedInvestments(batchSize = 100): Promise<number>
       if (!wallet.rowCount) throw new Error(`WALLET_NOT_FOUND_FOR_INVESTMENT:${investment.id}`);
 
       const transaction = await client.query(
-        `INSERT INTO transactions
+        `INSERT INTO wallet_transactions
            (user_id,type,status,amount,balance_before,balance_after,reference_id,description)
          VALUES ($1,'investment_return','completed',$2::numeric+$3::numeric,$4::numeric,$5::numeric,$6,$7)
          RETURNING id`,
@@ -255,30 +257,8 @@ async function changeBalance(
   referenceId?: string,
   includeTransactionId = false,
 ): Promise<number | { balance: number; transactionId: string }> {
-  const wallet = await client.query<{ balance: string }>(
-    "SELECT balance FROM wallets WHERE user_id = $1 FOR UPDATE",
-    [userId],
-  );
-  const before = number(wallet.rows[0]?.balance);
-  const after = before + amount;
-  if (after < 0) throw Object.assign(new Error("INSUFFICIENT_BALANCE"), { status: 400 });
-  await client.query(
-    `UPDATE wallets SET balance = $1, total_earned = total_earned + CASE WHEN $2::numeric > 0 AND $3 <> 'deposit' THEN $2::numeric ELSE 0::numeric END,
-      total_deposited = total_deposited + CASE WHEN $3 = 'deposit' THEN $2::numeric ELSE 0::numeric END,
-      total_withdrawn = total_withdrawn + CASE WHEN $3 = 'withdrawal' THEN -$2::numeric ELSE 0::numeric END,
-      updated_at = now() WHERE user_id = $4`,
-    [after, amount, type, userId],
-  );
-  const transaction = await client.query<{ id: string }>(
-    `INSERT INTO transactions (user_id, type, amount, balance_before, balance_after, reference_id, description)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
-     RETURNING id`,
-    [userId, type, amount, before, after, referenceId ?? null, description],
-  );
-  if (includeTransactionId) {
-    return { balance: after, transactionId: transaction.rows[0].id };
-  }
-  return after;
+  const result = await recordWalletChange(client, userId, amount, type, description, referenceId);
+  return includeTransactionId ? result : result.balance;
 }
 
 const TEAM_CASH_MILESTONES = [
@@ -544,7 +524,7 @@ async function distributeReferralCommissions(
           row.referrer_id,
         ]);
         await client.query(
-          "INSERT INTO referral_commissions (referrer_id, referred_id, source_transaction_id, level, amount) VALUES ($1,$2,$3,$4,$5)",
+          "INSERT INTO referral_commissions (referrer_id, referred_id, wallet_transaction_id, level, amount) VALUES ($1,$2,$3,$4,$5)",
           [row.referrer_id, userId, sourceTransactionId || null, row.level, commission],
         );
         await client.query(
@@ -1049,6 +1029,10 @@ app.get("/api/app/records", async (request, response, next) => {
         `SELECT id::text,type,amount,status,balance_before,balance_after,
                 reference_id::text,user_id,description,created_at
          FROM transactions WHERE user_id=$1
+         UNION ALL
+         SELECT id::text,type,amount,status,balance_before,balance_after,
+                reference_id,user_id,description,created_at
+         FROM wallet_transactions WHERE user_id=$1
          UNION ALL
          SELECT id::text,'daily_login_reward',amount,'completed',balance_before,balance_after,
                 NULL::text,user_id,'مكافأة تسجيل الدخول اليومية',created_at
@@ -1644,6 +1628,12 @@ app.post("/api/app/tasks/complete", async (request, response, next) => {
         "SELECT count(*)::int AS count FROM task_completions WHERE user_id=$1 AND completion_date=current_date",
         [user.id],
       );
+      // Profile lock serializes claims even on legacy tables lacking UNIQUE.
+      const priorCompletion = await client.query(
+        "SELECT id FROM task_completions WHERE user_id=$1 AND task_id=$2 AND completion_date=current_date",
+        [user.id, taskId],
+      );
+      if (priorCompletion.rowCount) return { ok: false, reason: "ALREADY_COMPLETED_TODAY" };
       if (number(count.rows[0]?.count) >= limit)
         return { ok: false, reason: "DAILY_LIMIT_REACHED" };
       const inserted = await client.query<{ id: string }>(
@@ -2702,6 +2692,7 @@ async function initDatabase() {
     // Additive and idempotent: never delete or re-create existing customer data.
     await ensureTeamMilestoneSchema();
     await ensureDailyRewardSchema();
+    await ensureWalletLedgerSchema();
     // Ensure default primary admin user exists and is linked
     const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com");
     const adminPassword = process.env.ADMIN_PASSWORD;
