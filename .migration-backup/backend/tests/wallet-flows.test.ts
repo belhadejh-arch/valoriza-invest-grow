@@ -30,6 +30,7 @@ test("task, admin credit, deposit approval, withdrawal and refund use the wallet
     const admin = await register();
     const user = await register();
     await pool.query("INSERT INTO user_roles(user_id,role) VALUES($1,'admin')", [admin.id]);
+    await pool.query("INSERT INTO referrals(referrer_id,referred_id,level) VALUES($1,$2,1)", [admin.id, user.id]);
     const before = await balance(user.id);
     const adjustment = await api(admin.token, "/api/admin/users/balance", {
       targetUserId: user.id, amount: 100, reason: "isolated development integration test",
@@ -79,6 +80,10 @@ test("task, admin credit, deposit approval, withdrawal and refund use the wallet
     assert.equal(await balance(user.id), before + 100 + taskAmount, "pending deposit must not credit wallet");
     await api(admin.token, "/api/admin/deposits/review", { depositId, action: "approve" });
     assert.equal(await balance(user.id), before + 150 + taskAmount);
+    assert.equal((await pool.query(
+      "SELECT count(*)::int AS n FROM referral_commissions WHERE referred_id=$1 AND wallet_transaction_id IS NOT NULL",
+      [user.id],
+    )).rows[0].n, 1);
     const duplicate = await fetch("http://127.0.0.1:80/api/admin/deposits/review", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${admin.token}` },
       body: JSON.stringify({ depositId, action: "approve" }),
