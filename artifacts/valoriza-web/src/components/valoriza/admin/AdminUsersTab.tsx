@@ -170,8 +170,13 @@ export function AdminUsersTab() {
 
   const balanceMutation = useMutation({
     mutationFn: manualBalanceAdjustment,
-    onSuccess: () => {
+    onSuccess: (result, variables) => {
       toast.success("تم تعديل رصيد المستخدم بنجاح وتوثيق العملية");
+      setSelectedUser((previous: any) =>
+        previous?.id === variables.targetUserId
+          ? { ...previous, balance: Number(result.balance) }
+          : previous,
+      );
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
       setAdjustBalanceOpen(false);
@@ -950,7 +955,7 @@ export function AdminUsersTab() {
                 onClick={() =>
                   balanceMutation.mutate({
                     targetUserId: selectedUser.id,
-                    amount: Number(adjustAmount),
+                    amount: isCredit ? Number(adjustAmount) : -Number(adjustAmount),
                     reason: adjustReason,
                   })
                 }

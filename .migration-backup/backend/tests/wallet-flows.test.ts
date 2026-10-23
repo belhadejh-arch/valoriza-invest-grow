@@ -37,6 +37,20 @@ test("task, admin credit, deposit approval, withdrawal and refund use the wallet
     });
     assert.equal(adjustment.ok, true);
     assert.equal(await balance(user.id), before + 100);
+    const deduction = await api(admin.token, "/api/admin/users/balance", {
+      targetUserId: user.id, amount: -10, reason: "development test debit",
+    });
+    assert.equal(deduction.balance, before + 90);
+    assert.equal(await balance(user.id), before + 90);
+    const insufficient = await fetch("http://127.0.0.1:80/api/admin/users/balance", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${admin.token}` },
+      body: JSON.stringify({ targetUserId: user.id, amount: -1000, reason: "test overdraw" }),
+    });
+    assert.equal(insufficient.status, 400);
+    assert.equal(await balance(user.id), before + 90);
+    await api(admin.token, "/api/admin/users/balance", {
+      targetUserId: user.id, amount: 10, reason: "restore development fixture balance",
+    });
     await api(user.token, "/api/app/trial", {});
     const tasks = await api(user.token, "/api/app/tasks");
     const task = tasks.tasks.find((item: { status: string }) => item.status === "AVAILABLE");
@@ -101,7 +115,7 @@ test("task, admin credit, deposit approval, withdrawal and refund use the wallet
     assert.equal(await balance(user.id), before + 150 + taskAmount);
     const records = await api(user.token, "/api/app/records");
     for (const type of ["admin_adjustment", "task_reward", "deposit", "withdrawal", "withdrawal_refund"]) {
-      assert.equal(records.transactions.filter((row: { type: string }) => row.type === type).length, 1, type);
+      assert.equal(records.transactions.filter((row: { type: string }) => row.type === type).length, type === "admin_adjustment" ? 3 : 1, type);
     }
     console.log("Verified task replay protection, credit, deposit review, withdrawal/refund and records");
   } finally {
