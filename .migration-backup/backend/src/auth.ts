@@ -14,10 +14,35 @@ const JWT_SECRET = getJwtSecret();
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 30);
 export const SESSION_COOKIE = "valoriza_session";
 
+const EMAIL_FORMAT_CODEPOINT_RANGES: Array<[number, number]> = [
+  [0x00ad, 0x00ad],
+  [0x034f, 0x034f],
+  [0x061c, 0x061c],
+  [0x180e, 0x180e],
+  [0x200b, 0x200f],
+  [0x202a, 0x202e],
+  [0x2060, 0x206f],
+  [0xfeff, 0xfeff],
+  [0xfff9, 0xfffb],
+  [0x110bd, 0x110bd],
+  [0x110cd, 0x110cd],
+  [0x13430, 0x1343f],
+  [0x1bca0, 0x1bca3],
+  [0x1d173, 0x1d17a],
+  [0xe0001, 0xe0001],
+  [0xe0020, 0xe007f],
+];
+
+export const EMAIL_FORMAT_CHARACTERS = EMAIL_FORMAT_CODEPOINT_RANGES
+  .flatMap(([start, end]) =>
+    Array.from({ length: end - start + 1 }, (_, index) => String.fromCodePoint(start + index)),
+  )
+  .join("");
+
 export function normalizeEmail(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
+    .replace(/[\p{Cf}\u034F]/gu, "")
     .trim()
     .toLowerCase();
 }

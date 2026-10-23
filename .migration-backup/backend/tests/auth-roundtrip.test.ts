@@ -30,11 +30,16 @@ test("database credentials survive logout, legacy email collisions, and password
     assert.equal(first.status, 201);
     ids.push(first.data.user.id);
     const originalToken = first.data.token;
+    const [emailLocal, emailDomain] = email.split("@");
+    await pool.query("UPDATE users SET email=$1 WHERE id=$2", [
+      `${emailLocal}\u061c@${emailDomain}`,
+      ids[0],
+    ]);
     assert.equal((await api("/api/auth/logout", {}, bearer(originalToken))).status, 200);
     assert.equal((await api("/api/auth/session", undefined, bearer(originalToken))).data.session, null);
 
     const login = await api("/api/auth/login", {
-      email: `\u200B ${email.toUpperCase()} \u2060`,
+      email: `\u061c\u200B ${email.toUpperCase()} \u2060`,
       password,
     });
     assert.equal(login.status, 200);

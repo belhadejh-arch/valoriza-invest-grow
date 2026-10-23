@@ -13,7 +13,7 @@ const listeners = new Set<AuthListener>();
 function normalizeEmail(value: string): string {
   return value
     .normalize("NFKC")
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
+    .replace(/[\p{Cf}\u034F]/gu, "")
     .trim()
     .toLowerCase();
 }

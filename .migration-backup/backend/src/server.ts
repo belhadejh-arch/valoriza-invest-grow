@@ -11,6 +11,7 @@ import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import {
   createSession,
   destroySession,
+  EMAIL_FORMAT_CHARACTERS,
   getAuthUser,
   hashPassword,
   normalizeEmail,
@@ -590,8 +591,8 @@ app.post("/api/auth/register", async (request, response, next) => {
       // for the same normalized identity without rewriting existing accounts.
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [emailValue]);
       const existing = await client.query(
-        "SELECT id FROM users WHERE lower(btrim(email))=$1 LIMIT 1",
-        [emailValue],
+        "SELECT id FROM users WHERE lower(btrim(translate(email, $2, '')))=$1 LIMIT 1",
+        [emailValue, EMAIL_FORMAT_CHARACTERS],
       );
       if (existing.rowCount) {
         throw Object.assign(new Error("ACCOUNT_EXISTS"), { code: "ACCOUNT_EXISTS" });
@@ -707,10 +708,8 @@ app.post("/api/auth/login", async (request, response, next) => {
       `SELECT u.id, u.password_hash, p.id AS profile_id, COALESCE(p.is_blocked, false) AS is_blocked
        FROM users u
        LEFT JOIN profiles p ON p.id = u.id
-       WHERE lower(btrim(u.email)) = $1`,
-      [
-        normalizedEmail,
-      ],
+       WHERE lower(btrim(translate(u.email, $2, ''))) = $1`,
+      [normalizedEmail, EMAIL_FORMAT_CHARACTERS],
     );
     if (!result.rows.length) {
       const configuredAdminEmail = process.env.ADMIN_EMAIL;
@@ -2718,8 +2717,8 @@ async function initDatabase() {
       throw new Error("ADMIN_PASSWORD_SYNC requires an ADMIN_PASSWORD of at most 72 UTF-8 bytes.");
     }
     const adminCheck = await query<{ id: string; password_hash: string }>(
-      "SELECT id, password_hash FROM users WHERE lower(btrim(email)) = $1",
-      [adminEmail],
+      "SELECT id, password_hash FROM users WHERE lower(btrim(translate(email, $2, ''))) = $1",
+      [adminEmail, EMAIL_FORMAT_CHARACTERS],
     );
     if (adminCheck.rows.length > 1) {
       throw new Error("Primary admin email matches multiple accounts; refusing password sync.");
