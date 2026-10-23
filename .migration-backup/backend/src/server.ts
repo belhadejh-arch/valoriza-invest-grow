@@ -8,6 +8,7 @@ import { pool, query, withTransaction } from "./db.js";
 import { applySafeDatabaseSchema, ensureTeamMilestoneSchema } from "./safe-schema.js";
 import { referralRate } from "./referral-rates.js";
 import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
+import { recoverPrimaryAdmin } from "./primary-admin-recovery.js";
 import {
   createSession,
   destroySession,
@@ -712,7 +713,7 @@ app.post("/api/auth/login", async (request, response, next) => {
       [normalizedEmail, EMAIL_FORMAT_CHARACTERS],
     );
     if (!result.rows.length) {
-      const configuredAdminEmail = process.env.ADMIN_EMAIL;
+      const configuredAdminEmail = process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com";
       const matchesConfiguredAdmin =
         typeof configuredAdminEmail === "string" &&
         normalizeEmail(configuredAdminEmail) === normalizedEmail;
@@ -2707,7 +2708,7 @@ async function initDatabase() {
     // Additive and idempotent: never delete or re-create existing customer data.
     await ensureTeamMilestoneSchema();
     // Ensure default primary admin user exists and is linked
-    const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "superadmin@valoriza.com");
+    const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com");
     const adminPassword = process.env.ADMIN_PASSWORD;
     const syncAdminPassword = process.env.ADMIN_PASSWORD_SYNC === "true";
     if (syncAdminPassword && !adminPassword) {
@@ -2715,6 +2716,21 @@ async function initDatabase() {
     }
     if (syncAdminPassword && adminPassword && Buffer.byteLength(adminPassword, "utf8") > 72) {
       throw new Error("ADMIN_PASSWORD_SYNC requires an ADMIN_PASSWORD of at most 72 UTF-8 bytes.");
+    }
+    const previousAdminEmail = process.env.ADMIN_PREVIOUS_EMAIL;
+    if (syncAdminPassword && adminPassword && previousAdminEmail) {
+      const changed = await withTransaction((client) =>
+        recoverPrimaryAdmin(client, {
+          previousEmail: previousAdminEmail,
+          email: adminEmail,
+          password: adminPassword,
+        }),
+      );
+      if (changed) {
+        console.warn(
+          "[AUTH_ADMIN_ACCOUNT_RESET] existing admin credentials updated; previous sessions revoked",
+        );
+      }
     }
     const adminCheck = await query<{ id: string; password_hash: string }>(
       "SELECT id, password_hash FROM users WHERE lower(btrim(translate(email, $2, ''))) = $1",

@@ -20,9 +20,13 @@ services:
       - key: CORS_ORIGINS
         value: "*"
       - key: ADMIN_EMAIL
-        value: admin@valoriza.com
+        value: adminvaloriza@vercel.com
       - key: ADMIN_PASSWORD
         sync: false
+      - key: ADMIN_PREVIOUS_EMAIL
+        value: admin@valoriza.com
+      - key: ADMIN_PASSWORD_SYNC
+        value: "false"
       - key: USER_EMAIL
         value: user@valoriza.com
       - key: USER_PASSWORD

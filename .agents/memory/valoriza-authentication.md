@@ -24,3 +24,9 @@ The database is authoritative for credentials and sessions. Never convert databa
 **Why:** The user requires accounts to keep working after logout and login, and false credential errors were reported repeatedly.
 
 **How to apply:** Test create → logout → login against stored hashes, password whitespace, legacy email case variants, stale cookie/bearer combinations, password changes, and rejected-session reuse using temporary development accounts.
+
+Admin credential recovery must preserve the existing account identity, balances, and linked records. Fail when identities conflict rather than silently provisioning a replacement admin or taking over another account.
+
+**Why:** Changing an operator email is a credential reset, not permission to create a separately funded account or detach the administrator's existing history.
+
+**How to apply:** Require explicit operator recovery settings, update the account and profile together in a transaction, revoke prior sessions only when credentials change, and keep retries idempotent.
