@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pool } from "./db.js";
+import { dailyRewardSchemaSql } from "./daily-reward.js";
 
 async function readBaselineMigration(): Promise<string> {
   const candidates = [
@@ -44,6 +45,10 @@ async function readTeamMilestoneMigration(): Promise<string> {
 
 export async function ensureTeamMilestoneSchema(): Promise<void> {
   await pool.query(await readTeamMilestoneMigration());
+}
+
+export async function ensureDailyRewardSchema(): Promise<void> {
+  await pool.query(dailyRewardSchemaSql);
 }
 
 export async function applySafeDatabaseSchema(): Promise<void> {

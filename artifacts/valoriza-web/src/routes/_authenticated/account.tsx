@@ -75,8 +75,11 @@ function AccountPage() {
         qc.invalidateQueries({ queryKey: ["account"] });
         qc.invalidateQueries({ queryKey: ["home"] });
         qc.invalidateQueries({ queryKey: ["financial-records"] });
+        qc.invalidateQueries({ queryKey: ["rewards"] });
       } else {
         toast.info(t("rewards.alreadyClaimed"));
+        qc.invalidateQueries({ queryKey: ["account"] });
+        qc.invalidateQueries({ queryKey: ["home"] });
       }
     },
     onError: () => toast.error(t("common.error")),

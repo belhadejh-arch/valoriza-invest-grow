@@ -214,6 +214,12 @@ CREATE TABLE IF NOT EXISTS daily_login_rewards (
   UNIQUE (user_id, reward_date)
 );
 
+-- Keep unknown historical balances NULL. New daily credits record their
+-- actual balance snapshots without writing to unrelated legacy cash ledgers.
+ALTER TABLE daily_login_rewards
+  ADD COLUMN IF NOT EXISTS balance_before numeric(18,4),
+  ADD COLUMN IF NOT EXISTS balance_after numeric(18,4);
+
 CREATE TABLE IF NOT EXISTS lucky_wheel_configs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   label_ar text NOT NULL,

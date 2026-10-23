@@ -25,4 +25,10 @@ Compatibility checks must exercise the complete production SQL against a minimal
 
 **Why:** A snapshot-only migration passed a reduced test but production subsequently failed on another missing ledger field. Fixing the first reported column alone did not cover the real write contract.
 
-**How to apply:** Audit every field read or written by the affected flow together, run the actual statement for both daily and task rewards, and verify repeated migrations preserve historical records.
+**How to apply:** Audit every field read or written by the affected flow together, exercise each flow's actual persistence path, and verify repeated migrations preserve historical records.
+
+Daily login credits use their own dated receipts with actual before/after wallet balances as the financial audit record, alongside the reward entry. Do not reintroduce a mandatory write to the legacy cash ledger.
+
+**Why:** The existing cash ledger can require counterparties and recorder identities and restrict types to income/expense. Supplying invented values or relaxing its constraints would corrupt unrelated financial semantics; the reward must not fail because of that ledger.
+
+**How to apply:** Credit the wallet, persist the dated receipt and reward together, lock the wallet before checking the day's receipt, and include new receipt-backed credits in the user's financial records. Leave historical unknown snapshots null, so old ledger-backed daily rewards are not displayed twice.

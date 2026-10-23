@@ -175,13 +175,14 @@ function RewardsPage() {
   const claimMutation = useMutation({
     mutationFn: async () => (await claim()) as { ok: boolean; amount?: number },
     onSuccess: (res) => {
-      toast[res.ok ? "success" : "error"](
+      toast[res.ok ? "success" : "info"](
         res.ok ? t("rewards.claimSuccess") : t("rewards.alreadyClaimed"),
       );
       qc.invalidateQueries({ queryKey: ["rewards"] });
       qc.invalidateQueries({ queryKey: ["home"] });
       qc.invalidateQueries({ queryKey: ["user-notifications"] });
-      qc.invalidateQueries({ queryKey: ["account-data"] });
+      qc.invalidateQueries({ queryKey: ["account"] });
+      qc.invalidateQueries({ queryKey: ["financial-records"] });
     },
     onError: () => toast.error(t("common.error")),
   });

@@ -105,9 +105,12 @@ function HomePage() {
       if (res.ok) {
         toast.success(`${t("home.claimDaily")} ${t("common.success")}`);
       } else {
-        toast.error(t("home.claimedDaily"));
+        toast.info(t("home.claimedDaily"));
       }
       qc.invalidateQueries({ queryKey: ["home"] });
+      qc.invalidateQueries({ queryKey: ["account"] });
+      qc.invalidateQueries({ queryKey: ["rewards"] });
+      qc.invalidateQueries({ queryKey: ["financial-records"] });
     },
     onError: () => toast.error(t("common.error")),
   });

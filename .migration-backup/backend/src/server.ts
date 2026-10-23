@@ -5,7 +5,8 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
-import { applySafeDatabaseSchema, ensureTeamMilestoneSchema } from "./safe-schema.js";
+import { applySafeDatabaseSchema, ensureTeamMilestoneSchema, ensureDailyRewardSchema } from "./safe-schema.js";
+import { creditDailyReward } from "./daily-reward.js";
 import { referralRate } from "./referral-rates.js";
 import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import { recoverPrimaryAdmin } from "./primary-admin-recovery.js";
@@ -892,25 +893,7 @@ app.post("/api/app/daily-reward", async (request, response, next) => {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const settings = await getSettings();
     const amount = number(settings.daily_login_reward ?? 0.11);
-    const result = await withTransaction(async (client) => {
-      const inserted = await client.query(
-        "INSERT INTO daily_login_rewards (user_id, reward_date, amount) VALUES ($1,current_date,$2) ON CONFLICT DO NOTHING RETURNING id",
-        [user.id, amount],
-      );
-      if (!inserted.rowCount) return { ok: false, amount: 0 };
-      await changeBalance(
-        client,
-        user.id,
-        amount,
-        "daily_login_reward",
-        "مكافأة تسجيل الدخول اليومية",
-      );
-      await client.query(
-        "INSERT INTO rewards (user_id, source, amount, description_ar) VALUES ($1,'daily_login',$2,'مكافأة تسجيل الدخول اليومية')",
-        [user.id, amount],
-      );
-      return { ok: true, amount };
-    });
+    const result = await withTransaction((client) => creditDailyReward(client, user.id, amount));
     response.json(result);
   } catch (error) {
     next(error);
@@ -1062,7 +1045,18 @@ app.get("/api/app/records", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const [transactions, deposits, withdrawals, rewards] = await Promise.all([
-      query("SELECT * FROM transactions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
+      query(
+        `SELECT id::text,type,amount,status,balance_before,balance_after,
+                reference_id::text,user_id,description,created_at
+         FROM transactions WHERE user_id=$1
+         UNION ALL
+         SELECT id::text,'daily_login_reward',amount,'completed',balance_before,balance_after,
+                NULL::text,user_id,'مكافأة تسجيل الدخول اليومية',created_at
+         FROM daily_login_rewards
+         WHERE user_id=$1 AND balance_before IS NOT NULL AND balance_after IS NOT NULL
+         ORDER BY created_at DESC LIMIT 100`,
+        [user.id],
+      ),
       query("SELECT * FROM deposits WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
       query("SELECT * FROM withdrawals WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
       query("SELECT * FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
@@ -2707,6 +2701,7 @@ async function initDatabase() {
     // Required by team/rewards queries in every runtime, including serverless.
     // Additive and idempotent: never delete or re-create existing customer data.
     await ensureTeamMilestoneSchema();
+    await ensureDailyRewardSchema();
     // Ensure default primary admin user exists and is linked
     const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com");
     const adminPassword = process.env.ADMIN_PASSWORD;
