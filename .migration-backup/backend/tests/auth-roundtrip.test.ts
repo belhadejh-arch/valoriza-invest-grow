@@ -46,6 +46,13 @@ test("database credentials survive logout, legacy email collisions, and password
     assert.equal(login.data.user.id, ids[0]);
     assert.notEqual(login.data.token, originalToken);
     assert.equal(login.headers.get("cache-control"), "no-store");
+    const pooledSessions = await Promise.all(
+      Array.from({ length: 8 }, () => api("/api/auth/session", undefined, bearer(login.data.token))),
+    );
+    for (const session of pooledSessions) {
+      assert.equal(session.status, 200);
+      assert.equal(session.data.session?.user.id, ids[0], "pooled connections must agree on the session");
+    }
     assert.equal((await api("/api/auth/login", { email, password: password.trim() })).status, 401);
     assert.equal((await api("/api/auth/login", { email, password: "incorrect-password" })).status, 401);
 

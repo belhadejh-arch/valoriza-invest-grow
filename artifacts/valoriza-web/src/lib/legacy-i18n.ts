@@ -1,7 +1,4 @@
-import english from "./locales/en-legacy.json";
-import spanish from "./locales/es-legacy.json";
-
-const dictionaries: Record<"en" | "es", Record<string, string>> = { en: english, es: spanish };
+const dictionaries: Record<"en" | "es", Record<string, string>> = { en: {}, es: {} };
 const createTemplateRules = (dictionary: Record<string, string>) => Object.entries(dictionary).filter(([key]) => /\{\d+\}/.test(key)).map(([key, value]) => {
   const indices: number[] = [];
   const pattern = key.split(/(\{\d+\})/).map((part) => {
@@ -13,7 +10,27 @@ const createTemplateRules = (dictionary: Record<string, string>) => Object.entri
   }).join("");
   return { pattern: new RegExp(`^${pattern}$`), value, indices };
 });
-const templateRules = { en: createTemplateRules(dictionaries.en), es: createTemplateRules(dictionaries.es) };
+const templateRules: Record<"en" | "es", ReturnType<typeof createTemplateRules>> = { en: [], es: [] };
+const languageLoads = new Map<string, Promise<void>>();
+
+/** Load the selected language before importing routes and their module-level copy. */
+export function loadLegacyLanguage(language: "ar" | "en" | "es"): Promise<void> {
+  if (language === "ar") return Promise.resolve();
+  const existing = languageLoads.get(language);
+  if (existing) return existing;
+  const loading = (language === "en"
+    ? import("./locales/en-legacy.json")
+    : import("./locales/es-legacy.json")
+  ).then((module) => {
+    dictionaries[language] = module.default;
+    templateRules[language] = createTemplateRules(module.default);
+  }).catch((error) => {
+    languageLoads.delete(language);
+    throw error;
+  });
+  languageLoads.set(language, loading);
+  return loading;
+}
 export function storedLanguage(): "ar" | "en" | "es" {
   try {
     const value = localStorage.getItem("valoriza_language");

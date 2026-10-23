@@ -97,6 +97,34 @@ test("admin recovery preserves the existing account and rejects email collisions
       (await api("/api/auth/session", undefined, login.data.token)).data.session.user.id,
       ids[0],
     );
+
+    // Import startup without opening a second HTTP listener. These environment
+    // overrides exist only in this disposable test process.
+    process.env.VERCEL = "1";
+    process.env.ADMIN_EMAIL = `unconfigured-${nonce}@example.invalid`;
+    process.env.ADMIN_PASSWORD = newPassword;
+    process.env.ADMIN_PASSWORD_SYNC = "false";
+    const { initDatabase } = await import("../src/server.js");
+    await initDatabase();
+    await initDatabase();
+    assert.equal(
+      (await pool.query("SELECT id FROM users WHERE email=$1", [process.env.ADMIN_EMAIL])).rowCount,
+      0,
+      "a configuration mismatch must not create a replacement admin",
+    );
+    const incompleteEmail = `incomplete-${nonce}@example.invalid`;
+    const incomplete = await pool.query(
+      "INSERT INTO users (email,password_hash) SELECT $1,password_hash FROM users WHERE id=$2 RETURNING id",
+      [incompleteEmail, ids[0]],
+    );
+    ids.push(incomplete.rows[0].id);
+    process.env.ADMIN_EMAIL = incompleteEmail;
+    await initDatabase();
+    assert.equal(
+      (await pool.query("SELECT user_id FROM admin_users WHERE user_id=$1", [ids[2]])).rowCount,
+      0,
+      "an incomplete account must not gain administrator privileges on restart",
+    );
   } finally {
     if (ids.length) await pool.query("DELETE FROM users WHERE id=ANY($1::uuid[])", [ids]);
     await pool.end();

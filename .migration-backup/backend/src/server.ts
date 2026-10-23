@@ -2732,8 +2732,10 @@ async function initDatabase() {
         );
       }
     }
-    const adminCheck = await query<{ id: string; password_hash: string }>(
-      "SELECT id, password_hash FROM users WHERE lower(btrim(translate(email, $2, ''))) = $1",
+    const adminCheck = await query<{ id: string; password_hash: string; profile_id: string | null }>(
+      `SELECT u.id, u.password_hash, p.id AS profile_id FROM users u
+       LEFT JOIN profiles p ON p.id=u.id
+       WHERE lower(btrim(translate(u.email, $2, ''))) = $1`,
       [adminEmail, EMAIL_FORMAT_CHARACTERS],
     );
     if (adminCheck.rows.length > 1) {
@@ -2741,31 +2743,36 @@ async function initDatabase() {
     }
     let adminId = adminCheck.rows[0]?.id;
 
-    if (!adminId && adminPassword) {
+    const existingAdmin = await query(
+      `SELECT p.id FROM profiles p
+       WHERE EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id=p.id AND r.role='admin')
+          OR EXISTS (SELECT 1 FROM admin_users a WHERE a.user_id=p.id)
+       LIMIT 1`,
+    );
+    if ((adminId && !adminCheck.rows[0].profile_id) || (!adminId && existingAdmin.rowCount)) {
+      // A configuration change is not permission to create a replacement
+      // administrator. Keep serving existing accounts; require explicit recovery.
+      console.warn(
+        "[AUTH_ADMIN_CONFIGURATION_MISMATCH] configured admin account is missing or incomplete; existing accounts remain available; use explicit admin recovery",
+      );
+    } else if (!adminId && adminPassword) {
       const adminHash = await hashPassword(adminPassword);
-      const res = await query<{ id: string }>(
-        `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
-        [adminEmail, adminHash],
-      );
-      adminId = res.rows[0].id;
-      await query(
-        `INSERT INTO profiles (id, username, email, referral_code)
-         VALUES ($1, 'admin', $2, 'ADMIN')
-         ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
-        [adminId, adminEmail],
-      );
-      await query(
-        "INSERT INTO wallets (user_id, balance) VALUES ($1, 1000) ON CONFLICT (user_id) DO NOTHING",
-        [adminId],
-      );
-      await query(
-        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
-        [adminId],
-      );
-      await query(
-        "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-        [adminId],
-      );
+      adminId = await withTransaction(async (client) => {
+        const res = await client.query<{ id: string }>(
+          `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id`,
+          [adminEmail, adminHash],
+        );
+        const newId = res.rows[0].id;
+        const suffix = newId.replace(/-/g, "").slice(0, 12);
+        await client.query(
+          `INSERT INTO profiles (id, username, email, referral_code) VALUES ($1,$2,$3,$4)`,
+          [newId, `admin_${suffix}`, adminEmail, `AD${suffix}`],
+        );
+        await client.query("INSERT INTO wallets (user_id, balance) VALUES ($1,0)", [newId]);
+        await client.query("INSERT INTO user_roles (user_id, role) VALUES ($1,'admin')", [newId]);
+        await client.query("INSERT INTO admin_users (user_id) VALUES ($1)", [newId]);
+        return newId;
+      });
       console.log("Primary admin account provisioned.");
     } else if (!adminId) {
       console.warn("Primary admin provisioning skipped because ADMIN_PASSWORD is not configured.");

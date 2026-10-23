@@ -5,7 +5,8 @@ export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     const { data, error } = await auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/" });
+    if (error) throw error;
+    if (!data.user) throw redirect({ to: "/" });
     return { user: data.user };
   },
   component: () => <Outlet />,

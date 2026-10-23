@@ -86,8 +86,8 @@ export function AdminUsersTab() {
   } = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => getAdminUsers(),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   });

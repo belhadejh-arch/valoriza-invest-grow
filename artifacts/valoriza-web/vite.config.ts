@@ -2,6 +2,7 @@ import path from 'path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 import legacyI18n from './legacy-i18n-plugin';
@@ -33,6 +34,7 @@ const outputDir = process.env.VERCEL_OUTPUT_DIR ?? 'dist/public';
 export default defineConfig({
   base: basePath,
   plugins: [
+    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
     legacyI18n(),
     react(),
     tailwindcss(),

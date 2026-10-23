@@ -1,5 +1,6 @@
 import "dotenv/config";
 import pg from "pg";
+import { createNamespaceInitializer } from "./database-namespace.js";
 
 const { Pool } = pg;
 
@@ -8,8 +9,7 @@ const connectionString =
     ? process.env.POSTGRES_URL || process.env.DATABASE_URL
     : process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
-export const pool = new Pool(
-  connectionString
+const connectionOptions = connectionString
     ? {
         connectionString,
         ssl:
@@ -22,8 +22,14 @@ export const pool = new Pool(
     : {
         // Fallback placeholder when DB URL is not yet configured
         max: 1,
-      },
-);
+      };
+
+export const pool = new Pool({
+  ...connectionOptions,
+  // pg-pool awaits this hook before exposing a new connection. An async
+  // "connect" event listener does not provide that guarantee.
+  onConnect: createNamespaceInitializer(),
+});
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
   text: string,

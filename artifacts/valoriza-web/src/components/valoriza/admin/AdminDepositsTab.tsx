@@ -30,8 +30,8 @@ export function AdminDepositsTab() {
   } = useQuery({
     queryKey: ["admin-deposits"],
     queryFn: () => getAdminDeposits(),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   });

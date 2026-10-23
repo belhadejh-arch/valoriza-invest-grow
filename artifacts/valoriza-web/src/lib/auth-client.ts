@@ -1,4 +1,5 @@
 import { buildApiUrl, getStoredToken, setStoredToken } from "@/lib/backend-client";
+import { createSessionReader } from "./auth-session-cache";
 
 export type AuthUser = {
   id: string;
@@ -43,31 +44,37 @@ async function request<T>(
       clearTimeout(timeoutId);
     }
 
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch(() => null);
+    if (!data || typeof data !== "object") {
+      return { data: null, error: new Error("AUTH_UNAVAILABLE") };
+    }
     if (!response.ok) {
       const message =
-        (response.status >= 500 ? "AUTH_UNAVAILABLE" : data?.message) ||
-        (response.status === 401
-          ? "INVALID_CREDENTIALS"
-          : response.status === 403
-            ? "ACCOUNT_BLOCKED"
-            : response.status === 409
-              ? "ACCOUNT_EXISTS"
-              : `فشل الطلب (${response.status})`);
+        response.status >= 500 || typeof data.message !== "string"
+          ? "AUTH_UNAVAILABLE"
+          : data.message;
       return { data: null, error: new Error(message) };
     }
     return { data: data as T, error: null };
-  } catch (error) {
+  } catch {
     return {
       data: null,
-      error: error instanceof Error ? error : new Error("NETWORK_ERROR"),
+      error: new Error("AUTH_UNAVAILABLE"),
     };
   }
 }
 
+const sessions = createSessionReader<AuthUser>(async () => {
+  const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+  if (!result.error && (!result.data || !("session" in result.data))) {
+    return { data: null, error: new Error("AUTH_UNAVAILABLE") };
+  }
+  return result;
+}, getStoredToken);
+
 export const auth = {
   async getSession() {
-    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+    const result = await sessions.read();
     return {
       data: { session: result.data?.session ?? null },
       error: result.error,
@@ -75,7 +82,7 @@ export const auth = {
   },
 
   async getUser() {
-    const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
+    const result = await sessions.read();
     return {
       data: { user: result.data?.session?.user ?? null },
       error: result.error,
@@ -83,6 +90,7 @@ export const auth = {
   },
 
   async signInWithPassword(input: { email: string; password: string }) {
+    sessions.clear();
     const result = await request<{ ok: boolean; token?: string; user?: AuthUser }>(
       "/api/auth/login",
       {
@@ -98,6 +106,7 @@ export const auth = {
     }
     if (!result.error && result.data?.ok && result.data.user) {
       if (result.data.token) setStoredToken(result.data.token);
+      sessions.prime(result.data.user);
       listeners.forEach((listener) => listener("SIGNED_IN", result.data));
     }
     return result;
@@ -108,6 +117,7 @@ export const auth = {
     password: string;
     options?: { data?: Record<string, string> };
   }) {
+    sessions.clear();
     const email = normalizeEmail(input.email);
     const metadata = input.options?.data ?? {};
     if (!email || !email.includes("@")) {
@@ -135,6 +145,7 @@ export const auth = {
     }
     if (!result.error && result.data?.ok && result.data.user) {
       if (result.data.token) setStoredToken(result.data.token);
+      sessions.prime(result.data.user);
       listeners.forEach((listener) => listener("SIGNED_IN", result.data));
     } else if (
       result.error &&
@@ -149,6 +160,7 @@ export const auth = {
   },
 
   async signOut() {
+    sessions.clear();
     const result = await request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
     if (result.error) return result;
     if (!result.data?.ok) return { data: null, error: new Error("AUTH_UNAVAILABLE") };
@@ -163,6 +175,7 @@ export const auth = {
       body: JSON.stringify(input),
     });
     if (!result.error && result.data?.user) {
+      sessions.clear();
       listeners.forEach((listener) => listener("USER_UPDATED", result.data));
     }
     return result;

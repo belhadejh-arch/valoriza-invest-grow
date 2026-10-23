@@ -34,8 +34,8 @@ export function AdminWithdrawalsTab() {
   } = useQuery({
     queryKey: ["admin-settings"],
     queryFn: () => getAdminSettings(),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   });
@@ -71,8 +71,8 @@ export function AdminWithdrawalsTab() {
   } = useQuery({
     queryKey: ["admin-withdrawals"],
     queryFn: () => getAdminWithdrawals(),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
   });

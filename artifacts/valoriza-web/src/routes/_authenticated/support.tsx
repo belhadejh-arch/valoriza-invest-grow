@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_authenticated/support")({
   component: SupportPage,
 });
 
-export function SupportPage() {
+function SupportPage() {
   const { t, isRTL } = useI18n();
   const fetchSettings = useServerFn(getCompanySettingsAndSupport);
   const { data, isLoading, isError, refetch } = useQuery({

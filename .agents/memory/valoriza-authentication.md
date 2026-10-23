@@ -30,3 +30,9 @@ Admin credential recovery must preserve the existing account identity, balances,
 **Why:** Changing an operator email is a credential reset, not permission to create a separately funded account or detach the administrator's existing history.
 
 **How to apply:** Require explicit operator recovery settings, update the account and profile together in a transaction, revoke prior sessions only when credentials change, and keep retries idempotent.
+
+An admin configuration mismatch must not disable otherwise valid users' access or grant privileges to an incomplete account.
+
+**Why:** Re-provisioning after an admin email change can collide with the existing profile and stop the whole API, making ordinary sign-ins fail as well.
+
+**How to apply:** Warn about mismatches, keep existing accounts available, require explicit recovery, and create genuinely new bootstrap accounts atomically.

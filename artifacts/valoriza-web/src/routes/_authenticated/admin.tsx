@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -90,23 +90,14 @@ function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<string>("overview");
   const queryClient = useQueryClient();
   const [isRefreshingGlobal, setIsRefreshingGlobal] = useState(false);
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && navigator.onLine) {
-        void queryClient.invalidateQueries({
-          predicate: (query) => String(query.queryKey[0]).startsWith("admin-"),
-          refetchType: "active",
-        });
-      }
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [queryClient]);
-
   const handleGlobalRefresh = async () => {
     setIsRefreshingGlobal(true);
     try {
       await queryClient.invalidateQueries(
-        { refetchType: "all" },
+        {
+          predicate: (query) => String(query.queryKey[0]).startsWith("admin-"),
+          refetchType: "active",
+        },
         { throwOnError: true },
       );
       toast.success("تم تحديث البيانات المحمّلة من الخادم وقاعدة PostgreSQL");
