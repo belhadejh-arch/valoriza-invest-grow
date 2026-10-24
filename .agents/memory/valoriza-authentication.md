@@ -31,6 +31,12 @@ Admin credential recovery must preserve the existing account identity, balances,
 
 **How to apply:** Require explicit operator recovery settings, update the account and profile together in a transaction, revoke prior sessions only when credentials change, and keep retries idempotent.
 
+Only the account matching configured `ADMIN_EMAIL` is the administrator; ordinary accounts must never inherit admin access from stale role-table rows.
+
+**Why:** The user requires one designated admin account and no administrative access for other users.
+
+**How to apply:** Derive the authenticated admin role from the configured account, reconcile stale admin memberships when that account is present, and keep admin-only navigation/routes hidden or blocked for all other accounts.
+
 An admin configuration mismatch must not disable otherwise valid users' access or grant privileges to an incomplete account.
 
 **Why:** Re-provisioning after an admin email change can collide with the existing profile and stop the whole API, making ordinary sign-ins fail as well.

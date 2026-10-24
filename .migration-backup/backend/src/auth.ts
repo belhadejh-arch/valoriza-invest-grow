@@ -120,18 +120,24 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
   const result = await query<AuthUser>(
       `SELECT u.id, u.email, p.username,
               CASE
-                WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = u.id AND role = 'admin')
-                  OR EXISTS (SELECT 1 FROM admin_users WHERE user_id = u.id)
+                WHEN lower(btrim(translate(u.email, $3, ''))) = $2
                 THEN 'admin'
                 ELSE COALESCE(
-                  (SELECT role FROM user_roles WHERE user_id = u.id ORDER BY role = 'admin' DESC LIMIT 1),
+                  (SELECT role FROM user_roles
+                   WHERE user_id = u.id AND role <> 'admin'
+                   ORDER BY role LIMIT 1),
                   'user'
                 )
               END AS role
        FROM users u JOIN profiles p ON p.id = u.id
        JOIN sessions s ON s.user_id = u.id
-       WHERE u.id = $1 AND s.token_hash = $2 AND s.expires_at > now()`,
-      [userId, hashToken(token)],
+       WHERE u.id = $1 AND s.token_hash = $4 AND s.expires_at > now()`,
+       [
+         userId,
+         normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com"),
+         EMAIL_FORMAT_CHARACTERS,
+         hashToken(token),
+       ],
     );
   return result.rows[0] ?? null;
 }

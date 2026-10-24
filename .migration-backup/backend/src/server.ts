@@ -735,16 +735,21 @@ app.post("/api/auth/login", async (request, response, next) => {
     const userProfile = await query<{ username: string; email: string; role: string }>(
       `SELECT p.username, p.email,
               CASE
-                WHEN EXISTS (SELECT 1 FROM user_roles WHERE user_id = p.id AND role = 'admin')
-                  OR EXISTS (SELECT 1 FROM admin_users WHERE user_id = p.id)
+                WHEN lower(btrim(translate(u.email, $3, ''))) = $2
                 THEN 'admin'
                 ELSE COALESCE(
-                  (SELECT role FROM user_roles WHERE user_id = p.id ORDER BY role = 'admin' DESC LIMIT 1),
+                  (SELECT role FROM user_roles
+                   WHERE user_id = p.id AND role <> 'admin'
+                   ORDER BY role LIMIT 1),
                   'user'
                 )
               END AS role
-       FROM profiles p WHERE p.id = $1`,
-      [row.id],
+       FROM profiles p JOIN users u ON u.id = p.id WHERE p.id = $1`,
+      [
+        row.id,
+        normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com"),
+        EMAIL_FORMAT_CHARACTERS,
+      ],
     );
     const token = await createSession(row.id, response);
     return response.json({
@@ -2804,28 +2809,23 @@ async function initDatabase() {
           "[AUTH_ADMIN_PASSWORD_SYNC] configured primary admin password applied; sessions revoked",
         );
       }
-      await query(
-        "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
-        [adminId],
-      );
-      await query(
-        "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
-        [adminId],
-      );
+      await withTransaction(async (client) => {
+        await client.query(
+          "INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin') ON CONFLICT (user_id, role) DO NOTHING",
+          [adminId],
+        );
+        await client.query(
+          "INSERT INTO admin_users (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+          [adminId],
+        );
+        await client.query(
+          "DELETE FROM user_roles WHERE role = 'admin' AND user_id <> $1",
+          [adminId],
+        );
+        await client.query("DELETE FROM admin_users WHERE user_id <> $1", [adminId]);
+      });
       console.log(`👑 Primary admin verified: ${adminEmail}`);
     }
-
-    // Keep the two explicit admin-membership tables consistent on startup.
-    await query(
-      `INSERT INTO user_roles (user_id, role)
-       SELECT user_id, 'admin' FROM admin_users
-       ON CONFLICT (user_id, role) DO NOTHING`,
-    );
-    await query(
-      `INSERT INTO admin_users (user_id)
-       SELECT user_id FROM user_roles WHERE role = 'admin'
-       ON CONFLICT (user_id) DO NOTHING`,
-    );
 
     // Ensure default user exists
     const userEmail = (process.env.USER_EMAIL || "user@valoriza.com").trim().toLowerCase();

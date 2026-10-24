@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import type { Request } from "express";
 import { pool, withTransaction } from "../src/db.js";
 import { recoverPrimaryAdmin } from "../src/primary-admin-recovery.js";
+import { getAuthUser } from "../src/auth.js";
 
 test("admin recovery preserves the existing account and rejects email collisions", async () => {
   assert.notEqual(process.env.NODE_ENV, "production");
@@ -89,7 +91,39 @@ test("admin recovery preserves the existing account and rejects email collisions
     const login = await api("/api/auth/login", { email: nextEmail, password: newPassword });
     assert.equal(login.status, 200);
     assert.equal(login.data.user.id, ids[0]);
-    assert.equal(login.data.user.role, "admin");
+
+    process.env.ADMIN_EMAIL = nextEmail;
+    const requestWithToken = (token: string) => ({
+      header: (name: string) => name.toLowerCase() === "authorization" ? `Bearer ${token}` : undefined,
+      cookies: undefined,
+    }) as unknown as Request;
+    assert.equal((await getAuthUser(requestWithToken(login.data.token)))?.role, "admin");
+    await pool.query("INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin')", [ids[1]]);
+    await pool.query("INSERT INTO admin_users (user_id) VALUES ($1)", [ids[1]]);
+    const { initDatabase } = await import("../src/server.js");
+    await initDatabase();
+    assert.equal(
+      (await pool.query("SELECT user_id FROM user_roles WHERE user_id=$1 AND role='admin'", [ids[0]])).rowCount,
+      1,
+      "the configured primary admin keeps the admin role",
+    );
+    assert.equal(
+      (await pool.query("SELECT user_id FROM user_roles WHERE user_id=$1 AND role='admin'", [ids[1]])).rowCount,
+      0,
+      "an ordinary account loses any stale admin role",
+    );
+    assert.equal(
+      (await pool.query("SELECT user_id FROM admin_users WHERE user_id=$1", [ids[1]])).rowCount,
+      0,
+      "an ordinary account is removed from the admin membership table",
+    );
+    await pool.query("INSERT INTO user_roles (user_id, role) VALUES ($1, 'admin')", [ids[1]]);
+    await pool.query("INSERT INTO admin_users (user_id) VALUES ($1)", [ids[1]]);
+    assert.equal(
+      (await getAuthUser(requestWithToken(other.data.token)))?.role,
+      "user",
+      "an ordinary account cannot become admin even with stale database role rows",
+    );
 
     // A restart with the same recovery settings must not log the admin out again.
     assert.equal(await withTransaction((client) => recoverPrimaryAdmin(client, recovery)), false);
@@ -104,7 +138,6 @@ test("admin recovery preserves the existing account and rejects email collisions
     process.env.ADMIN_EMAIL = `unconfigured-${nonce}@example.invalid`;
     process.env.ADMIN_PASSWORD = newPassword;
     process.env.ADMIN_PASSWORD_SYNC = "false";
-    const { initDatabase } = await import("../src/server.js");
     await initDatabase();
     await initDatabase();
     assert.equal(

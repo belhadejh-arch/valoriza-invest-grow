@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   LayoutDashboard,
@@ -74,8 +74,14 @@ const AdminAuditLogsTab = lazy(() =>
   })),
 );
 import { useI18n } from "@/lib/i18n";
+import { auth } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/_authenticated/admin")({
+  beforeLoad: async () => {
+    const { data, error } = await auth.getUser();
+    if (error) throw error;
+    if (data.user?.role !== "admin") throw redirect({ to: "/home" });
+  },
   head: () => ({
     meta: [
       { title: "لوحة تحكم الإدارة — فالوريزا" },
