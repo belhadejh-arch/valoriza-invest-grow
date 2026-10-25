@@ -109,10 +109,45 @@ test("database credentials survive logout, legacy email collisions, and password
     const updatedLogin = await api("/api/auth/login", { email, password: nextPassword });
     assert.equal(updatedLogin.status, 200);
     assert.equal(updatedLogin.data.user.id, ids[0]);
+    await pool.query("UPDATE wallets SET balance=6.08 WHERE user_id=$1", [ids[0]]);
+    await pool.query(
+      "INSERT INTO referrals (referrer_id, referred_id, level) VALUES ($1, $2, 1)",
+      [ids[1], ids[0]],
+    );
     await pool.query("DELETE FROM profiles WHERE id=$1", [ids[0]]);
-    const incomplete = await api("/api/auth/login", { email, password: nextPassword });
-    assert.equal(incomplete.status, 503);
-    assert.equal(incomplete.data.message, "AUTH_UNAVAILABLE");
+    const existingSession = await api(
+      "/api/auth/session",
+      undefined,
+      bearer(updatedLogin.data.token),
+    );
+    assert.equal(existingSession.status, 200);
+    assert.equal(existingSession.data.session.user.id, ids[0]);
+
+    const restoredHome = await api("/api/app/home", undefined, bearer(updatedLogin.data.token));
+    assert.equal(restoredHome.status, 200);
+    assert.equal(restoredHome.data.profile.email, email);
+    assert.match(restoredHome.data.profile.username, /^member_/);
+    assert.equal(Number(restoredHome.data.wallet.balance), 6.08);
+    const recoveredProfile = await pool.query(
+      "SELECT referred_by, referral_code FROM profiles WHERE id=$1",
+      [ids[0]],
+    );
+    assert.equal(recoveredProfile.rows[0].referred_by, ids[1]);
+    assert.equal(
+      recoveredProfile.rows[0].referral_code,
+      `VZ${ids[0].slice(0, 8).toUpperCase()}`,
+    );
+    const restoredTeam = await api("/api/app/team", undefined, bearer(updatedLogin.data.token));
+    assert.equal(restoredTeam.status, 200);
+
+    const recoveredLogin = await api("/api/auth/login", { email, password: nextPassword });
+    assert.equal(recoveredLogin.status, 200);
+    assert.equal(recoveredLogin.data.user.id, ids[0]);
+    await pool.query("DELETE FROM profiles WHERE id=$1", [ids[0]]);
+    const loginWithoutProfile = await api("/api/auth/login", { email, password: nextPassword });
+    assert.equal(loginWithoutProfile.status, 200);
+    assert.equal(loginWithoutProfile.data.user.id, ids[0]);
+    assert.match(loginWithoutProfile.data.user.username, /^member_/);
   } finally {
     if (ids.length) await pool.query("DELETE FROM users WHERE id=ANY($1::uuid[])", [ids]);
     await pool.end();

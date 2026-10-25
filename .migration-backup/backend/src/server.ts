@@ -226,6 +226,55 @@ async function getSettings(publicOnly = false) {
 }
 
 async function ensureUserRows(userId: string) {
+  const profile = await query("SELECT 1 FROM profiles WHERE id = $1", [userId]);
+  if (!profile.rowCount) {
+    await withTransaction(async (client) => {
+      const account = await client.query<{ email: string }>(
+        "SELECT email FROM users WHERE id = $1 FOR UPDATE",
+        [userId],
+      );
+      if (!account.rowCount) throw new Error("AUTH_ACCOUNT_MISSING");
+
+      const suffix = userId.replace(/-/g, "").toUpperCase();
+      const sponsor = await client.query<{ referrer_id: string }>(
+        `SELECT r.referrer_id
+         FROM referrals r
+         JOIN profiles p ON p.id = r.referrer_id
+         WHERE r.referred_id = $1 AND r.level = 1
+         LIMIT 1`,
+        [userId],
+      );
+      const restoredProfile = await client.query(
+        `INSERT INTO profiles (id, username, email, referral_code)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO NOTHING
+         RETURNING id`,
+        [
+          userId,
+          `member_${suffix}`,
+          normalizeEmail(account.rows[0].email),
+          `VZ${userId.slice(0, 8).toUpperCase()}`,
+        ],
+      );
+      if (restoredProfile.rowCount && sponsor.rowCount) {
+        await client.query("UPDATE profiles SET referred_by = $1 WHERE id = $2", [
+          sponsor.rows[0].referrer_id,
+          userId,
+        ]);
+      }
+      await client.query(
+        "INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
+        [userId],
+      );
+      if (restoredProfile.rowCount) {
+        console.warn(
+          "[AUTH_PROFILE_RESTORED] a missing profile was recreated without changing wallet history",
+        );
+      }
+    });
+    return;
+  }
+
   await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
     userId,
   ]);
@@ -727,10 +776,7 @@ app.post("/api/auth/login", async (request, response, next) => {
       return response.status(409).json({ message: "ACCOUNT_EMAIL_CONFLICT" });
     }
     const row = matching[0];
-    if (!row.profile_id) {
-      console.error("[AUTH_LOGIN_BLOCKED] account_profile_missing");
-      return response.status(503).json({ message: "AUTH_UNAVAILABLE" });
-    }
+    if (!row.profile_id) await ensureUserRows(row.id);
     if (row.is_blocked) return response.status(403).json({ message: "ACCOUNT_BLOCKED" });
     const userProfile = await query<{ username: string; email: string; role: string }>(
       `SELECT p.username, p.email,

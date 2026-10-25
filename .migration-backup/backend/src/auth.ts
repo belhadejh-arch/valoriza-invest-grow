@@ -118,7 +118,7 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
   }
   // A database outage is a service error, not an invalid password/session.
   const result = await query<AuthUser>(
-      `SELECT u.id, u.email, p.username,
+      `SELECT u.id, u.email, COALESCE(p.username, split_part(u.email, '@', 1)) AS username,
               CASE
                 WHEN lower(btrim(translate(u.email, $3, ''))) = $2
                 THEN 'admin'
@@ -129,7 +129,7 @@ export async function getAuthUser(request: Request): Promise<AuthUser | null> {
                   'user'
                 )
               END AS role
-       FROM users u JOIN profiles p ON p.id = u.id
+       FROM users u LEFT JOIN profiles p ON p.id = u.id
        JOIN sessions s ON s.user_id = u.id
        WHERE u.id = $1 AND s.token_hash = $4 AND s.expires_at > now()`,
        [

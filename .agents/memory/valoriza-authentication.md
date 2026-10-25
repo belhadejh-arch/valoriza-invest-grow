@@ -25,6 +25,12 @@ The database is authoritative for credentials and sessions. Never convert databa
 
 **How to apply:** Test create → logout → login against stored hashes, password whitespace, legacy email case variants, stale cookie/bearer combinations, password changes, and rejected-session reuse using temporary development accounts.
 
+An existing user with a valid session must remain recoverable if their profile row is missing; restore the profile additively without replacing the account or wallet.
+
+**Why:** The user reported authenticated pages failing when an existing account's profile record was absent.
+
+**How to apply:** Authenticate from the user/session records even without a profile, recreate only missing profile/wallet rows, preserve the deterministic original referral code, and restore sponsor linkage only from an existing referral record.
+
 Admin credential recovery must preserve the existing account identity, balances, and linked records. Fail when identities conflict rather than silently provisioning a replacement admin or taking over another account.
 
 **Why:** Changing an operator email is a credential reset, not permission to create a separately funded account or detach the administrator's existing history.
