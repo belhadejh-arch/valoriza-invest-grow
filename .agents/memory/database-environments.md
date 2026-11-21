@@ -3,13 +3,13 @@ name: Separate database environments
 description: Which PostgreSQL database contains legacy customer investment records.
 ---
 
-Existing customer investments are stored in the external PostgreSQL database supplied through `POSTGRES_URL`; the Replit development database is a separate environment and may contain no customer investment history.
+Legacy customer investments were stored in external PostgreSQL supplied through `POSTGRES_URL`. The user now hosts the frontend and API on Netlify. Do not assume its runtime database matches either the old Render database or the workspace database.
 
-The production frontend is hosted on Vercel and the API/backend on Render. Vercel's frontend environment and Replit's development database are separate from the Render PostgreSQL database.
+A connection supplied by the user as copied from Netlify matched the workspace database target, but updating its existing admin credentials did not make the published API accept them. Its relationship to the active production runtime remains unverified.
 
 **Why:** A successful test or empty result in the development database does not establish whether production investments were settled.
 
-**How to apply:** Keep development work on the Replit database. Production browser API calls stay same-origin: Vercel rewrites `/api/*` to the Render service, while Replit preview routes `/api/*` to its API artifact. Handle Render schema changes separately from Replit. For authorized production reconciliation, inspect the external database read-only first, match rows by user-provided criteria, and use a transaction with idempotency protection for any settlement.
+**How to apply:** Keep development work separate from authorized production changes. Verify the active deployment's connection precedence and namespace, not just whether a supplied connection succeeds. Production browser API calls stay same-origin. For authorized production reconciliation, inspect the target read-only first, match rows by user-provided criteria, and use a transaction with idempotency protection for any settlement.
 
 Do not assume `public` is the application's effective schema: the development database can contain the same table names in more than one namespace.
 

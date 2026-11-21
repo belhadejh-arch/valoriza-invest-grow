@@ -1,4 +1,4 @@
-- [Separate database environments](database-environments.md) — legacy customer investments live in external PostgreSQL; Replit’s development database is separate.
+- [Database targets and namespaces](database-environments.md) — verify Netlify’s active connection and namespace; a supplied URL alone does not prove it is the live target.
 - [Legacy schema compatibility](legacy-schema-compatibility.md) — Render's existing tables predate the imported baseline; `CREATE TABLE IF NOT EXISTS` does not add missing columns.
 - [Team milestone rewards](team-milestone-rewards.md) — each cash tier pays once; qualifying existing teams are included in the one-time backfill; 250 members grant the next VIP level.
 - [Vercel artifact builds](vercel-artifact-builds.md) — Vercel workspace builds do not inherit environment values from Replit artifact workflows.
