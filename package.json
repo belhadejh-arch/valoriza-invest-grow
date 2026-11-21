@@ -7,6 +7,10 @@
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run vercel-build",
     "vercel-build": "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/valoriza-web run vercel-build",
+    "netlify:build": "pnpm --filter @workspace/valoriza-web run netlify-build",
+    "netlify:dev": "NETLIFY=true netlify dev --filter @workspace/valoriza-web",
+    "netlify:link": "netlify link --filter @workspace/valoriza-web",
+    "netlify:deploy": "netlify deploy --build --prod --filter @workspace/valoriza-web",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
@@ -15,6 +19,7 @@
     "@replit/connectors-sdk": "^0.4.3"
   },
   "devDependencies": {
+    "netlify-cli": "26.2.0",
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"
   }

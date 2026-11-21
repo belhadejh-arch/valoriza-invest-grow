@@ -42,6 +42,50 @@ export const Route = createFileRoute("/_authenticated/deposit")({
 
 type NetworkType = "USDT-ERC20" | "USDT-BEP20" | "USDT-TRC20";
 
+async function compressDepositProof(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const maxDimension = 1600;
+    const initialScale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+    let width = Math.max(1, Math.round(bitmap.width * initialScale));
+    let height = Math.max(1, Math.round(bitmap.height * initialScale));
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("IMAGE_COMPRESSION_UNAVAILABLE");
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      canvas.width = width;
+      canvas.height = height;
+      context.drawImage(bitmap, 0, 0, width, height);
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (result) => result ? resolve(result) : reject(new Error("IMAGE_COMPRESSION_FAILED")),
+          "image/jpeg",
+          Math.max(0.55, 0.82 - attempt * 0.1),
+        );
+      });
+      if (blob.size <= 3 * 1024 * 1024) {
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => typeof reader.result === "string"
+            ? resolve(reader.result)
+            : reject(new Error("IMAGE_READ_FAILED"));
+          reader.onerror = () => reject(reader.error ?? new Error("IMAGE_READ_FAILED"));
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      width = Math.max(1, Math.round(width * 0.82));
+      height = Math.max(1, Math.round(height * 0.82));
+    }
+  } finally {
+    bitmap.close();
+  }
+
+  throw new Error("DEPOSIT_PROOF_TOO_LARGE");
+}
+
 function DepositPage() {
   const { t, isRTL } = useI18n();
   const qc = useQueryClient();
@@ -86,7 +130,7 @@ function DepositPage() {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -100,12 +144,13 @@ function DepositPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setScreenshotPreview(reader.result as string);
+    try {
+      const compressedProof = await compressDepositProof(file);
+      setScreenshotPreview(compressedProof);
       toast.success(t("deposit.proof"));
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      toast.error(t("common.error"));
+    }
   };
 
   const handleRemoveScreenshot = () => {

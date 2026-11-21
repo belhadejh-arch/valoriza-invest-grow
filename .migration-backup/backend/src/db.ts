@@ -16,7 +16,7 @@ const connectionOptions = connectionString
           process.env.NODE_ENV === "production" || connectionString.includes("sslmode=require")
             ? { rejectUnauthorized: false }
             : undefined,
-        max: Number(process.env.DB_POOL_MAX ?? 10),
+        max: Number(process.env.DB_POOL_MAX ?? (process.env.NETLIFY === "true" ? 2 : 10)),
         idleTimeoutMillis: 30_000,
       }
     : {

@@ -204,13 +204,9 @@ export async function settleMaturedInvestments(batchSize = 100): Promise<number>
 }
 
 async function runInvestmentSettlementJob() {
-  try {
-    const count = await settleMaturedInvestments();
-    if (count > 0) {
-      console.info(`Investment settlement completed: ${count} investment(s).`);
-    }
-  } catch (error) {
-    console.error("Investment settlement job failed:", error);
+  const count = await settleMaturedInvestments();
+  if (count > 0) {
+    console.info(`Investment settlement completed: ${count} investment(s).`);
   }
 }
 
@@ -506,26 +502,22 @@ async function settleTeamMilestonesForUsers(userIds: string[]) {
 }
 
 async function runTeamMilestoneSettlementJob() {
-  try {
-    const candidates = await query<{ referrer_id: string }>(
-      `SELECT r.referrer_id
-       FROM referrals r
-       JOIN profiles p ON p.id=r.referred_id
-       WHERE p.vip_level>0
-       GROUP BY r.referrer_id
-       HAVING count(DISTINCT p.id)>=3
-       ORDER BY r.referrer_id`,
+  const candidates = await query<{ referrer_id: string }>(
+    `SELECT r.referrer_id
+     FROM referrals r
+     JOIN profiles p ON p.id=r.referred_id
+     WHERE p.vip_level>0
+     GROUP BY r.referrer_id
+     HAVING count(DISTINCT p.id)>=3
+     ORDER BY r.referrer_id`,
+  );
+  const result = await settleTeamMilestonesForUsers(
+    candidates.rows.map((row) => row.referrer_id),
+  );
+  if (result.cashAwards || result.vipUpgrades) {
+    console.info(
+      `Team milestone settlement completed: ${result.cashAwards} cash award(s), ${result.vipUpgrades} VIP upgrade(s).`,
     );
-    const result = await settleTeamMilestonesForUsers(
-      candidates.rows.map((row) => row.referrer_id),
-    );
-    if (result.cashAwards || result.vipUpgrades) {
-      console.info(
-        `Team milestone settlement completed: ${result.cashAwards} cash award(s), ${result.vipUpgrades} VIP upgrade(s).`,
-      );
-    }
-  } catch (error) {
-    console.error("Team milestone settlement job failed:", error);
   }
 }
 
@@ -3063,23 +3055,50 @@ async function initDatabase() {
   }
 }
 
-if (!process.env.VERCEL) {
+let backendInitialization: Promise<void> | undefined;
+
+export function initializeBackend(): Promise<void> {
+  if (!backendInitialization) {
+    backendInitialization = (async () => {
+      if (
+        process.env.NODE_ENV === "production" &&
+        (process.env.POSTGRES_URL || process.env.DATABASE_URL)
+      ) {
+        await applySafeDatabaseSchema();
+      }
+      await initDatabase();
+    })().catch((error) => {
+      backendInitialization = undefined;
+      throw error;
+    });
+  }
+  return backendInitialization;
+}
+
+export async function runScheduledSettlementJobs(): Promise<void> {
+  await runTeamMilestoneSettlementJob();
+  await runInvestmentSettlementJob();
+}
+
+if (!process.env.VERCEL && process.env.NETLIFY !== "true" && process.env.NETLIFY !== "1") {
   const server = createServer(app);
   let settlementTimer: NodeJS.Timeout | undefined;
   server.listen(port, "0.0.0.0", async () => {
     console.log(`Valoriza backend listening on port ${port}`);
     try {
-      if (process.env.NODE_ENV === "production" && (process.env.POSTGRES_URL || process.env.DATABASE_URL)) {
-        await applySafeDatabaseSchema();
-      }
-      await initDatabase();
-      await runTeamMilestoneSettlementJob();
-      await runInvestmentSettlementJob();
+      await initializeBackend();
+      await runScheduledSettlementJobs();
       const intervalMs = Number(process.env.INVESTMENT_SETTLEMENT_INTERVAL_MS ?? 15_000);
       if (!Number.isFinite(intervalMs) || intervalMs < 1_000) {
         throw new Error("INVESTMENT_SETTLEMENT_INTERVAL_MS must be at least 1000.");
       }
-      settlementTimer = setInterval(() => void runInvestmentSettlementJob(), intervalMs);
+      settlementTimer = setInterval(
+        () =>
+          void runInvestmentSettlementJob().catch((error) =>
+            console.error("Investment settlement job failed:", error),
+          ),
+        intervalMs,
+      );
       settlementTimer.unref();
     } catch (error) {
       console.error("Backend initialization failed:", error);

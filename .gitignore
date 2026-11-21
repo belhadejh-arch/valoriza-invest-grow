@@ -6,6 +6,7 @@
 dist
 .output/
 **/.vercel/
+/.netlify/
 tmp
 out-tsc
 *.tsbuildinfo

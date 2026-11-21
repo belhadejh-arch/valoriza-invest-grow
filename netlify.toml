@@ -1,0 +1,29 @@
+[build]
+  command = "pnpm run netlify:build"
+  publish = ".output/public"
+
+[functions]
+  directory = "artifacts/api-server/netlify/functions"
+  node_bundler = "esbuild"
+  included_files = [".migration-backup/backend/migrations/*.sql"]
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[dev]
+  framework = "#custom"
+  command = "pnpm --filter @workspace/valoriza-web run netlify-dev"
+  targetPort = 18785
+  port = 8888
+  autoLaunch = false
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
