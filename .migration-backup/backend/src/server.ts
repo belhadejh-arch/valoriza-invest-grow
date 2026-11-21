@@ -82,14 +82,16 @@ app.post("/api/auth/admin-password-reset", async (request, response, next) => {
       response.status(503).json({ message: "ADMIN_RESET_NOT_CONFIGURED" });
       return;
     }
-    if (
-      typeof code !== "string" ||
-      Buffer.byteLength(code, "utf8") > 512 ||
-      typeof newPassword !== "string" ||
-      newPassword.length < 12 ||
-      Buffer.byteLength(newPassword, "utf8") > 72
-    ) {
-      response.status(400).json({ message: "INVALID_RESET_INPUT" });
+    if (typeof code !== "string" || !code.length || Buffer.byteLength(code, "utf8") > 512) {
+      response.status(400).json({ message: "INVALID_RESET_CODE_INPUT" });
+      return;
+    }
+    if (typeof newPassword !== "string" || newPassword.length < 12) {
+      response.status(400).json({ message: "RESET_PASSWORD_TOO_SHORT" });
+      return;
+    }
+    if (Buffer.byteLength(newPassword, "utf8") > 72) {
+      response.status(400).json({ message: "RESET_PASSWORD_TOO_LONG" });
       return;
     }
 

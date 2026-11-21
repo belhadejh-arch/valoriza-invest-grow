@@ -63,7 +63,10 @@ function AdminPasswordResetPage() {
           ADMIN_RESET_NOT_CONFIGURED: "لم يكتمل إعداد الاستعادة في Netlify بعد.",
           ADMIN_PASSWORD_SYNC_ACTIVE: "أوقف مزامنة كلمة المرور القديمة في Netlify ثم أعد نشر الموقع.",
           ADMIN_ACCOUNT_UNAVAILABLE: "تعذر العثور على حساب الإدارة المحدد في إعدادات الخادم.",
-          INVALID_RESET_INPUT: "تحقق من الرمز وكلمة المرور ثم أعد المحاولة.",
+          INVALID_RESET_CODE_INPUT: "أدخل رمز الاستعادة كاملاً دون مسافات زائدة.",
+          RESET_PASSWORD_TOO_SHORT: "كلمة المرور الجديدة يجب أن تكون 12 حرفاً على الأقل.",
+          RESET_PASSWORD_TOO_LONG: "كلمة المرور طويلة جداً؛ استخدم كلمة مرور لا تتجاوز 72 بايت.",
+          INVALID_RESET_INPUT: "تحقق من البيانات المدخلة ثم أعد المحاولة.",
         };
         setError(messages[payload.message ?? ""] ?? "تعذر تغيير كلمة المرور. حاول لاحقاً.");
         return;
