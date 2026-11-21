@@ -76,8 +76,9 @@ app.post("/api/auth/admin-password-reset", async (request, response, next) => {
       response.status(503).json({ message: "ADMIN_PASSWORD_SYNC_ACTIVE" });
       return;
     }
-    const { code, newPassword } = request.body ?? {};
-    const configuredCode = process.env.ADMIN_PASSWORD_RESET_CODE;
+    const { code: submittedCode, newPassword } = request.body ?? {};
+    const code = typeof submittedCode === "string" ? submittedCode.trim() : submittedCode;
+    const configuredCode = process.env.ADMIN_PASSWORD_RESET_CODE?.trim();
     if (!configuredCode || Buffer.byteLength(configuredCode, "utf8") < 32) {
       response.status(503).json({ message: "ADMIN_RESET_NOT_CONFIGURED" });
       return;
