@@ -28,10 +28,13 @@ Set database and admin variables in Netlify's site environment settings with the
 - `SESSION_SECRET`: a long, random, stable secret. Do not rotate it during routine deploys.
 - `ADMIN_EMAIL` and `ADMIN_PASSWORD`: the existing primary-admin credentials. Never put the password in source control.
 - `ADMIN_PASSWORD_SYNC=true` only when intentionally synchronizing the configured password into the existing admin account. If migrating the admin email, also set `ADMIN_PREVIOUS_EMAIL` to the current admin email for that deploy. This updates the existing account and revokes its existing sessions.
+- `ADMIN_PASSWORD_RESET_CODE`: a private random value of at least 32 bytes for the one-time admin reset page at `/reset-password`. Generate it locally (for example, with `openssl rand -base64 32`) and save it in Netlify's Functions-scoped environment variables. Never put it in source control or a chat message. The code can reset only the account matching `ADMIN_EMAIL`, is consumed once, and failed attempts are temporarily rate-limited. Rotate the value in Netlify before another reset; each previously used code stays blocked.
 - `DB_POOL_MAX=2`: limits each warm function instance to two database connections; use a provider-supported pooled URL if available.
 - `FRONTEND_URL`: optional when the browser and API use the same Netlify origin.
 
 Do not point the production site at the Replit development database. The development and production databases are separate.
+
+Before using `/reset-password`, make sure `ADMIN_PASSWORD_SYNC` is unset or `false` and remove any stale `ADMIN_PREVIOUS_EMAIL`; otherwise startup password synchronization can overwrite the newly reset password. Keep the configured `ADMIN_EMAIL` aligned with the existing administrator account.
 
 ## Commands
 

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -317,6 +317,17 @@ function AuthPage() {
                   onChange={set("password")}
                   required
                 />
+
+                {mode === "login" && (
+                  <div className="text-start">
+                    <Link
+                      to="/reset-password"
+                      className="text-xs font-bold text-cyan-glow hover:underline"
+                    >
+                      نسيت كلمة المرور؟
+                    </Link>
+                  </div>
+                )}
 
                 {mode === "register" && (
                   <Field

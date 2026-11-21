@@ -5,12 +5,19 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "node:http";
 import { pool, query, withTransaction } from "./db.js";
-import { applySafeDatabaseSchema, ensureTeamMilestoneSchema, ensureDailyRewardSchema, ensureWalletLedgerSchema } from "./safe-schema.js";
+import {
+  applySafeDatabaseSchema,
+  ensureAdminPasswordResetSchema,
+  ensureTeamMilestoneSchema,
+  ensureDailyRewardSchema,
+  ensureWalletLedgerSchema,
+} from "./safe-schema.js";
 import { creditDailyReward } from "./daily-reward.js";
 import { recordWalletChange } from "./wallet-ledger.js";
 import { referralRate } from "./referral-rates.js";
 import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import { recoverPrimaryAdmin } from "./primary-admin-recovery.js";
+import { resetPrimaryAdminPasswordWithCode } from "./admin-password-reset.js";
 import {
   createSession,
   destroySession,
@@ -61,6 +68,61 @@ app.use(cookieParser());
 app.use("/api/auth", (_request, response, next) => {
   response.set("Cache-Control", "no-store");
   next();
+});
+
+app.post("/api/auth/admin-password-reset", async (request, response, next) => {
+  try {
+    if (process.env.ADMIN_PASSWORD_SYNC === "true") {
+      response.status(503).json({ message: "ADMIN_PASSWORD_SYNC_ACTIVE" });
+      return;
+    }
+    const { code, newPassword } = request.body ?? {};
+    const configuredCode = process.env.ADMIN_PASSWORD_RESET_CODE;
+    if (!configuredCode || Buffer.byteLength(configuredCode, "utf8") < 32) {
+      response.status(503).json({ message: "ADMIN_RESET_NOT_CONFIGURED" });
+      return;
+    }
+    if (
+      typeof code !== "string" ||
+      Buffer.byteLength(code, "utf8") > 512 ||
+      typeof newPassword !== "string" ||
+      newPassword.length < 12 ||
+      Buffer.byteLength(newPassword, "utf8") > 72
+    ) {
+      response.status(400).json({ message: "INVALID_RESET_INPUT" });
+      return;
+    }
+
+    const netlifyClientIp = request.header("x-nf-client-connection-ip")?.split(",")[0]?.trim();
+    const result = await withTransaction((client) =>
+      resetPrimaryAdminPasswordWithCode(client, {
+        adminEmail: normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com"),
+        configuredCode,
+        code,
+        newPassword,
+        attemptKey: netlifyClientIp || request.ip || "unknown",
+      }),
+    );
+    switch (result.status) {
+      case "success":
+        response.json({ ok: true });
+        return;
+      case "invalid_code":
+        response.status(401).json({ message: "INVALID_RESET_CODE" });
+        return;
+      case "rate_limited":
+        response.status(429).json({ message: "RESET_TOO_MANY_ATTEMPTS" });
+        return;
+      case "code_already_used":
+        response.status(409).json({ message: "RESET_CODE_ALREADY_USED" });
+        return;
+      case "admin_unavailable":
+        response.status(503).json({ message: "ADMIN_ACCOUNT_UNAVAILABLE" });
+        return;
+    }
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/health", async (_request, response) => {
@@ -2760,6 +2822,7 @@ async function initDatabase() {
     await ensureTeamMilestoneSchema();
     await ensureDailyRewardSchema();
     await ensureWalletLedgerSchema();
+    await ensureAdminPasswordResetSchema();
     // Ensure default primary admin user exists and is linked
     const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "adminvaloriza@vercel.com");
     const adminPassword = process.env.ADMIN_PASSWORD;

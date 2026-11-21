@@ -56,6 +56,21 @@ export async function ensureDailyRewardSchema(): Promise<void> {
   await pool.query(dailyRewardSchemaSql);
 }
 
+export async function ensureAdminPasswordResetSchema(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_password_reset_uses (
+      code_hash text PRIMARY KEY,
+      consumed_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS admin_password_reset_attempts (
+      attempt_key text PRIMARY KEY,
+      attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+      window_started_at timestamptz NOT NULL DEFAULT now(),
+      locked_until timestamptz
+    );
+  `);
+}
+
 export async function applySafeDatabaseSchema(): Promise<void> {
   const baselineSql = await readBaselineMigration();
   const teamMilestoneSql = await readTeamMilestoneMigration();

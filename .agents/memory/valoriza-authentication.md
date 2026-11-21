@@ -37,6 +37,12 @@ Admin credential recovery must preserve the existing account identity, balances,
 
 **How to apply:** Require explicit operator recovery settings, update the account and profile together in a transaction, revoke prior sessions only when credentials change, and keep retries idempotent.
 
+The public admin reset page uses a Netlify-only reset code with at least 32 bytes of entropy. Store only its digest in the database, consume it in the same transaction as the password change, rate-limit failed attempts, and revoke existing sessions. Disable `ADMIN_PASSWORD_SYNC` before using the page so startup cannot restore an older configured password; rotate the reset code before another recovery.
+
+**Why:** Netlify cannot send an email reset link without a configured mail provider, and a public form must not let a caller choose which account to reset.
+
+**How to apply:** Keep the reset code in Netlify Functions environment settings, target only the configured `ADMIN_EMAIL`, and require a fresh code for each reset.
+
 Only the account matching configured `ADMIN_EMAIL` is the administrator; ordinary accounts must never inherit admin access from stale role-table rows.
 
 **Why:** The user requires one designated admin account and no administrative access for other users.
