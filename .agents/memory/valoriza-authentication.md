@@ -19,6 +19,12 @@ Registration must work with a valid referral code or without a code. Do not work
 
 **How to apply:** Verify both successful registration and the resulting sponsor linkage. Compilation and a successful signup response alone do not establish that referral attribution works; use disposable development accounts, not customer records.
 
+New-account registration must accept a user-chosen nonempty password without minimum-length or character-composition requirements. Report invalid username/email separately, never as a password-length failure. Keep a clear technical maximum matching the password hasher to prevent silent truncation; this does not relax administrator recovery requirements.
+
+**Why:** The user explicitly requested unrestricted password choice after registration rejected passwords longer than six characters and misleadingly blamed password length.
+
+**How to apply:** Keep registration UI and API rules aligned, preserve the submitted password exactly, and verify signup → logout → login for simple numeric, alphabetic, Arabic, and short passwords.
+
 The database is authoritative for credentials and sessions. Never convert database/network errors into “wrong password,” or let an old cookie override the bearer token selected by the browser; preserve existing account data when legacy identities collide.
 
 **Why:** The user requires accounts to keep working after logout and login, and false credential errors were reported repeatedly.

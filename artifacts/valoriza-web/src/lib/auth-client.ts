@@ -121,10 +121,13 @@ export const auth = {
     const email = normalizeEmail(input.email);
     const metadata = input.options?.data ?? {};
     if (!email || !email.includes("@")) {
-      return { data: null, error: new Error("يرجى إدخال بريد إلكتروني صالح.") };
+      return { data: null, error: new Error("INVALID_EMAIL") };
     }
-    if (input.password.length < 6) {
-      return { data: null, error: new Error("كلمة المرور يجب أن لا تقل عن 6 أحرف.") };
+    if (!input.password.length) {
+      return { data: null, error: new Error("PASSWORD_REQUIRED") };
+    }
+    if (new TextEncoder().encode(input.password).length > 72) {
+      return { data: null, error: new Error("PASSWORD_TOO_LONG") };
     }
 
     const result = await request<{ ok: boolean; token?: string; user?: AuthUser }>(

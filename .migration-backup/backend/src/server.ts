@@ -660,15 +660,19 @@ async function distributeReferralCommissions(
 app.post("/api/auth/register", async (request, response, next) => {
   try {
     const { username, email, phone, password, referralCode } = request.body ?? {};
-    if (
-      typeof username !== "string" ||
-      username.trim().length < 3 ||
-      typeof email !== "string" ||
-      !email.includes("@") ||
-      typeof password !== "string" ||
-      password.length < 6
-    ) {
-      return response.status(400).json({ message: "INVALID_REGISTRATION" });
+    if (typeof username !== "string" || username.trim().length < 3) {
+      return response.status(400).json({ message: "INVALID_USERNAME" });
+    }
+    if (typeof email !== "string" || !normalizeEmail(email).includes("@")) {
+      return response.status(400).json({ message: "INVALID_EMAIL" });
+    }
+    if (typeof password !== "string" || password.length === 0) {
+      return response.status(400).json({ message: "PASSWORD_REQUIRED" });
+    }
+    // bcrypt uses at most 72 bytes; reject overlong input instead of silently
+    // saving a different password. No minimum length or composition rules.
+    if (Buffer.byteLength(password, "utf8") > 72) {
+      return response.status(400).json({ message: "PASSWORD_TOO_LONG" });
     }
     if (referralCode != null && typeof referralCode !== "string") {
       return response.status(400).json({ message: "INVALID_REFERRAL_CODE" });

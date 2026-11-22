@@ -88,6 +88,10 @@ export const translations = {
     "auth.errInvalidCreds": "بيانات الدخول غير صحيحة، تأكد من البريد وكلمة المرور",
     "auth.errUsernameLen": "اسم المستخدم يجب ألا يقل عن 3 أحرف",
     "auth.errPasswordLen": "كلمة المرور يجب ألا تقل عن 6 أحرف",
+    "auth.errPasswordRequired": "أدخل كلمة مرور لحسابك.",
+    "auth.errPasswordTooLong": "كلمة المرور طويلة جداً. الحد التقني 72 بايت؛ عادةً 72 حرفاً إنجليزياً أو 36 حرفاً عربياً.",
+    "auth.errEmail": "أدخل بريداً إلكترونياً صالحاً.",
+    "auth.errRegistration": "تحقق من بيانات التسجيل وأكمل الحقول المطلوبة.",
     "auth.errInvalidReferral": "رمز الإحالة غير صحيح. تحقق منه أو اترك الحقل فارغًا للتسجيل بدونه.",
     "auth.errUnavailable": "تعذر التحقق من الحساب لدى الخادم. حاول مجددًا؛ هذا الخطأ لا يعني أن كلمة المرور غير صحيحة.",
     "auth.errEmailConflict": "يوجد أكثر من حساب قديم بنفس البريد وبيانات الدخول. تواصل مع إدارة المنصة لاستعادة الحساب دون فقد بياناته.",
@@ -459,6 +463,10 @@ translations.es = Object.fromEntries(
   Object.entries(translations.ar).map(([key, value]) => [key, translateLegacyText(value, [], "es")]),
 );
 Object.assign(translations.en, {
+  "auth.errPasswordRequired": "Enter a password for your account.",
+  "auth.errPasswordTooLong": "The password exceeds the technical limit of 72 bytes. Use a shorter password.",
+  "auth.errEmail": "Enter a valid email address.",
+  "auth.errRegistration": "Check your registration details and complete the required fields.",
   "auth.errUnavailable": "The server could not verify your account. Please try again; this does not mean your password is incorrect.",
   "auth.errEmailConflict": "Multiple legacy accounts share this email and login details. Contact the platform administrator to recover your account without losing its data.",
   "auth.errInvalidReferral": "That referral code is not valid. Check it or leave the field blank to register without a referral.",
@@ -490,6 +498,10 @@ Object.assign(translations.en, {
 });
 
 Object.assign(translations.es, {
+  "auth.errPasswordRequired": "Introduce una contraseña para tu cuenta.",
+  "auth.errPasswordTooLong": "La contraseña supera el límite técnico de 72 bytes. Utiliza una más corta.",
+  "auth.errEmail": "Introduce un correo electrónico válido.",
+  "auth.errRegistration": "Revisa los datos de registro y completa los campos obligatorios.",
   "auth.errUnavailable": "El servidor no pudo verificar tu cuenta. Inténtalo de nuevo; esto no significa que tu contraseña sea incorrecta.",
   "auth.errEmailConflict": "Varias cuentas antiguas comparten este correo y los datos de acceso. Contacta con la administración de la plataforma para recuperar tu cuenta sin perder sus datos.",
   "auth.errInvalidReferral": "El código de referido no es válido. Compruébelo o deje el campo vacío para registrarse sin referido.",

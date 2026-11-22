@@ -86,8 +86,12 @@ function AuthPage() {
     if (rawMsg.includes("ACCOUNT_BLOCKED")) {
       return "تم تجميد هذا الحساب من قبل إدارة المنصة.";
     }
+    if (rawMsg.includes("PASSWORD_REQUIRED")) return t("auth.errPasswordRequired");
+    if (rawMsg.includes("PASSWORD_TOO_LONG")) return t("auth.errPasswordTooLong");
+    if (rawMsg.includes("INVALID_USERNAME")) return t("auth.errUsernameLen");
+    if (rawMsg.includes("INVALID_EMAIL")) return t("auth.errEmail");
     if (rawMsg.includes("INVALID_REGISTRATION")) {
-      return "بيانات التسجيل غير مكتملة، كلمة المرور يجب أن تكون 6 أحرف على الأقل.";
+      return t("auth.errRegistration");
     }
     if (rawMsg.includes("INVALID_REFERRAL_CODE")) {
       return t("auth.errInvalidReferral");
@@ -119,10 +123,6 @@ function AuthPage() {
       if (mode === "register") {
         if (submittedValues.username.trim().length < 3) {
           toast.error(t("auth.errUsernameLen"));
-          return;
-        }
-        if (submittedValues.password.length < 6) {
-          toast.error(t("auth.errPasswordLen"));
           return;
         }
         const { error } = await auth.signUp({

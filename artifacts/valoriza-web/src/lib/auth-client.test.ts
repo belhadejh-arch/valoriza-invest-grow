@@ -56,6 +56,32 @@ test("only an explicit credential rejection is shown as wrong credentials", asyn
     assert.equal(anonymousUser.data.user, null);
     assert.equal(calls, 3, "logout plus one shared session request");
     assert.equal(storage.has("valoriza_session_token"), false);
+
+    let signupCalls = 0;
+    let submittedPassword = "";
+    globalThis.fetch = async (_url, init) => {
+      signupCalls += 1;
+      const body = JSON.parse(String(init?.body));
+      submittedPassword = body.password;
+      return Response.json({
+        ok: true,
+        token: `signup-token-${signupCalls}`,
+        user: { id: `signup-user-${signupCalls}`, email: body.email },
+      });
+    };
+    for (const password of ["a", "123456", "abcdefghijk", "كلمةسر", "  keep spaces  "]) {
+      const result = await auth.signUp({
+        email: "signup@example.invalid",
+        password,
+        options: { data: { username: "signup-test" } },
+      });
+      assert.equal(result.error, null);
+      assert.equal(submittedPassword, password, "signup must preserve the exact password");
+    }
+    assert.equal(signupCalls, 5);
+    assert.equal((await auth.signUp({ email: "signup@example.invalid", password: "" })).error?.message, "PASSWORD_REQUIRED");
+    assert.equal((await auth.signUp({ email: "signup@example.invalid", password: "أ".repeat(37) })).error?.message, "PASSWORD_TOO_LONG");
+    assert.equal(signupCalls, 5, "empty or overlong passwords must not be sent");
   } finally {
     globalThis.fetch = originalFetch;
     if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
