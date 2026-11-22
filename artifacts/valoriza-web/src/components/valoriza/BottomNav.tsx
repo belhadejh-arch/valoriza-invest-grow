@@ -3,8 +3,7 @@ import { Gift, Home, TrendingUp, User, Users, Video } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 export function BottomNav() {
-  const routerState = useRouterState();
-  const currentPath = routerState.location.pathname;
+  const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const { t } = useI18n();
 
   const items = [
@@ -20,41 +19,32 @@ export function BottomNav() {
     <nav
       id="app-bottom-nav"
       aria-label="شريط التنقل السفلي"
-      className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 backdrop-blur-lg shadow-[0_-8px_20px_-6px_rgba(0,0,0,0.5)] transition-colors"
+      className="md:hidden fixed inset-x-0 bottom-0 z-40 w-full max-w-full border-t border-border/80 bg-background/95"
     >
-      <ul className="mx-auto flex max-w-lg items-stretch justify-between px-1 pb-[env(safe-area-inset-bottom)]">
+      <ul className="mx-auto grid w-full max-w-lg grid-cols-6 px-0.5 pb-[env(safe-area-inset-bottom)] ps-[env(safe-area-inset-left)] pe-[env(safe-area-inset-right)]">
         {items.map(({ to, label, icon: Icon }) => {
           const isActive = currentPath === to;
           return (
-            <li key={to} className="flex-1">
+            <li key={to} className="min-w-0">
               <Link
                 id={`bottom-nav-link-${to.replace("/", "")}`}
                 to={to}
-                className={`group relative flex flex-col items-center gap-1 py-2 text-[10px] sm:text-[11px] transition-all duration-200 ${
+                aria-current={isActive ? "page" : undefined}
+                className={`group relative flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 px-0.5 py-1.5 text-[9px] min-[380px]:text-[10px] sm:text-[11px] transition-colors duration-150 ${
                   isActive
                     ? "text-cyan-glow font-black"
                     : "text-muted-foreground font-semibold hover:text-foreground"
                 }`}
               >
-                {/* Glowing Top Active Indicator */}
                 {isActive && (
-                  <span className="absolute top-0 inset-x-2.5 h-0.5 rounded-full bg-cyan-glow shadow-[0_0_8px_oklch(0.82_0.14_205)]" />
+                  <span className="absolute top-0 inset-x-2 h-0.5 rounded-full bg-cyan-glow" />
                 )}
-
                 <Icon
-                  className={`h-4.5 w-4.5 sm:h-5 sm:w-5 transition-transform duration-200 group-active:scale-90 ${
-                    isActive
-                      ? "text-cyan-glow drop-shadow-[0_0_8px_oklch(0.82_0.14_205/0.8)] scale-110"
-                      : "text-muted-foreground group-hover:text-foreground"
+                  className={`h-5 w-5 shrink-0 transition-transform duration-150 group-active:scale-90 ${
+                    isActive ? "text-cyan-glow" : "text-muted-foreground group-hover:text-foreground"
                   }`}
                 />
-                <span
-                  className={`truncate leading-none ${
-                    isActive ? "drop-shadow-[0_0_6px_oklch(0.82_0.14_205/0.5)]" : ""
-                  }`}
-                >
-                  {label}
-                </span>
+                <span className="flex min-h-[2.5em] w-full items-center justify-center text-center leading-tight tracking-tight [overflow-wrap:anywhere]">{label}</span>
               </Link>
             </li>
           );

@@ -283,7 +283,11 @@ async function getSettings(publicOnly = false) {
 }
 
 async function ensureUserRows(userId: string) {
-  const profile = await query("SELECT 1 FROM profiles WHERE id = $1", [userId]);
+  const profile = await query<{ wallet_exists: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM wallets WHERE user_id = $1) AS wallet_exists
+     FROM profiles WHERE id = $1`,
+    [userId],
+  );
   if (!profile.rowCount) {
     await withTransaction(async (client) => {
       const account = await client.query<{ email: string }>(
@@ -332,9 +336,11 @@ async function ensureUserRows(userId: string) {
     return;
   }
 
-  await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
-    userId,
-  ]);
+  if (!profile.rows[0].wallet_exists) {
+    await query("INSERT INTO wallets (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [
+      userId,
+    ]);
+  }
 }
 
 function changeBalance(

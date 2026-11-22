@@ -96,7 +96,8 @@ function HomePage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["home"],
     queryFn: () => fetchHome(),
-    refetchOnMount: "always",
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
   });
 
   const claimMutation = useMutation({
@@ -117,7 +118,7 @@ function HomePage() {
 
   if (!data || !data.profile) {
     return (
-      <div className="min-h-screen bg-background text-foreground pb-28">
+      <div className="min-h-[100dvh] w-full max-w-full overflow-x-clip bg-background text-foreground pb-28">
         <AppHeader />
         <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4">
           {isError ? (
@@ -156,7 +157,7 @@ function HomePage() {
   return (
     <div
       id="home-page-container"
-      className="min-h-screen bg-background text-foreground pb-24 md:pb-12 transition-colors"
+      className="min-h-[100dvh] w-full max-w-full overflow-x-clip bg-background text-foreground pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-12"
     >
       {/* 1. App Header with Hamburger & Profile & Desktop Navigation */}
       <AppHeader
@@ -168,19 +169,21 @@ function HomePage() {
         onOpenSupport={() => setSupportOpen(true)}
       />
 
-      <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-3 sm:pt-5 space-y-4 sm:space-y-6">
+      <main className="mx-auto w-full min-w-0 max-w-7xl px-3 sm:px-6 pt-3 sm:pt-5 space-y-4 sm:space-y-6">
         {/* =========================================================================
             2. Hero Banner with Carousel Controls matching Section 3
             ========================================================================= */}
         <section
           id="home-hero-banner"
-          className="relative surface-card glow-border overflow-hidden rounded-3xl min-h-[200px] sm:min-h-[240px] flex items-center shadow-xl"
+          className="relative surface-card glow-border overflow-hidden rounded-3xl min-h-[200px] sm:min-h-[240px] flex items-center md:shadow-xl"
         >
           {/* Background Hero Image */}
           <img
             src={heroCityImg}
             alt="أفق استثمار فالوريزا"
-            className="absolute inset-0 h-full w-full object-cover brightness-[0.38] contrast-125 transition-all duration-700"
+            decoding="async"
+            fetchPriority="high"
+            className="absolute inset-0 h-full w-full object-cover brightness-[0.38] contrast-125"
           />
 
           {/* Glowing Gradient Overlay */}
@@ -188,7 +191,7 @@ function HomePage() {
 
           {/* Slide Text Content */}
           <div className="relative z-10 w-full p-4 sm:p-6 md:p-8 flex flex-col justify-between min-h-[200px] sm:min-h-[240px] text-start">
-            <div className="max-w-xl">
+            <div className="min-w-0 max-w-xl">
               <span className="inline-flex items-center gap-1 rounded-full border border-gold/40 bg-gold/15 px-2.5 py-0.5 text-[10px] sm:text-xs font-extrabold text-gold shadow-gold-glow">
                 <Sparkles className="h-3 w-3" />
                 {currentSlide.title}
@@ -202,7 +205,7 @@ function HomePage() {
             </div>
 
             {/* CTA Button and Navigation Arrows */}
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
               <Link
                 id="hero-cta-btn"
                 to={currentSlide.ctaTo}
@@ -224,7 +227,7 @@ function HomePage() {
                   type="button"
                   onClick={prevSlide}
                   aria-label="الشريحة السابقة"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
                 >
                   <ChevronRight className="h-4 w-4 rtl:rotate-180" />
                 </button>
@@ -232,7 +235,7 @@ function HomePage() {
                   type="button"
                   onClick={nextSlide}
                   aria-label="الشريحة التالية"
-                  className="flex h-8 w-8 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-surface/80 border border-border/70 text-foreground hover:border-cyan-glow transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
                 </button>
@@ -245,13 +248,13 @@ function HomePage() {
             3. Quick Actions (4 Cards: Savings, Support, Withdraw, Deposit)
             ========================================================================= */}
         <section id="home-quick-actions-section">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
             {/* 1. صندوق التوفير (Green/Teal Gradient) */}
             <button
               id="quick-action-savings"
               type="button"
               onClick={() => setSavingsOpen(true)}
-              className="group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#022c22] shadow-[0_4px_16px_-4px_rgba(4,120,87,0.4)] text-start transition-all duration-200 active:scale-95 hover:border-emerald-400 hover:shadow-lg"
+              className="group relative min-w-0 flex flex-col justify-between p-3 min-[360px]:p-3.5 sm:p-4 rounded-2xl border border-emerald-500/40 bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#022c22] md:shadow-[0_4px_16px_-4px_rgba(4,120,87,0.4)] text-start transition-transform duration-150 active:scale-95 hover:border-emerald-400 hover:shadow-lg"
             >
               <div className="flex items-center justify-between w-full">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 border border-white/20 text-white">
@@ -261,7 +264,7 @@ function HomePage() {
                   ›
                 </span>
               </div>
-              <div className="mt-3 text-start">
+              <div className="mt-3 min-w-0 text-start break-words">
                 <span className="block text-xs sm:text-sm font-black text-white">
                   {t("home.savingsFund")}
                 </span>
@@ -276,7 +279,7 @@ function HomePage() {
               id="quick-action-support"
               type="button"
               onClick={() => setSupportOpen(true)}
-              className="group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl border border-purple-500/40 bg-gradient-to-br from-[#581c87] via-[#6b21a8] to-[#3b0764] shadow-[0_4px_16px_-4px_rgba(107,33,168,0.4)] text-start transition-all duration-200 active:scale-95 hover:border-purple-400 hover:shadow-lg"
+              className="group relative min-w-0 flex flex-col justify-between p-3 min-[360px]:p-3.5 sm:p-4 rounded-2xl border border-purple-500/40 bg-gradient-to-br from-[#581c87] via-[#6b21a8] to-[#3b0764] md:shadow-[0_4px_16px_-4px_rgba(107,33,168,0.4)] text-start transition-transform duration-150 active:scale-95 hover:border-purple-400 hover:shadow-lg"
             >
               <div className="flex items-center justify-between w-full">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 border border-white/20 text-white">
@@ -286,7 +289,7 @@ function HomePage() {
                   ›
                 </span>
               </div>
-              <div className="mt-3 text-start">
+              <div className="mt-3 min-w-0 text-start break-words">
                 <span className="block text-xs sm:text-sm font-black text-white">
                   {t("nav.support")}
                 </span>
@@ -301,7 +304,7 @@ function HomePage() {
               id="quick-action-withdraw"
               type="button"
               onClick={() => setWithdrawalOpen(true)}
-              className="group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl border border-sky-500/40 bg-gradient-to-br from-[#0c4a6e] via-[#0284c7] to-[#082f49] shadow-[0_4px_16px_-4px_rgba(2,132,199,0.4)] text-start transition-all duration-200 active:scale-95 hover:border-sky-400 hover:shadow-lg"
+              className="group relative min-w-0 flex flex-col justify-between p-3 min-[360px]:p-3.5 sm:p-4 rounded-2xl border border-sky-500/40 bg-gradient-to-br from-[#0c4a6e] via-[#0284c7] to-[#082f49] md:shadow-[0_4px_16px_-4px_rgba(2,132,199,0.4)] text-start transition-transform duration-150 active:scale-95 hover:border-sky-400 hover:shadow-lg"
             >
               <div className="flex items-center justify-between w-full">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 border border-white/20 text-white">
@@ -311,7 +314,7 @@ function HomePage() {
                   ›
                 </span>
               </div>
-              <div className="mt-3 text-start">
+              <div className="mt-3 min-w-0 text-start break-words">
                 <span className="block text-xs sm:text-sm font-black text-white">
                   {t("home.withdraw")}
                 </span>
@@ -326,7 +329,7 @@ function HomePage() {
               id="quick-action-deposit"
               type="button"
               onClick={() => void navigate({ to: "/deposit" })}
-              className="group relative flex flex-col justify-between p-3.5 sm:p-4 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-[#78350f] via-[#b45309] to-[#451a03] shadow-[0_4px_16px_-4px_rgba(180,83,9,0.4)] text-start transition-all duration-200 active:scale-95 hover:border-amber-400 hover:shadow-lg"
+              className="group relative min-w-0 flex flex-col justify-between p-3 min-[360px]:p-3.5 sm:p-4 rounded-2xl border border-amber-500/40 bg-gradient-to-br from-[#78350f] via-[#b45309] to-[#451a03] md:shadow-[0_4px_16px_-4px_rgba(180,83,9,0.4)] text-start transition-transform duration-150 active:scale-95 hover:border-amber-400 hover:shadow-lg"
             >
               <div className="flex items-center justify-between w-full">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 border border-white/20 text-white">
@@ -336,7 +339,7 @@ function HomePage() {
                   ›
                 </span>
               </div>
-              <div className="mt-3 text-start">
+              <div className="mt-3 min-w-0 text-start break-words">
                 <span className="block text-xs sm:text-sm font-black text-white">
                   {t("home.deposit")}
                 </span>
@@ -353,15 +356,15 @@ function HomePage() {
             ========================================================================= */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 items-start">
           {/* Main Column (Wallet Status & Lucky Wheel) -> 7 cols on lg */}
-          <div className="lg:col-span-7 space-y-4">
+          <div className="min-w-0 lg:col-span-7 space-y-4">
             {/* 4. Wallet Status & Daily Reward Snapshot */}
             <section id="home-wallet-snapshot" className="surface-card glow-border p-4 sm:p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-start">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0 flex-1 basis-[10rem] text-start">
                   <span className="text-xs text-muted-foreground font-semibold">
                     {t("home.availableBalance")}
                   </span>
-                  <p className="text-3xl sm:text-4xl font-black text-gold-gradient tracking-tight mt-0.5">
+                  <p className="text-[clamp(1.5rem,7vw,2.25rem)] leading-tight font-black text-gold-gradient tracking-tight mt-0.5 tabular-amount">
                     {money(data.wallet.balance)}
                   </p>
                 </div>
@@ -372,44 +375,44 @@ function HomePage() {
                   type="button"
                   disabled={data.dailyReward.claimed || claimMutation.isPending}
                   onClick={() => claimMutation.mutate()}
-                  className={`flex items-center gap-1.5 rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-extrabold transition-all shadow-md active:scale-95 ${
+                  className={`flex min-h-10 max-w-full shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-extrabold transition-transform active:scale-95 max-[359px]:w-full ${
                     data.dailyReward.claimed
                       ? "bg-surface text-muted-foreground border border-border cursor-default"
-                      : "gold-gradient text-navy-deep shadow-gold-glow animate-pulse"
+                      : "gold-gradient text-navy-deep shadow-gold-glow"
                   }`}
                 >
-                  <Gift className="h-4 w-4" />
-                  <span>
+                  <Gift className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 break-words text-center">
                     {data.dailyReward.claimed ? t("home.claimedDaily") : t("home.claimDaily")}
                   </span>
                 </button>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2.5 pt-3.5 border-t border-border/50 text-center">
-                <div className="rounded-xl bg-surface/60 border border-border/70 p-2.5">
+              <div className="mt-4 grid grid-cols-3 gap-1.5 min-[360px]:gap-2.5 pt-3.5 border-t border-border/50 text-center">
+                <div className="min-w-0 rounded-xl bg-surface/60 border border-border/70 p-1.5 min-[360px]:p-2.5">
                   <TrendingUp className="mx-auto h-4 w-4 text-cyan-glow mb-1" />
                   <span className="block text-[10px] sm:text-[11px] text-muted-foreground font-semibold">
                     {t("home.profits")}
                   </span>
-                  <span className="block text-xs sm:text-sm font-bold text-foreground mt-0.5">
+                  <span className="block text-[11px] min-[360px]:text-xs sm:text-sm font-bold text-foreground mt-0.5 tabular-amount">
                     {money(data.wallet.totalEarned)}
                   </span>
                 </div>
-                <div className="rounded-xl bg-surface/60 border border-border/70 p-2.5">
+                <div className="min-w-0 rounded-xl bg-surface/60 border border-border/70 p-1.5 min-[360px]:p-2.5">
                   <Wallet className="mx-auto h-4 w-4 text-gold mb-1" />
                   <span className="block text-[10px] sm:text-[11px] text-muted-foreground font-semibold">
                     {t("home.invested")}
                   </span>
-                  <span className="block text-xs sm:text-sm font-bold text-foreground mt-0.5">
+                  <span className="block text-[11px] min-[360px]:text-xs sm:text-sm font-bold text-foreground mt-0.5 tabular-amount">
                     {money(data.wallet.investedBalance)}
                   </span>
                 </div>
-                <div className="rounded-xl bg-surface/60 border border-border/70 p-2.5">
+                <div className="min-w-0 rounded-xl bg-surface/60 border border-border/70 p-1.5 min-[360px]:p-2.5">
                   <Users className="mx-auto h-4 w-4 text-emerald-400 mb-1" />
                   <span className="block text-[10px] sm:text-[11px] text-muted-foreground font-semibold">
                     {t("home.teamIncome")}
                   </span>
-                  <span className="block text-xs sm:text-sm font-bold text-foreground mt-0.5">
+                  <span className="block text-[11px] min-[360px]:text-xs sm:text-sm font-bold text-foreground mt-0.5 tabular-amount">
                     {money(data.wallet.teamIncome)}
                   </span>
                 </div>
@@ -429,17 +432,19 @@ function HomePage() {
           </div>
 
           {/* Secondary Column (About Company, Member Stats, VIP Shortcut) -> 5 cols on lg */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className="min-w-0 lg:col-span-5 space-y-4">
             {/* Card 1: نبذة عن الشركة (Madrid Spain HQ) */}
             <div className="surface-card glow-border overflow-hidden">
               <div className="relative h-36 sm:h-40 w-full">
                 <img
                   src={madridHQImg}
                   alt="المقر الرئيسي لشركة فالوريزا في مدريد"
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-navy-deep via-navy-deep/50 to-transparent" />
-                <div className="absolute bottom-2.5 inset-x-3.5 flex items-center justify-between">
+                <div className="absolute bottom-2.5 inset-x-3.5 flex flex-wrap items-center justify-between gap-1.5">
                   <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5 drop-shadow">
                     <MapPin className="h-4 w-4 text-gold" />
                     {t("nav.about")}
@@ -471,8 +476,8 @@ function HomePage() {
             </div>
 
             {/* Card 2: عدد أعضاء منصتنا */}
-            <div className="surface-card p-3.5 sm:p-4 border-border/80 flex items-center justify-between gap-3 text-start">
-              <div className="flex items-center gap-3">
+            <div className="surface-card p-3.5 sm:p-4 border-border/80 flex flex-wrap items-center justify-between gap-3 text-start">
+              <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-surface border border-cyan-glow/40 text-cyan-glow shadow-[0_0_12px_oklch(0.82_0.14_205/0.25)]">
                   <Users className="h-6 w-6" />
                 </div>

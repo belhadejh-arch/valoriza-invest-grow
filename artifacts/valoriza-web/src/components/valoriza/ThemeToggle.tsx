@@ -11,7 +11,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       onClick={toggleTheme}
       aria-label={isDark ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
       title={isDark ? "تفعيل الوضع النهاري" : "تفعيل الوضع الليلي"}
-      className={`relative flex h-8 w-8 items-center justify-center rounded-full border border-border/80 bg-surface/80 text-foreground hover:border-gold hover:text-gold transition-all active:scale-90 shadow-sm ${className}`}
+      className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border/80 bg-surface/80 text-foreground hover:border-gold hover:text-gold transition-colors active:scale-90 shadow-sm ${className}`}
     >
       {isDark ? (
         <Sun className="h-4 w-4 text-gold transition-transform hover:rotate-45 duration-300" />

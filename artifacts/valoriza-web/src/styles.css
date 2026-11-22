@@ -151,21 +151,25 @@
 @layer base {
   * {
     border-color: var(--color-border);
-    transition:
-      background-color 0.2s ease,
-      border-color 0.2s ease,
-      color 0.15s ease;
   }
 
   html {
     -webkit-text-size-adjust: 100%;
+    overflow-x: clip;
+  }
+
+  img,
+  svg,
+  video {
+    max-width: 100%;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    overflow-x: hidden;
+    overflow-x: clip;
+    max-width: 100%;
     overscroll-behavior-y: none;
   }
 
@@ -227,5 +231,38 @@
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+@utility tabular-amount {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Lighter effects on small/touch screens */
+@media (max-width: 767px) {
+  #app-main-header,
+  #app-bottom-nav {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  #home-page-container .surface-card {
+    box-shadow: 0 6px 16px -10px oklch(0 0 0 / 0.5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-ping,
+  .animate-bounce {
+    animation: none !important;
+  }
+  .animate-in {
+    animation-duration: 1ms !important;
+  }
+  #home-page-container [class*="transition"],
+  #app-main-header [class*="transition"],
+  #app-bottom-nav [class*="transition"] {
+    transition-duration: 1ms !important;
   }
 }
