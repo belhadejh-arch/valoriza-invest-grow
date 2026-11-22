@@ -29,6 +29,7 @@ import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal
 import { WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
+import { isSessionExpiredError } from "@/lib/request-errors";
 import heroCityImg from "@/assets/hero-city.webp";
 import madridHQImg from "@/assets/images/madrid-hq.webp";
 
@@ -113,7 +114,9 @@ function HomePage() {
       qc.invalidateQueries({ queryKey: ["rewards"] });
       qc.invalidateQueries({ queryKey: ["financial-records"] });
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (error) => {
+      if (!isSessionExpiredError(error)) toast.error(error.message || t("common.error"));
+    },
   });
 
   if (!data || !data.profile) {

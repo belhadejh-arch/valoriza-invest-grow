@@ -1,5 +1,6 @@
 import { buildApiUrl, getStoredToken, setStoredToken } from "@/lib/backend-client";
 import { createSessionReader } from "./auth-session-cache";
+import { invalidateSession, onSessionInvalidated } from "./session-token";
 
 export type AuthUser = {
   id: string;
@@ -8,7 +9,7 @@ export type AuthUser = {
   role?: string;
 };
 
-type AuthListener = (event: "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED", session: unknown) => void;
+type AuthListener = (event: "SIGNED_IN" | "SIGNED_OUT" | "USER_UPDATED" | "SESSION_EXPIRED", session: unknown) => void;
 const listeners = new Set<AuthListener>();
 
 function normalizeEmail(value: string): string {
@@ -49,6 +50,7 @@ async function request<T>(
       return { data: null, error: new Error("AUTH_UNAVAILABLE") };
     }
     if (!response.ok) {
+      if (response.status === 401 && data.message === "UNAUTHORIZED") invalidateSession(token);
       const message =
         response.status >= 500 || typeof data.message !== "string"
           ? "AUTH_UNAVAILABLE"
@@ -65,12 +67,19 @@ async function request<T>(
 }
 
 const sessions = createSessionReader<AuthUser>(async () => {
+  const token = getStoredToken();
   const result = await request<{ session: { user: AuthUser } | null }>("/api/auth/session");
   if (!result.error && (!result.data || !("session" in result.data))) {
     return { data: null, error: new Error("AUTH_UNAVAILABLE") };
   }
+  if (!result.error && result.data?.session === null && token) invalidateSession(token);
   return result;
 }, getStoredToken);
+
+onSessionInvalidated(() => {
+  sessions.clear();
+  listeners.forEach((listener) => listener("SESSION_EXPIRED", null));
+});
 
 export const auth = {
   async getSession() {

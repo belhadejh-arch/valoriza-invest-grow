@@ -17,6 +17,12 @@ Do not assume `public` is the application's effective schema: the development da
 
 **How to apply:** Check the application connection's effective schema and foreign-key targets before diagnosing missing accounts; do not force `public` or move existing data as a shortcut.
 
+Matching account counts in two namespaces do not establish matching identities or prove which namespace the live service uses.
+
+**Why:** A workspace-created disposable identity was rejected by the live service, while a live-created identity worked and was found in `public`; the supplied connection defaulted to `bennini` before `public`.
+
+**How to apply:** Trace a controlled disposable identity to its actual namespace before drawing conclusions about the live database. Do not merge, copy, or authenticate across namespaces as a workaround.
+
 All connections in an application pool must retain the same configured namespace before authentication queries run.
 
 **Why:** Mixed namespace resolution can make a known account or session appear absent, even when its password is correct. Required connection setup must complete before the client is handed to a request.

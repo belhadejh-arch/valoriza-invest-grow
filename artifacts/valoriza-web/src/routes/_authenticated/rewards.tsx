@@ -29,6 +29,7 @@ import {
 } from "@/lib/valoriza-pages.functions";
 import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
+import { isSessionExpiredError } from "@/lib/request-errors";
 import giftImg from "@/assets/rewards-gift.webp";
 import teamImg from "@/assets/rewards-team.webp";
 import "./rewards.css";
@@ -184,7 +185,9 @@ function RewardsPage() {
       qc.invalidateQueries({ queryKey: ["account"] });
       qc.invalidateQueries({ queryKey: ["financial-records"] });
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (error) => {
+      if (!isSessionExpiredError(error)) toast.error(error.message || t("common.error"));
+    },
   });
 
   function getSourceInfo(source: string) {

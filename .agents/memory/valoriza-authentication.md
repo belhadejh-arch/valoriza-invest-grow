@@ -66,3 +66,9 @@ An existing request body is not necessarily parsed JSON. Netlify's serverless ad
 **Why:** Skipping parsing whenever a body existed made correct credentials appear absent before database verification, so resetting stored passwords could not repair sign-in.
 
 **How to apply:** Verify authentication through the actual serverless adapter with UTF-8 and base64 events, as well as ordinary HTTP and Vercel-preparsed objects. Preserve passwords exactly, including spaces and Unicode.
+
+Browser persistence is not guaranteed, even after the server has accepted registration. Keep the actual server-issued credential usable for the current page when storage is denied; never replace it with a synthetic authenticated identity.
+
+**Why:** Silently ignoring a storage failure can show a successful signup followed immediately by unauthorized protected pages. Direct API authentication tests do not exercise that browser handoff.
+
+**How to apply:** Verify signup through the first protected account request with browser storage blocked. On a genuine session rejection, clear authenticated UI state and return to sign-in; do not expire sessions on database outages, permission denials, or late responses for a previously selected account.

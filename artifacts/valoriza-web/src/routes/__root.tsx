@@ -12,6 +12,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { auth } from "@/lib/auth-client";
 import { ThemeProvider } from "@/lib/theme";
 import { LanguageProvider } from "@/lib/i18n";
+import { requestErrorMessage } from "@/lib/request-errors";
+import { toast } from "sonner";
 
 function NotFoundComponent() {
   return (
@@ -103,6 +105,12 @@ function RootComponent() {
 
   useEffect(() => {
     const { data } = auth.onAuthStateChange((event) => {
+      if (event === "SESSION_EXPIRED") {
+        queryClient.clear();
+        toast.error(requestErrorMessage("UNAUTHORIZED"));
+        void router.navigate({ to: "/", replace: true });
+        return;
+      }
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       if (event === "SIGNED_IN" || event === "SIGNED_OUT") queryClient.clear();
       router.invalidate();

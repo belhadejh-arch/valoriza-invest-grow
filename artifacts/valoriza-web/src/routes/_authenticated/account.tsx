@@ -31,6 +31,7 @@ import { claimDailyLoginReward } from "@/lib/valoriza.functions";
 import { auth } from "@/lib/auth-client";
 import { backendRequest } from "@/lib/backend-client";
 import { useI18n } from "@/lib/i18n";
+import { isSessionExpiredError } from "@/lib/request-errors";
 
 export const Route = createFileRoute("/_authenticated/account")({
   head: () => ({
@@ -82,7 +83,9 @@ function AccountPage() {
         qc.invalidateQueries({ queryKey: ["home"] });
       }
     },
-    onError: () => toast.error(t("common.error")),
+    onError: (error) => {
+      if (!isSessionExpiredError(error)) toast.error(error.message || t("common.error"));
+    },
   });
 
   if (!data || !data.profile) {

@@ -21,6 +21,7 @@ import { resetPrimaryAdminPasswordWithCode } from "./admin-password-reset.js";
 import { createJsonBodyParser } from "./json-body.js";
 import {
   createSession,
+  clearSessionCookie,
   destroySession,
   EMAIL_FORMAT_CHARACTERS,
   getAuthUser,
@@ -61,8 +62,10 @@ app.use(
 );
 app.use(createJsonBodyParser());
 app.use(cookieParser());
-app.use("/api/auth", (_request, response, next) => {
-  response.set("Cache-Control", "no-store");
+app.use("/api", (_request, response, next) => {
+  // Account data and auth failures must never be shared by browser/CDN caches.
+  response.set("Cache-Control", "private, no-store");
+  response.set("Netlify-CDN-Cache-Control", "no-store");
   next();
 });
 
@@ -903,6 +906,7 @@ app.post("/api/auth/password", async (request, response, next) => {
 app.get("/api/auth/session", async (request, response, next) => {
   try {
     const user = await getAuthUser(request);
+    if (!user) clearSessionCookie(response);
     response.json({ session: user ? { user } : null });
   } catch (error) {
     next(error);
@@ -1248,9 +1252,26 @@ app.post("/api/app/trial", async (request, response, next) => {
       response.json({ ok: true, trialExpiresAt: null });
       return;
     }
-    const profile = await query<{ vip_level: number }>("SELECT vip_level FROM profiles WHERE id=$1", [
+    const profile = await query<{
+      vip_level: number;
+      active: boolean;
+      trial_expires_at: Date | null;
+    }>(
+      `SELECT vip_level, trial_expires_at,
+       (trial_active AND trial_started_at IS NOT NULL
+        AND (trial_expires_at IS NULL OR trial_expires_at > now())
+        AND (SELECT count(*) FROM task_completions
+             WHERE user_id=profiles.id AND completed_at >= trial_started_at) < $2) AS active
+       FROM profiles WHERE id=$1`, [
       user.id,
+      TRIAL_TASK_LIMIT,
     ]);
+    // A repeated request (e.g. after a lost response) confirms an active trial
+    // without starting a new one or changing its original start time.
+    if (number(profile.rows[0]?.vip_level) === 0 && profile.rows[0]?.active) {
+      response.json({ ok: true, alreadyActive: true, trialExpiresAt: profile.rows[0].trial_expires_at });
+      return;
+    }
     response.json({
       ok: false,
       reason: number(profile.rows[0]?.vip_level) > 0 ? "HAS_VIP" : "TRIAL_ALREADY_USED",
@@ -2813,6 +2834,9 @@ app.use(
     _next: express.NextFunction,
   ) => {
     const status = Number((error as { status?: number }).status ?? 500);
+    if (status === 401 && error instanceof Error && error.message === "UNAUTHORIZED") {
+      clearSessionCookie(response);
+    }
     if (status >= 500) console.error(error);
     response
       .status(status)

@@ -22,6 +22,7 @@ import {
   purchaseVip,
 } from "@/lib/valoriza-pages.functions";
 import { useI18n } from "@/lib/i18n";
+import { isSessionExpiredError } from "@/lib/request-errors";
 import { arabicVipLabel } from "@/lib/arabic-labels";
 
 export const Route = createFileRoute("/_authenticated/investment")({
@@ -112,7 +113,9 @@ function InvestmentPage() {
         );
       }
     },
-    onError: () => toast.error("تعذر تفعيل التجربة"),
+    onError: (error) => {
+      if (!isSessionExpiredError(error)) toast.error(error.message || t("common.error"));
+    },
   });
 
   const buyMutation = useMutation({

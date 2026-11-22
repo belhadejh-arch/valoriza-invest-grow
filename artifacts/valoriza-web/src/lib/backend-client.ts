@@ -1,4 +1,7 @@
-import { localizeResponse, translateLegacyText } from "./legacy-i18n";
+import { localizeResponse } from "./legacy-i18n";
+import { getStoredToken, invalidateSession } from "./session-token";
+import { BackendRequestError } from "./request-errors";
+export { getStoredToken, setStoredToken } from "./session-token";
 
 export function hasConfiguredBackend(): boolean {
   return true;
@@ -26,28 +29,6 @@ export function buildApiUrl(path: string): string {
   return `${base}${apiPath}`;
 }
 
-export function getStoredToken(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem("valoriza_session_token");
-  } catch {
-    return null;
-  }
-}
-
-export function setStoredToken(token: string | null): void {
-  if (typeof window === "undefined") return;
-  try {
-    if (token) {
-      localStorage.setItem("valoriza_session_token", token);
-    } else {
-      localStorage.removeItem("valoriza_session_token");
-    }
-  } catch {
-    // Ignore localStorage access errors
-  }
-}
-
 export async function backendRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) {
@@ -58,6 +39,7 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}): P
   if (token && !headers.has("authorization")) {
     headers.set("authorization", `Bearer ${token}`);
   }
+  const sentToken = headers.get("authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1] ?? token;
 
   const url = buildApiUrl(path);
 
@@ -68,14 +50,24 @@ export async function backendRequest<T>(path: string, init: RequestInit = {}): P
       ...init,
       headers,
       credentials: "include",
+      cache: "no-store",
       signal: controller.signal,
     });
-    const data = await response.json() as T;
+    const data = await response.json().catch(() => null);
     if (!response.ok) {
-      const errorMsg = (data as any)?.message || `Request failed with status ${response.status}`;
-      throw new Error(translateLegacyText(errorMsg));
+      const code = typeof data?.message === "string" ? data.message : "SERVICE_UNAVAILABLE";
+      if (response.status === 401 && code === "UNAUTHORIZED") invalidateSession(sentToken);
+      throw new BackendRequestError(
+        response.status >= 500 && code !== "DAILY_REWARD_UNAVAILABLE" ? "SERVICE_UNAVAILABLE" : code,
+        response.status,
+      );
     }
-    return localizeResponse(data);
+    if (data === null) throw new BackendRequestError("SERVICE_UNAVAILABLE", response.status);
+    return localizeResponse(data) as T;
+  } catch (error) {
+    if (error instanceof BackendRequestError) throw error;
+    // Do not retry mutations: an interrupted response can follow a committed credit.
+    throw new BackendRequestError("SERVICE_UNAVAILABLE", 0);
   } finally {
     clearTimeout(timeoutId);
   }

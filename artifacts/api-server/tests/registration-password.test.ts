@@ -14,19 +14,20 @@ test("registration accepts simple passwords and reports the actual invalid field
   const ids: string[] = [];
   const emails: string[] = [];
 
-  async function request(path: string, data?: object, token?: string) {
+  async function request(path: string, data?: object, token?: string, extraHeaders: Record<string, string> = {}) {
     const result = await handler({
       httpMethod: data === undefined ? "GET" : "POST",
       path,
       headers: {
         "content-type": "application/json",
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...extraHeaders,
       },
       body: data === undefined ? "" : Buffer.from(JSON.stringify(data)).toString("base64"),
       isBase64Encoded: data !== undefined,
       requestContext: { identity: { sourceIp: "127.0.0.1" } },
     }, {} as never);
-    return { status: result.statusCode, data: JSON.parse(result.body) };
+    return { status: result.statusCode, data: JSON.parse(result.body), headers: new Headers(result.headers as HeadersInit) };
   }
 
   try {
@@ -49,14 +50,44 @@ test("registration accepts simple passwords and reports the actual invalid field
         [signup.data.user.id],
       );
       assert.notEqual(stored.rows[0].password_hash, password);
+      if (ids.length === 1) {
+        // Newly registered sessions must immediately authorize every affected page.
+        for (const path of ["/api/app/home", "/api/app/account", "/api/app/investment", "/api/app/tasks"]) {
+          const page = await request(path, undefined, signup.data.token, { cookie: "valoriza_session=stale-cookie" });
+          assert.equal(page.status, 200, `${path} must accept the freshly issued bearer`);
+          assert.match(page.headers.get("cache-control") ?? "", /no-store/);
+        }
+        assert.equal((await request("/api/admin/overview", undefined, signup.data.token)).status, 403);
+        const before = await request("/api/app/home", undefined, signup.data.token);
+        const claims = await Promise.all(Array.from({ length: 3 }, () =>
+          request("/api/app/daily-reward", {}, signup.data.token)));
+        assert.ok(claims.every((result) => result.status === 200));
+        assert.equal(claims.filter((result) => result.data.ok).length, 1, "daily reward credits once");
+        const after = await request("/api/app/home", undefined, signup.data.token);
+        const credit = claims.find((result) => result.data.ok)!.data.amount;
+        assert.ok(Math.abs(after.data.wallet.balance - before.data.wallet.balance - credit) < 0.00001);
+        assert.equal(after.data.dailyReward.claimed, true);
+        const activations = await Promise.all(Array.from({ length: 3 }, () =>
+          request("/api/app/trial", {}, signup.data.token)));
+        assert.ok(activations.every((result) => result.status === 200 && result.data.ok));
+        assert.equal(activations.filter((result) => !result.data.alreadyActive).length, 1);
+        const trial = await pool.query("SELECT trial_started_at FROM profiles WHERE id=$1", [signup.data.user.id]);
+        await pool.query("UPDATE profiles SET trial_expires_at=now()-interval '1 day' WHERE id=$1", [signup.data.user.id]);
+        const expired = await request("/api/app/trial", {}, signup.data.token);
+        assert.equal(expired.data.reason, "TRIAL_ALREADY_USED", "an expired trial cannot restart");
+        const unchanged = await pool.query("SELECT trial_started_at FROM profiles WHERE id=$1", [signup.data.user.id]);
+        assert.equal(unchanged.rows[0].trial_started_at.getTime(), trial.rows[0].trial_started_at.getTime());
+      }
       if (!referralCode) referralCode = stored.rows[0].referral_code;
       else assert.equal(stored.rows[0].referred_by, ids[0]);
       assert.equal((await request("/api/auth/logout", {}, signup.data.token)).status, 200);
+      assert.equal((await request("/api/app/home", undefined, signup.data.token)).status, 401);
       const login = await request("/api/auth/login", { email, password });
       assert.equal(login.status, 200);
       assert.equal(login.data.user.id, signup.data.user.id);
       const session = await request("/api/auth/session", undefined, login.data.token);
       assert.equal(session.data.session?.user.id, signup.data.user.id);
+      assert.equal((await request("/api/app/home", undefined, login.data.token)).status, 200);
       assert.equal((await request("/api/auth/logout", {}, login.data.token)).status, 200);
     }
     const valid = { username: "valid_name", email: `validation-${randomUUID()}@example.invalid`, password: "1234567" };
@@ -79,7 +110,7 @@ test("registration accepts simple passwords and reports the actual invalid field
       const created = await client.query<{ id: string }>("SELECT id FROM users WHERE email=ANY($1::text[])", [emails]);
       const cleanupIds = [...new Set([...ids, ...created.rows.map((row) => row.id)])];
       await client.query("DELETE FROM referrals WHERE referred_id=ANY($1::uuid[]) OR referrer_id=ANY($1::uuid[])", [cleanupIds]);
-      for (const table of ["sessions", "user_roles", "wallets"]) {
+      for (const table of ["rewards", "daily_login_rewards", "sessions", "user_roles", "wallets"]) {
         await client.query(`DELETE FROM ${table} WHERE user_id=ANY($1::uuid[])`, [cleanupIds]);
       }
       await client.query("DELETE FROM profiles WHERE id=ANY($1::uuid[])", [cleanupIds]);
