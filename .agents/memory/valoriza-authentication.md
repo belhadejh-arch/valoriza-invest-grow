@@ -54,3 +54,9 @@ An admin configuration mismatch must not disable otherwise valid users' access o
 **Why:** Re-provisioning after an admin email change can collide with the existing profile and stop the whole API, making ordinary sign-ins fail as well.
 
 **How to apply:** Warn about mismatches, keep existing accounts available, require explicit recovery, and create genuinely new bootstrap accounts atomically.
+
+An existing request body is not necessarily parsed JSON. Netlify's serverless adapter supplies a raw Buffer alongside a readable stream; only an already-parsed object may bypass JSON parsing.
+
+**Why:** Skipping parsing whenever a body existed made correct credentials appear absent before database verification, so resetting stored passwords could not repair sign-in.
+
+**How to apply:** Verify authentication through the actual serverless adapter with UTF-8 and base64 events, as well as ordinary HTTP and Vercel-preparsed objects. Preserve passwords exactly, including spaces and Unicode.

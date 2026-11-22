@@ -5,7 +5,7 @@ description: Which PostgreSQL database contains legacy customer investment recor
 
 Legacy customer investments were stored in external PostgreSQL supplied through `POSTGRES_URL`. The user now hosts the frontend and API on Netlify. Do not assume its runtime database matches either the old Render database or the workspace database.
 
-A connection supplied by the user as copied from Netlify matched the workspace database target, but updating its existing admin credentials did not make the published API accept them. Its relationship to the active production runtime remains unverified.
+A connection confirmed by the user as copied from Netlify matched the workspace database target. Never assume development and production are isolated merely because their secret names differ. A rejected live login alone does not prove a database mismatch: serverless request parsing can fail before querying credentials.
 
 **Why:** A successful test or empty result in the development database does not establish whether production investments were settled.
 

@@ -18,6 +18,7 @@ import { referralRate } from "./referral-rates.js";
 import { findReferralOwner, normalizeReferralCode } from "./referral-codes.js";
 import { recoverPrimaryAdmin } from "./primary-admin-recovery.js";
 import { resetPrimaryAdminPasswordWithCode } from "./admin-password-reset.js";
+import { createJsonBodyParser } from "./json-body.js";
 import {
   createSession,
   destroySession,
@@ -58,12 +59,7 @@ app.use(
     credentials: true,
   }),
 );
-const jsonBodyParser = express.json({ limit: "8mb" });
-app.use((request, response, next) => {
-  // Vercel may pass a parsed request body to serverless functions already.
-  if (request.body !== undefined) return next();
-  return jsonBodyParser(request, response, next);
-});
+app.use(createJsonBodyParser());
 app.use(cookieParser());
 app.use("/api/auth", (_request, response, next) => {
   response.set("Cache-Control", "no-store");
