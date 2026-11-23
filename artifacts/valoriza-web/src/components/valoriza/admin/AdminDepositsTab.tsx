@@ -26,6 +26,8 @@ export function AdminDepositsTab() {
     data: deposits = [],
     isLoading,
     isFetching,
+    isError,
+    error,
     refetch,
   } = useQuery({
     queryKey: ["admin-deposits"],
@@ -93,7 +95,7 @@ export function AdminDepositsTab() {
               >
                 <span>{tab.label}</span>
                 <span className="rounded-full bg-black/30 px-1.5 py-0.2 text-[10px] font-extrabold">
-                  {count}
+                  {isError || isLoading ? "—" : count}
                 </span>
               </button>
             );
@@ -103,7 +105,7 @@ export function AdminDepositsTab() {
         <div className="flex items-center gap-2">
           <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            تحديث تلقائي (5ث)
+            تحديث تلقائي (15ث)
           </span>
           <button
             type="button"
@@ -119,7 +121,15 @@ export function AdminDepositsTab() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div role="alert" className="surface-card rounded-2xl border border-danger/40 p-5 text-center">
+          <p className="text-sm font-bold text-danger">تعذر تحميل طلبات الإيداع؛ لا يعني ذلك عدم وجود طلبات.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{error instanceof Error ? error.message : "أعد المحاولة."}</p>
+          <button type="button" onClick={() => refetch()} className="mt-3 rounded-xl border border-border px-4 py-2 text-xs font-bold">
+            إعادة المحاولة
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="py-20 text-center text-xs text-muted-foreground">
           <RefreshCw className="mx-auto h-7 w-7 animate-spin text-cyan-glow mb-2" />
           جارٍ جلب سجل الإيداعات...

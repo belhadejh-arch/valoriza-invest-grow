@@ -85,7 +85,16 @@ export const saveAdminTask = adminPost<Record<string, unknown>>("/api/admin/task
 export const toggleTaskStatus = adminPost<{ taskId: string; isActive: boolean }>(
   "/api/admin/tasks/status",
 );
-export const getAdminWheelPrizes = adminGet("/api/admin/wheel");
+export const getAdminWheelPrizes = async () => {
+  const prizes = await serverBackendRequest<any[]>("/api/admin/wheel");
+  return prizes.map((prize) => ({
+    ...prize,
+    label: prize.label_ar,
+    amount: Number(prize.prize_value),
+    probability_weight: Number(prize.probability),
+    color: prize.accent,
+  }));
+};
 export const saveWheelPrize = adminPost<Record<string, unknown>>("/api/admin/wheel/save");
 export const getAdminSettings = adminGet<Record<string, any>>("/api/admin/settings");
 export const saveAdminSettings = adminPost<Record<string, unknown>>("/api/admin/settings/save");

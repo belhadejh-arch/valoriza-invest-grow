@@ -6,18 +6,24 @@ const messages = {
     FORBIDDEN: "ليس لديك صلاحية لتنفيذ هذه العملية.",
     SERVICE_UNAVAILABLE: "تعذر الاتصال بالخادم أو تأكيد نتيجة العملية. حدّث البيانات قبل إعادة المحاولة.",
     DAILY_REWARD_UNAVAILABLE: "المكافأة اليومية غير متاحة حالياً. حاول لاحقاً.",
+    INVALID_ADMIN_INPUT: "تحقق من الحقول المطلوبة والقيم الرقمية قبل الحفظ.",
+    ADMIN_RECORD_NOT_FOUND: "العنصر غير موجود؛ حدّث القائمة قبل التعديل.",
   },
   en: {
     UNAUTHORIZED: "Your session has expired. Please sign in again.",
     FORBIDDEN: "You do not have permission to perform this action.",
     SERVICE_UNAVAILABLE: "Unable to reach the server or confirm the result. Refresh the data before trying again.",
     DAILY_REWARD_UNAVAILABLE: "The daily reward is currently unavailable. Please try later.",
+    INVALID_ADMIN_INPUT: "Check the required fields and numeric values before saving.",
+    ADMIN_RECORD_NOT_FOUND: "This item no longer exists. Refresh the list before editing.",
   },
   es: {
     UNAUTHORIZED: "Tu sesión ha caducado. Inicia sesión de nuevo.",
     FORBIDDEN: "No tienes permiso para realizar esta operación.",
     SERVICE_UNAVAILABLE: "No se pudo contactar con el servidor ni confirmar el resultado. Actualiza los datos antes de reintentar.",
     DAILY_REWARD_UNAVAILABLE: "La recompensa diaria no está disponible. Inténtalo más tarde.",
+    INVALID_ADMIN_INPUT: "Revisa los campos obligatorios y los valores numéricos antes de guardar.",
+    ADMIN_RECORD_NOT_FOUND: "El elemento ya no existe. Actualiza la lista antes de editar.",
   },
 };
 

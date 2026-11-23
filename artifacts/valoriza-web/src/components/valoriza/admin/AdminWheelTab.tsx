@@ -30,6 +30,7 @@ export function AdminWheelTab() {
   const [amount, setAmount] = useState(0.5);
   const [probabilityWeight, setProbabilityWeight] = useState(20);
   const [color, setColor] = useState("#00E5FF");
+  const [colorChanged, setColorChanged] = useState(false);
   const [isActive, setIsActive] = useState(true);
 
   // Grant Free Spin Section State
@@ -81,7 +82,8 @@ export function AdminWheelTab() {
     setLabel(prize.label);
     setAmount(Number(prize.amount));
     setProbabilityWeight(prize.probability_weight);
-    setColor(prize.color || "#00E5FF");
+    setColor(/^#[0-9a-f]{6}$/i.test(prize.color) ? prize.color : "#00E5FF");
+    setColorChanged(false);
     setIsActive(prize.is_active);
     setModalOpen(true);
   };
@@ -92,6 +94,7 @@ export function AdminWheelTab() {
     setAmount(1.0);
     setProbabilityWeight(10);
     setColor("#FFD700");
+    setColorChanged(false);
     setIsActive(true);
     setModalOpen(true);
   };
@@ -117,9 +120,11 @@ export function AdminWheelTab() {
     saveMutation.mutate({
       id: editingPrize?.id,
       label,
-      amount,
-      probabilityWeight,
-      color,
+      prizeType: editingPrize?.prize_type ?? "cash",
+      prizeValue: amount,
+      probability: probabilityWeight,
+      icon: editingPrize?.icon ?? null,
+      accent: editingPrize && !colorChanged ? editingPrize.accent : color,
       isActive,
     });
   };
@@ -351,7 +356,7 @@ export function AdminWheelTab() {
                   <input
                     type="color"
                     value={color}
-                    onChange={(e) => setColor(e.target.value)}
+                    onChange={(e) => { setColor(e.target.value); setColorChanged(true); }}
                     className="h-8 w-12 rounded cursor-pointer border border-border bg-transparent"
                   />
                   <span className="font-mono text-xs text-muted-foreground">{color}</span>

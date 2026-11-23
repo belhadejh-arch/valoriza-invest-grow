@@ -408,7 +408,7 @@ export function AdminUsersTab() {
                     )}
                   </td>
                   <td className="p-3">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex min-w-64 flex-wrap items-center justify-start gap-2 [&>button]:inline-flex [&>button]:shrink-0 [&>button]:items-center [&>button]:gap-1 [&>button]:whitespace-nowrap [&_svg]:shrink-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -431,6 +431,7 @@ export function AdminUsersTab() {
                         className="rounded-lg bg-surface border border-cyan-glow/40 p-1.5 text-cyan-glow hover:bg-cyan-glow/10"
                       >
                         <Eye className="h-3.5 w-3.5" />
+                        <span>معاينة الحساب</span>
                       </button>
 
                       {/* Add Free Spin Button */}
@@ -441,6 +442,7 @@ export function AdminUsersTab() {
                         className="rounded-lg bg-surface border border-gold/40 p-1.5 text-gold hover:bg-gold/10"
                       >
                         <Ticket className="h-3.5 w-3.5" />
+                        <span>إضافة فرصة</span>
                       </button>
 
                       {/* Adjust Balance Button */}
@@ -454,6 +456,7 @@ export function AdminUsersTab() {
                         className="rounded-lg bg-surface border border-border p-1.5 text-muted-foreground hover:text-foreground"
                       >
                         <Wallet className="h-3.5 w-3.5" />
+                        <span>تعديل الرصيد</span>
                       </button>
 
                       {/* VIP upgrade button */}
@@ -468,6 +471,7 @@ export function AdminUsersTab() {
                         className="rounded-lg bg-surface border border-vip/40 p-1.5 text-vip-soft hover:bg-vip/10"
                       >
                         <Crown className="h-3.5 w-3.5" />
+                        <span>تعديل العضوية</span>
                       </button>
 
                       {/* Block/Unblock Button */}
@@ -491,6 +495,7 @@ export function AdminUsersTab() {
                         ) : (
                           <Lock className="h-3.5 w-3.5" />
                         )}
+                        <span>{user.isBlocked ? "إلغاء الحظر" : "حظر المستخدم"}</span>
                       </button>
                     </div>
                   </td>

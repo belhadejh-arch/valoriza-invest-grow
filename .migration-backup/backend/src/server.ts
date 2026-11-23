@@ -2429,8 +2429,12 @@ app.post("/api/admin/users/balance", async (request, response, next) => {
 app.get("/api/admin/deposits", async (_request, response, next) => {
   try {
     const result = await query(
-      `SELECT d.*,p.username,p.email FROM deposits d JOIN profiles p ON p.id=d.user_id
-       ORDER BY d.created_at DESC LIMIT 150`,
+      `SELECT d.*,COALESCE(p.username,u.email) AS username,
+              COALESCE(p.email,u.email) AS email
+       FROM deposits d
+       LEFT JOIN profiles p ON p.id=d.user_id
+       LEFT JOIN users u ON u.id=d.user_id
+       ORDER BY (d.status='pending') DESC,d.created_at DESC LIMIT 150`,
     );
     response.json(
       result.rows.map((row) => ({
@@ -2458,6 +2462,9 @@ app.post("/api/admin/deposits/review", async (request, response, next) => {
   try {
     const admin = (request as express.Request & { authUser: { id: string } }).authUser;
     const { depositId, action, rejectReason } = request.body ?? {};
+    if (!depositId || !["approve", "reject"].includes(action)) {
+      return response.status(400).json({ message: "INVALID_ADMIN_INPUT" });
+    }
     const result = await withTransaction(async (client) => {
       const deposit = await client.query<{
         id: string;
@@ -2604,9 +2611,17 @@ app.post("/api/admin/funds/save", async (request, response, next) => {
     const durationDays = data.durationDays ?? data.duration_days;
     const profitPercent = data.profitPercent ?? data.profit_percent;
     const minAmount = data.minAmount ?? data.min_amount ?? 5;
+    if (typeof nameAr !== "string" || !nameAr.trim() ||
+        typeof nameEn !== "string" || !nameEn.trim() ||
+        !Number.isInteger(Number(durationDays)) || Number(durationDays) <= 0 ||
+        !Number.isFinite(Number(profitPercent)) || Number(profitPercent) < 0 ||
+        !Number.isFinite(Number(minAmount)) || Number(minAmount) < 0 ||
+        (!data.id && (typeof data.code !== "string" || !data.code.trim()))) {
+      return response.status(400).json({ message: "INVALID_ADMIN_INPUT" });
+    }
     if (data.id) {
-      await query(
-        "UPDATE investment_funds SET name_ar=$1,name_en=$2,tagline_ar=$3,duration_days=$4,profit_percent=$5,min_amount=$6,accent=$7,is_active=$8 WHERE id=$9",
+      const updated = await query(
+        "UPDATE investment_funds SET name_ar=$1,name_en=$2,tagline_ar=$3,duration_days=$4,profit_percent=$5,min_amount=$6,accent=COALESCE($7,accent),is_active=$8,code=COALESCE($10,code) WHERE id=$9 RETURNING id",
         [
           nameAr,
           nameEn,
@@ -2617,11 +2632,13 @@ app.post("/api/admin/funds/save", async (request, response, next) => {
           data.accent,
           data.isActive ?? data.is_active ?? true,
           data.id,
+          data.code,
         ],
       );
+      if (!updated.rowCount) return response.status(404).json({ message: "ADMIN_RECORD_NOT_FOUND" });
     } else {
       await query(
-        "INSERT INTO investment_funds (code,name_ar,name_en,tagline_ar,duration_days,profit_percent,min_amount,accent,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,99)",
+        "INSERT INTO investment_funds (code,name_ar,name_en,tagline_ar,duration_days,profit_percent,min_amount,accent,is_active,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,99)",
         [
           data.code,
           nameAr,
@@ -2631,6 +2648,7 @@ app.post("/api/admin/funds/save", async (request, response, next) => {
           profitPercent,
           minAmount,
           data.accent ?? "blue",
+          data.isActive ?? data.is_active ?? true,
         ],
       );
     }
@@ -2651,20 +2669,28 @@ app.get("/api/admin/vip-packages", async (_request, response, next) => {
 app.post("/api/admin/vip-packages/save", async (request, response, next) => {
   try {
     const data = request.body ?? {};
-    await query(
-      "UPDATE vip_packages SET name=$1,price=$2,daily_profit=$3,daily_tasks=$4,task_reward=$5,duration_days=$6,accent=$7,is_active=$8 WHERE id=$9",
+    const numbers = [data.price, data.dailyProfit ?? data.daily_profit,
+      data.dailyTasks ?? data.daily_tasks, data.taskReward ?? data.task_reward];
+    if (!data.id || typeof data.name !== "string" || !data.name.trim() ||
+        numbers.some((value) => value == null || value === "" || !Number.isFinite(Number(value)) || Number(value) < 0) ||
+        !Number.isInteger(Number(data.dailyTasks ?? data.daily_tasks))) {
+      return response.status(400).json({ message: "INVALID_ADMIN_INPUT" });
+    }
+    const updated = await query(
+      "UPDATE vip_packages SET name=$1,price=$2,daily_profit=$3,daily_tasks=$4,task_reward=$5,duration_days=COALESCE($6,duration_days),accent=COALESCE($7,accent),is_active=$8 WHERE id=$9",
       [
         data.name,
         data.price,
         data.dailyProfit ?? data.daily_profit,
         data.dailyTasks ?? data.daily_tasks,
         data.taskReward ?? data.task_reward,
-        data.durationDays ?? data.duration_days ?? 365,
+        data.durationDays ?? data.duration_days,
         data.accent,
         data.isActive ?? data.is_active ?? true,
         data.id,
       ],
     );
+    if (!updated.rowCount) return response.status(404).json({ message: "ADMIN_RECORD_NOT_FOUND" });
     response.json({ ok: true });
   } catch (error) {
     next(error);
@@ -2738,32 +2764,40 @@ app.post("/api/admin/wheel/save", async (request, response, next) => {
     const data = request.body ?? {};
     const label = data.label ?? data.label_ar;
     const prizeType = data.prizeType ?? data.prize_type;
-    const prizeValue = data.prizeValue ?? data.prize_value ?? 0;
+    const prizeValue = data.prizeValue ?? data.prize_value ?? data.amount ?? 0;
+    const probability = data.probability ?? data.probabilityWeight ?? 0;
+    if (typeof label !== "string" || !label.trim() ||
+        !Number.isFinite(Number(prizeValue)) || Number(prizeValue) < 0 ||
+        !Number.isFinite(Number(probability)) || Number(probability) < 0 || Number(probability) > 100) {
+      return response.status(400).json({ message: "INVALID_ADMIN_INPUT" });
+    }
     const isActive = data.isActive ?? data.is_active ?? true;
     if (data.id) {
-      await query(
-        "UPDATE lucky_wheel_configs SET label_ar=$1,prize_type=$2,prize_value=$3,probability=$4,icon=$5,accent=$6,is_active=$7 WHERE id=$8",
+      const updated = await query(
+        "UPDATE lucky_wheel_configs SET label_ar=$1,prize_type=COALESCE($2,prize_type),prize_value=$3,probability=$4,icon=COALESCE($5,icon),accent=COALESCE($6,accent),is_active=$7 WHERE id=$8",
         [
           label,
           prizeType,
           prizeValue,
-          data.probability ?? 0,
+          probability,
           data.icon ?? null,
-          data.accent ?? "blue",
+          data.accent ?? data.color,
           isActive,
           data.id,
         ],
       );
+      if (!updated.rowCount) return response.status(404).json({ message: "ADMIN_RECORD_NOT_FOUND" });
     } else {
       await query(
-        "INSERT INTO lucky_wheel_configs (label_ar,prize_type,prize_value,probability,icon,accent,sort_order) VALUES ($1,$2,$3,$4,$5,$6,99)",
+        "INSERT INTO lucky_wheel_configs (label_ar,prize_type,prize_value,probability,icon,accent,is_active,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,99)",
         [
           label,
-          prizeType,
+          prizeType ?? "cash",
           prizeValue,
-          data.probability ?? 0,
+          probability,
           data.icon ?? null,
-          data.accent ?? "blue",
+          data.accent ?? data.color ?? "blue",
+          isActive,
         ],
       );
     }
