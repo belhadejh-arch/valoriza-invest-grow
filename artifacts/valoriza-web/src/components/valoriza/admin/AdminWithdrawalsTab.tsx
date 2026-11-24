@@ -71,7 +71,7 @@ export function AdminWithdrawalsTab() {
   } = useQuery({
     queryKey: ["admin-withdrawals"],
     queryFn: () => getAdminWithdrawals(),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",

@@ -57,6 +57,22 @@ test("registration accepts simple passwords and reports the actual invalid field
           assert.equal(page.status, 200, `${path} must accept the freshly issued bearer`);
           assert.match(page.headers.get("cache-control") ?? "", /no-store/);
         }
+        const bind = await request(
+          "/api/app/withdrawal/address",
+          { network: "TRC20", address: `T${"A".repeat(33)}` },
+          signup.data.token,
+        );
+        assert.equal(bind.status, 200);
+        assert.equal(bind.data.ok, true);
+        const withdrawalInfo = await request("/api/app/withdrawal", undefined, signup.data.token);
+        assert.equal(withdrawalInfo.data.boundAddress.address, `T${"A".repeat(33)}`);
+        assert.equal(withdrawalInfo.data.boundAddress.network, "TRC20");
+        const conflictingBind = await request(
+          "/api/app/withdrawal/address",
+          { network: "ERC20", address: `0x${"b".repeat(40)}` },
+          signup.data.token,
+        );
+        assert.equal(conflictingBind.data.ok, false, "a saved address cannot be silently replaced");
         assert.equal((await request("/api/admin/overview", undefined, signup.data.token)).status, 403);
         const before = await request("/api/app/home", undefined, signup.data.token);
         const claims = await Promise.all(Array.from({ length: 3 }, () =>

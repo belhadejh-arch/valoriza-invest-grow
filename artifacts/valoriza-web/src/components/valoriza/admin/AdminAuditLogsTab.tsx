@@ -10,7 +10,7 @@ export function AdminAuditLogsTab() {
   } = useQuery({
     queryKey: ["admin-audit-logs"],
     queryFn: () => getAdminAuditLogs(),
-    refetchInterval: 20000,
+    refetchInterval: 60_000,
   });
 
   return (

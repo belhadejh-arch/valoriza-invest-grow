@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -251,7 +251,7 @@ interface WithdrawalModalProps {
 export function WithdrawalModal({
   isOpen,
   onClose,
-  balance = 125.5,
+  balance: initialBalance = 0,
   existingAddress,
   onSuccess,
 }: WithdrawalModalProps) {
@@ -260,32 +260,86 @@ export function WithdrawalModal({
   const [isLocked, setIsLocked] = useState(Boolean(existingAddress?.address));
   const [amount, setAmount] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [binding, setBinding] = useState(false);
+  const [balance, setBalance] = useState(initialBalance);
+  const [minWithdrawal, setMinWithdrawal] = useState(6);
+  const [feePercent, setFeePercent] = useState(10);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    backendRequest<{
+      balance: number;
+      boundAddress: { network: "ERC20" | "BEP20" | "TRC20"; address: string; locked: boolean } | null;
+      settings?: { minWithdrawal?: number; feePercent?: number };
+    }>("/api/app/withdrawal")
+      .then((info) => {
+        if (cancelled) return;
+        setBalance(Number(info.balance) || 0);
+        setMinWithdrawal(Math.max(6, Number(info.settings?.minWithdrawal) || 6));
+        setFeePercent(Number(info.settings?.feePercent) || 0);
+        if (info.boundAddress?.address) {
+          setNetwork(info.boundAddress.network);
+          setAddressInput(info.boundAddress.address);
+          setIsLocked(info.boundAddress.locked);
+        } else {
+          setAddressInput("");
+          setIsLocked(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("تعذر تحميل بيانات السحب من قاعدة البيانات.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const feePercent = 10;
   const numAmount = parseFloat(amount) || 0;
   const feeAmount = (numAmount * feePercent) / 100;
   const netAmount = Math.max(0, numAmount - feeAmount);
 
-  const handleBindAddress = (e: React.FormEvent) => {
+  const handleBindAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addressInput.trim() || addressInput.trim().length < 15) {
       toast.error("يرجى إدخال عنوان محفظة صحيح");
       return;
     }
-    setIsLocked(true);
-    toast.success("تم ربط وقفل عنوان السحب بحسابك بنجاح");
+    setBinding(true);
+    try {
+      const result = await backendRequest<{
+        ok: boolean;
+        message?: string;
+        boundAddress?: { network: "ERC20" | "BEP20" | "TRC20"; address: string; locked: boolean };
+      }>("/api/app/withdrawal/address", {
+        method: "POST",
+        body: JSON.stringify({ network, address: addressInput.trim() }),
+      });
+      if (!result.ok || !result.boundAddress) {
+        toast.error(result.message || "تعذر حفظ عنوان السحب. حاول مرة أخرى.");
+        return;
+      }
+      setNetwork(result.boundAddress.network);
+      setAddressInput(result.boundAddress.address);
+      setIsLocked(result.boundAddress.locked);
+      toast.success("تم حفظ عنوان السحب في حسابك وقَفله.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر حفظ عنوان السحب.");
+    } finally {
+      setBinding(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addressInput.trim()) {
+    if (!isLocked) {
       toast.error("يرجى ربط عنوان السحب أولاً");
       return;
     }
-    if (numAmount < 6) {
-      toast.error("الحد الأدنى للسحب هو 6 دولارات");
+    if (numAmount < minWithdrawal) {
+      toast.error(`الحد الأدنى للسحب هو ${minWithdrawal} دولار`);
       return;
     }
     if (numAmount > balance) {
@@ -307,8 +361,6 @@ export function WithdrawalModal({
       }>("/api/app/withdrawal", {
         method: "POST",
         body: JSON.stringify({
-          network,
-          address: addressInput.trim(),
           amount: numAmount,
         }),
       });
@@ -371,11 +423,12 @@ export function WithdrawalModal({
                 id={`withdraw-net-${net}`}
                 type="button"
                 onClick={() => setNetwork(net)}
+                disabled={isLocked}
                 className={`relative flex flex-col items-center justify-center rounded-2xl border p-3 transition-all ${
                   isSelected
                     ? "border-cyan-glow bg-surface shadow-[0_0_12px_oklch(0.82_0.14_205/0.3)]"
                     : "border-border/60 bg-navy hover:bg-surface/50"
-                }`}
+                } disabled:cursor-not-allowed disabled:opacity-70`}
               >
                 {isSelected && (
                   <span className="absolute top-1.5 left-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-cyan-glow text-navy-deep">
@@ -425,9 +478,10 @@ export function WithdrawalModal({
                 id="bind-address-btn"
                 type="button"
                 onClick={handleBindAddress}
-                className="shrink-0 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow"
+                disabled={binding}
+                className="shrink-0 rounded-xl brand-gradient px-3 py-2 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-60"
               >
-                ربط 🔗
+                {binding ? "جارٍ الحفظ..." : "ربط 🔗"}
               </button>
             ) : (
               <span className="shrink-0 flex items-center justify-center h-8 w-8 rounded-xl bg-success/20 text-success">
@@ -449,7 +503,7 @@ export function WithdrawalModal({
               <input
                 id="withdraw-amount-input"
                 type="number"
-                min="6"
+                min={minWithdrawal}
                 max={balance}
                 step="0.01"
                 placeholder="أدخل مبلغ السحب"
@@ -485,7 +539,7 @@ export function WithdrawalModal({
           <button
             id="submit-withdraw-btn"
             type="submit"
-            disabled={submitting || !isLocked}
+              disabled={submitting || !isLocked || numAmount <= 0 || numAmount > balance}
             className="w-full rounded-2xl brand-gradient py-3.5 text-sm font-extrabold text-primary-foreground shadow-glow active:scale-[0.99] disabled:opacity-50"
           >
             {submitting ? "جاري التقديم..." : "تقديم طلب السحب ✈"}
@@ -500,7 +554,7 @@ export function WithdrawalModal({
           </div>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Check className="h-3.5 w-3.5 text-success shrink-0" />
-            الحد الأدنى للسحب هو 6 دولارات.
+            الحد الأدنى للسحب هو {minWithdrawal} دولارات.
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Clock className="h-3.5 w-3.5 text-gold shrink-0" />
@@ -508,7 +562,7 @@ export function WithdrawalModal({
           </p>
           <p className="flex items-center gap-1 text-muted-foreground text-[11px]">
             <Coins className="h-3.5 w-3.5 text-cyan-glow shrink-0" />
-            رسوم السحب هي 10%.
+            رسوم السحب هي {feePercent}%.
           </p>
         </div>
       </div>

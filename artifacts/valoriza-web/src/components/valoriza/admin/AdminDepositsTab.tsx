@@ -32,7 +32,7 @@ export function AdminDepositsTab() {
   } = useQuery({
     queryKey: ["admin-deposits"],
     queryFn: () => getAdminDeposits(),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
@@ -105,7 +105,7 @@ export function AdminDepositsTab() {
         <div className="flex items-center gap-2">
           <span className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-bold text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            تحديث تلقائي (15ث)
+            تحديث تلقائي (60ث)
           </span>
           <button
             type="button"

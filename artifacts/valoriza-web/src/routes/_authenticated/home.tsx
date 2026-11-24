@@ -26,7 +26,7 @@ import { BottomNav } from "@/components/valoriza/BottomNav";
 import { ErrorState, LoadingState } from "@/components/valoriza/StatusStates";
 import { LuckyWheel } from "@/components/valoriza/LuckyWheel";
 import { CustomerServiceModal } from "@/components/valoriza/CustomerServiceModal";
-import { WithdrawalModal, SavingsFundModal } from "@/components/valoriza/QuickModals";
+import { SavingsFundModal } from "@/components/valoriza/QuickModals";
 import { getHomeData, claimDailyLoginReward, spinLuckyWheel } from "@/lib/valoriza.functions";
 import { useI18n } from "@/lib/i18n";
 import { isSessionExpiredError } from "@/lib/request-errors";
@@ -90,7 +90,6 @@ function HomePage() {
 
   // Quick Action Modal states
   const navigate = useNavigate();
-  const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
 
@@ -168,7 +167,7 @@ function HomePage() {
         username={data.profile.username}
         balance={data.wallet.balance}
         onOpenDeposit={() => void navigate({ to: "/deposit" })}
-        onOpenWithdraw={() => setWithdrawalOpen(true)}
+        onOpenWithdraw={() => void navigate({ to: "/withdrawal" })}
         onOpenSupport={() => setSupportOpen(true)}
       />
 
@@ -306,7 +305,7 @@ function HomePage() {
             <button
               id="quick-action-withdraw"
               type="button"
-              onClick={() => setWithdrawalOpen(true)}
+              onClick={() => void navigate({ to: "/withdrawal" })}
               className="group relative min-w-0 flex flex-col justify-between p-3 min-[360px]:p-3.5 sm:p-4 rounded-2xl border border-sky-500/40 bg-gradient-to-br from-[#0c4a6e] via-[#0284c7] to-[#082f49] md:shadow-[0_4px_16px_-4px_rgba(2,132,199,0.4)] text-start transition-transform duration-150 active:scale-95 hover:border-sky-400 hover:shadow-lg"
             >
               <div className="flex items-center justify-between w-full">
@@ -509,13 +508,6 @@ function HomePage() {
       </main>
 
       {/* Floating Customer Service & Quick Action Modals */}
-      <WithdrawalModal
-        isOpen={withdrawalOpen}
-        onClose={() => setWithdrawalOpen(false)}
-        balance={data.wallet.balance}
-        onSuccess={() => qc.invalidateQueries({ queryKey: ["home"] })}
-      />
-
       <SavingsFundModal isOpen={savingsOpen} onClose={() => setSavingsOpen(false)} />
 
       <CustomerServiceModal isOpen={supportOpen} onClose={() => setSupportOpen(false)} />

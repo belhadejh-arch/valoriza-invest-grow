@@ -86,7 +86,7 @@ export function AdminUsersTab() {
   } = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => getAdminUsers(),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: "always",
@@ -241,7 +241,7 @@ export function AdminUsersTab() {
               ? "تعذر الاتصال؛ ستتم إعادة المحاولة تلقائياً"
               : isFetching
                 ? "جارٍ جلب أحدث البيانات..."
-                : "تحديث تلقائي من PostgreSQL (5 ثوانٍ)"}
+                : "تحديث تلقائي من قاعدة البيانات كل دقيقة"}
           </span>
           <button
             type="button"

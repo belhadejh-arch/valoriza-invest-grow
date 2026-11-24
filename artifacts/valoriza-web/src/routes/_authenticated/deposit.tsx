@@ -179,6 +179,8 @@ function DepositPage() {
         toast.error(t("deposit.uploadHint"));
       } else if (res.reason === "BELOW_MIN_DEPOSIT") {
         toast.error(`${t("deposit.minNotice")} (${minDeposit}$)`);
+      } else if (res.reason === "DEPOSIT_ADDRESS_UNAVAILABLE") {
+        toast.error(res.message || "عنوان الإيداع غير متوفر لهذه الشبكة حالياً، يرجى التواصل مع الإدارة.");
       } else {
         toast.error(t("common.error"));
       }

@@ -26,13 +26,35 @@ test("admin saves the actual form payloads and receives/reviews another account'
   }
   try {
     const accounts: any[] = [];
+    const passwords = new Map<string, string>();
     for (const [index, email] of [process.env.ADMIN_EMAIL, `member-test-${nonce}@example.invalid`].entries()) {
-      const result = await request("/api/auth/register", "", { username: `admintest_${index}_${nonce.slice(0, 8)}`, email, password: randomUUID() });
+      const password = randomUUID();
+      passwords.set(email, password);
+      const result = await request("/api/auth/register", "", { username: `admintest_${index}_${nonce.slice(0, 8)}`, email, password });
       assert.equal(result.status, 201);
       accounts.push(result.data); userIds.push(result.data.user.id);
     }
     const [admin, member] = accounts;
     assert.equal((await request("/api/admin/deposits", member.token)).status, 403);
+
+    // Four independently issued sessions for the configured administrator
+    // must remain valid; signing out one device must not revoke the others.
+    const adminSessions: string[] = [admin.token];
+    for (let device = 1; device < 4; device += 1) {
+      const login = await request("/api/auth/login", "", {
+        email: process.env.ADMIN_EMAIL,
+        password: passwords.get(process.env.ADMIN_EMAIL!)!,
+      });
+      assert.equal(login.status, 200);
+      adminSessions.push(login.data.token);
+    }
+    for (const token of adminSessions) {
+      assert.equal((await request("/api/admin/overview", token)).status, 200);
+    }
+    assert.equal((await request("/api/auth/logout", adminSessions[0])).status, 200);
+    for (const token of adminSessions.slice(1)) {
+      assert.equal((await request("/api/admin/overview", token)).status, 200);
+    }
     await pool.query(`INSERT INTO investment_funds
       (id,code,name_ar,name_en,duration_days,profit_percent,min_amount,accent,is_active)
       VALUES ($1,$2,'تجريبي','Test',7,10,5,'gold',false)`, [fundId, `test-${nonce}`]);

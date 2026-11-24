@@ -25,7 +25,7 @@ export function AdminOverviewTab({ onSelectTab }: AdminOverviewTabProps) {
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
     retry: (failureCount, queryError) => !isForbiddenError(queryError) && failureCount < 2,
-    refetchInterval: (query) => (isForbiddenError(query.state.error) ? false : 30_000),
+    refetchInterval: (query) => (isForbiddenError(query.state.error) ? false : 60_000),
     refetchIntervalInBackground: false,
     refetchOnMount: "always",
     refetchOnWindowFocus: (query) => !isForbiddenError(query.state.error),

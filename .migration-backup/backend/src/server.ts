@@ -1156,12 +1156,12 @@ app.get("/api/app/records", async (request, response, next) => {
                 NULL::text,user_id,'مكافأة تسجيل الدخول اليومية',created_at
          FROM daily_login_rewards
          WHERE user_id=$1 AND balance_before IS NOT NULL AND balance_after IS NOT NULL
-         ORDER BY created_at DESC LIMIT 100`,
+         ORDER BY created_at DESC`,
         [user.id],
       ),
-      query("SELECT * FROM deposits WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
-      query("SELECT * FROM withdrawals WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
-      query("SELECT * FROM rewards WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [user.id]),
+      query("SELECT * FROM deposits WHERE user_id=$1 ORDER BY created_at DESC", [user.id]),
+      query("SELECT * FROM withdrawals WHERE user_id=$1 ORDER BY created_at DESC", [user.id]),
+      query("SELECT * FROM rewards WHERE user_id=$1 ORDER BY created_at DESC", [user.id]),
     ]);
     const transactionItems = transactions.rows.map((row) => ({
       ...row, amount: number(row.amount), balanceAfter: number(row.balance_after), createdAt: row.created_at,
@@ -1182,7 +1182,7 @@ app.get("/api/app/records", async (request, response, next) => {
         ...transactionItems,
         ...depositItems.map((row) => ({ ...row, type: "deposit" })),
         ...withdrawalItems.map((row) => ({ ...row, type: "withdrawal" })),
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 100),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     });
   } catch (error) {
     next(error);
@@ -2178,7 +2178,7 @@ app.get("/api/admin/users", async (_request, response, next) => {
        LEFT JOIN withdrawal_addresses wa ON wa.user_id = p.id
         LEFT JOIN team_metrics tm ON tm.referrer_id = p.id
         LEFT JOIN user_withdrawals uw ON uw.user_id = p.id
-       ORDER BY p.created_at DESC LIMIT 200`,
+       ORDER BY p.created_at DESC`,
     );
     response.json(
       result.rows.map((row) => ({
@@ -2434,7 +2434,7 @@ app.get("/api/admin/deposits", async (_request, response, next) => {
        FROM deposits d
        LEFT JOIN profiles p ON p.id=d.user_id
        LEFT JOIN users u ON u.id=d.user_id
-       ORDER BY (d.status='pending') DESC,d.created_at DESC LIMIT 150`,
+       ORDER BY (d.status='pending') DESC,d.created_at DESC`,
     );
     response.json(
       result.rows.map((row) => ({
@@ -2520,7 +2520,7 @@ app.get("/api/admin/withdrawals", async (_request, response, next) => {
   try {
     const result = await query(
       `SELECT w.*,p.username,p.email FROM withdrawals w JOIN profiles p ON p.id=w.user_id
-       ORDER BY w.created_at DESC LIMIT 150`,
+       ORDER BY w.created_at DESC`,
     );
     response.json(
       result.rows.map((row) => ({
@@ -2846,7 +2846,7 @@ app.post("/api/admin/notifications", async (request, response, next) => {
 app.get("/api/admin/audit-logs", async (_request, response, next) => {
   try {
     const result = await query(
-      "SELECT a.id,a.action,a.target_user_id,a.details,a.created_at,u.email AS admin_email FROM admin_actions a JOIN users u ON u.id=a.admin_id ORDER BY a.created_at DESC LIMIT 100",
+      "SELECT a.id,a.action,a.target_user_id,a.details,a.created_at,u.email AS admin_email FROM admin_actions a JOIN users u ON u.id=a.admin_id ORDER BY a.created_at DESC",
     );
     response.json(
       result.rows.map((row) => ({
