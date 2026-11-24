@@ -26,3 +26,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 VITE_BACKEND_URL = "https://valoriza-invest-grow-5atm.onrender.com"
+ADMIN_EMAIL = "adminvaloriza@vercel.com"
