@@ -228,6 +228,8 @@ export function AdminDepositsTab() {
                         src={dep.screenshotUrl}
                         alt="لقطة شاشة التحويل"
                         className="h-full w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
                       />
                     </button>
                     <div>
@@ -355,6 +357,7 @@ export function AdminDepositsTab() {
                 src={previewScreenshotUrl}
                 alt="إثبات الإيداع"
                 className="max-w-full max-h-[72vh] object-contain rounded-xl border border-[#14325e]"
+                decoding="async"
               />
             </div>
           </div>

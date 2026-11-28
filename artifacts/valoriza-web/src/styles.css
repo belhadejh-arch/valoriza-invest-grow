@@ -151,15 +151,26 @@
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role="button"] {
     transition:
       background-color 0.2s ease,
       border-color 0.2s ease,
-      color 0.15s ease;
+      color 0.15s ease,
+      opacity 0.15s ease,
+      transform 0.15s ease;
   }
 
   html {
     -webkit-text-size-adjust: 100%;
     overflow-x: hidden;
+    overscroll-behavior-y: auto;
   }
 
   img,
@@ -173,7 +184,8 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     overflow-x: hidden;
-    overscroll-behavior-y: none;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   h1,
@@ -183,6 +195,26 @@
     font-family: var(--font-display);
     font-weight: 700;
     line-height: 1.5;
+  }
+}
+
+@media (max-width: 640px) {
+  .glow-border,
+  .glow-gold,
+  .shadow-glow,
+  .shadow-gold-glow,
+  .shadow-xl,
+  .shadow-2xl {
+    box-shadow: 0 3px 12px -8px rgb(0 0 0 / 48%) !important;
+  }
+
+  .backdrop-blur-sm,
+  .backdrop-blur,
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 }
 

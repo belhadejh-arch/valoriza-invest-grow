@@ -340,7 +340,7 @@ function RewardsPage() {
 
         <section className="rw-surround space-y-3" aria-labelledby="team-rewards-title">
           <div className="rw-banner">
-            <img src={giftImg} alt="" className="h-24 w-24 sm:h-28 sm:w-28 shrink-0 object-contain drop-shadow-xl" />
+            <img src={giftImg} alt="" loading="lazy" decoding="async" className="h-24 w-24 sm:h-28 sm:w-28 shrink-0 object-contain drop-shadow-xl" />
             <div className="min-w-0 flex-1 text-center">
               <h1 id="team-rewards-title" className="text-2xl sm:text-3xl font-black text-white">{c.title}</h1>
               <p className="mt-1 text-sm font-bold text-[#ffe08a]">{c.tagline}</p>
@@ -377,7 +377,7 @@ function RewardsPage() {
                 const status = isTeamError ? c.unverified : claim?.kind === "cash" ? c.credited : claim?.kind === "vip" ? `${c.upgradedTo} ${claim.vipLevel ?? ""}` : vipAtMax ? c.vipMax : unlocked ? c.reached : `${c.getReward} · ${c.remaining(remaining)}`;
                 return (
                   <article key={tier.members} className={`rw-tier ${isVip ? "rw-tier-vip" : ""}`}>
-                    <img src={teamImg} alt="" className="h-14 w-14 shrink-0 object-contain" />
+                    <img src={teamImg} alt="" loading="lazy" decoding="async" className="h-14 w-14 shrink-0 object-contain" />
                     <div className="min-w-0 flex-1 text-start">
                       <p className="text-xs sm:text-sm font-black leading-snug text-white">{c.when(tier.members)}</p>
                       <p className={`mt-1 flex items-center gap-1 text-[11px] font-bold ${unlocked ? "text-emerald-300" : "text-[#7fd8ff]"}`}>
