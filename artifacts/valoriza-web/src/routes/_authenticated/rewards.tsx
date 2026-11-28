@@ -250,12 +250,12 @@ function RewardsPage() {
 
   return (
     <div
-      className="rw-page min-h-screen bg-background pb-28 md:pb-12 text-foreground"
+      className="min-h-screen bg-background pb-28 md:pb-12 text-foreground"
       dir={isRTL ? "rtl" : "ltr"}
     >
       <AppHeader balance={data?.balance} showAbout={true} />
 
-      <main className="rw-main mx-auto w-full max-w-5xl px-3 sm:px-6 lg:px-8 py-3">
+      <main className="rw-main mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Top Bento Section (2 Columns on desktop) */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
           {/* Total Rewards Hero Card */}

@@ -140,10 +140,10 @@ function InvestmentPage() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-28">
+    <div className="min-h-screen bg-background text-foreground pb-28 md:pb-12">
       <AppHeader />
 
-      <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4 space-y-4">
+        <main className="mx-auto w-full max-w-7xl px-3 sm:px-6 pt-4 space-y-4">
         {/* Wallet Snapshot Banner */}
         <section className="surface-card glow-border p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
           <div className="flex items-center gap-3">
@@ -246,7 +246,7 @@ function InvestmentPage() {
             </div>
 
             {isLoading ? (
-              <div className="grid grid-cols-2 gap-3 min-[430px]:grid-cols-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Array.from({ length: 7 }, (_, index) => (
                   <div
                     key={index}
@@ -261,7 +261,7 @@ function InvestmentPage() {
                   : "لا توجد باقات عضوية مميزة متاحة حالياً."}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-2.5 min-[430px]:grid-cols-4 sm:gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {packagesList.map((pkg: any) => {
                   const isCurrent = userVipLevel === pkg.level;
                   const isOwned = userVipLevel >= pkg.level;
@@ -282,25 +282,25 @@ function InvestmentPage() {
                   return (
                     <div
                       key={pkg.id}
-                      className={`surface-card relative flex min-h-52 flex-col gap-2 overflow-hidden rounded-2xl border p-2.5 text-center transition-all sm:min-h-60 sm:p-3 ${
+                      className={`surface-card relative flex flex-col justify-between gap-3 overflow-hidden rounded-2xl border p-4 text-start shadow-md transition-all ${
                         isCurrent
                           ? "border-cyan-glow shadow-[0_0_15px_oklch(0.82_0.14_205/0.25)] ring-1 ring-cyan-glow/50"
                           : isLocked
-                            ? "opacity-65"
-                            : "hover:-translate-y-0.5 hover:border-gold/60"
+                            ? "opacity-60"
+                            : "hover:border-cyan-glow/50"
                       }`}
                     >
                       {isCurrent && (
-                        <span className="absolute right-1 top-1 rounded-full bg-cyan-glow px-1.5 py-0.5 text-[8px] font-black text-navy-deep shadow sm:right-2 sm:top-2 sm:px-2 sm:text-[10px]">
+                        <span className="absolute top-2 left-2 rtl:left-auto rtl:right-2 rounded-full bg-cyan-glow text-navy-deep px-2.5 py-0.5 text-[10px] font-black shadow">
                           {t("investment.currentTier")}
                         </span>
                       )}
 
                       <div
-                        className={`mt-1 inline-flex min-h-8 items-center justify-center gap-1 self-center rounded-full border px-2 py-1 sm:mt-2 ${colorClass}`}
+                        className={`mt-1 inline-flex min-h-10 items-center justify-center gap-2 self-start rounded-2xl border px-3 py-2 ${colorClass} shadow-glow`}
                       >
-                        <Crown className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-                        <h3 className="text-xs font-black sm:text-sm">{arabicVipLabel(pkg.name)}</h3>
+                        <Crown className="h-5 w-5 shrink-0" />
+                        <h3 className="text-sm font-black">{arabicVipLabel(pkg.name)}</h3>
                       </div>
 
                       {isLocked && (
@@ -309,25 +309,25 @@ function InvestmentPage() {
                         </span>
                       )}
 
-                      <div className="rounded-xl border border-gold/25 bg-gold/5 px-1.5 py-1.5">
-                        <span className="block text-[9px] font-bold text-muted-foreground sm:text-[10px]">
+                      <div className="rounded-xl border border-gold/25 bg-gold/5 px-3 py-2">
+                        <span className="block text-[10px] font-bold text-muted-foreground">
                           {t("investment.price")}
                         </span>
-                        <span className="block text-base font-black text-gold-gradient sm:text-xl">
+                        <span className="block text-xl font-black text-gold-gradient">
                           {vipMoney(pkg.price)}
                         </span>
                       </div>
 
-                      <div className="rounded-xl border border-border/60 bg-surface/70 px-1 py-1.5">
-                        <span className="block text-[9px] font-bold text-muted-foreground sm:text-[10px]">
+                      <div className="rounded-xl border border-border/60 bg-surface/70 px-3 py-2">
+                        <span className="block text-[10px] font-bold text-muted-foreground">
                           {t("investment.dailyProfit")}
                         </span>
-                        <span className="block text-sm font-black text-gold sm:text-lg">
+                        <span className="block text-lg font-black text-gold">
                           {vipMoney(pkg.dailyProfit)}
                         </span>
                       </div>
 
-                      <div className="mt-auto text-[9px] font-bold text-muted-foreground sm:text-[11px]">
+                      <div className="text-xs font-bold text-muted-foreground">
                         {pkg.dailyTasks} {t("investment.tasksCount")}
                       </div>
 
@@ -335,16 +335,16 @@ function InvestmentPage() {
                         <button
                           type="button"
                           disabled
-                          className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-border/60 bg-surface/50 px-1.5 py-2 text-[9px] font-bold text-muted-foreground cursor-not-allowed sm:text-xs"
+                          className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-border/60 bg-surface/50 px-4 py-2 text-xs font-bold text-muted-foreground cursor-not-allowed"
                         >
                           <Lock className="h-3 w-3" /> {t("investment.unavailable")}
                         </button>
                       ) : isCurrent ? (
-                        <span className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-success/40 bg-success/20 px-1.5 py-2 text-[9px] font-bold text-success sm:text-xs">
+                        <span className="mt-1 inline-flex w-full items-center justify-center gap-1 rounded-xl border border-success/40 bg-success/20 px-4 py-2 text-xs font-bold text-success">
                           <Check className="h-3.5 w-3.5" /> {t("investment.activePackage")}
                         </span>
                       ) : isOwned ? (
-                        <span className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-border bg-surface px-1.5 py-2 text-[9px] font-bold text-muted-foreground sm:text-xs">
+                        <span className="mt-1 inline-flex w-full items-center justify-center rounded-xl border border-border bg-surface px-4 py-2 text-xs font-bold text-muted-foreground">
                           {t("investment.previouslyOwned")}
                         </span>
                       ) : (
@@ -352,7 +352,7 @@ function InvestmentPage() {
                           type="button"
                           disabled={buyMutation.isPending}
                           onClick={() => buyMutation.mutate({ id: pkg.id, level: pkg.level })}
-                          className="mt-1 inline-flex w-full items-center justify-center rounded-xl brand-gradient px-1.5 py-2 text-[9px] font-black text-primary-foreground shadow-glow active:scale-95 transition-all sm:text-xs"
+                          className="mt-1 inline-flex w-full items-center justify-center rounded-xl brand-gradient px-4 py-2 text-xs font-black text-primary-foreground shadow-glow active:scale-95 transition-all"
                         >
                           {buyMutation.isPending
                             ? t("common.loading")

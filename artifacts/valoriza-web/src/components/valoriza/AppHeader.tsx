@@ -101,34 +101,33 @@ export function AppHeader({
     <>
       <header
         id="app-main-header"
-        className="sticky top-0 z-40 border-b border-border/80 bg-background/95 md:backdrop-blur-md"
+        className="sticky top-0 z-40 border-b border-border/80 bg-background/95 backdrop-blur-md transition-colors"
       >
-        <div className="mx-auto flex w-full min-w-0 max-w-7xl items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-2.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-3 sm:px-6 py-2 sm:py-2.5">
           {/* Left section: Hamburger (mobile) + Brand Logo */}
-          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Hamburger Menu Button (Mobile only) */}
             <button
               id="header-hamburger-btn"
               type="button"
               onClick={handleToggleMenu}
               aria-label={t("nav.home")}
-              className="flex lg:hidden h-9 w-9 items-center justify-center rounded-xl bg-surface/80 border border-border text-foreground hover:border-cyan-glow transition-all active:scale-95"
+              className="flex md:hidden h-8 w-8 items-center justify-center rounded-xl bg-surface/80 border border-border text-foreground hover:border-cyan-glow transition-all active:scale-95"
             >
               <Menu className="h-4 w-4 text-cyan-glow" />
             </button>
 
             {/* Valoriza Brand Logo */}
-            <Link to="/home" aria-label="Valoriza" className="flex shrink-0 items-center">
-              <span className="min-[380px]:hidden"><Logo size="sm" variant="mark" /></span>
-              <span className="hidden min-[380px]:block"><Logo size="sm" /></span>
+            <Link to="/home" className="flex items-center">
+              <Logo size="sm" />
             </Link>
           </div>
 
           {/* Center section: Desktop Navigation Bar (Visible on md+ screens) */}
-          <nav className="hidden lg:flex min-w-0 items-center gap-1 xl:gap-2">
+          <nav className="hidden md:flex items-center gap-1 lg:gap-2">
             <Link
               to="/home"
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
               activeProps={{
                 className: "bg-surface text-cyan-glow font-black border-b-2 border-cyan-glow",
               }}
@@ -139,7 +138,7 @@ export function AppHeader({
 
             <Link
               to="/investment"
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
               activeProps={{
                 className: "bg-surface text-gold font-black border-b-2 border-gold",
               }}
@@ -150,7 +149,7 @@ export function AppHeader({
 
             <Link
               to="/team"
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
               activeProps={{
                 className: "bg-surface text-primary font-black border-b-2 border-primary",
               }}
@@ -161,7 +160,7 @@ export function AppHeader({
 
             <Link
               to="/tasks"
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
               activeProps={{
                 className: "bg-surface text-purple-400 font-black border-b-2 border-purple-400",
               }}
@@ -172,7 +171,7 @@ export function AppHeader({
 
             <Link
               to="/rewards"
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 xl:px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-foreground/80 hover:text-foreground hover:bg-surface transition-all"
               activeProps={{
                 className: "bg-surface text-pink-400 font-black border-b-2 border-pink-400",
               }}
@@ -184,7 +183,7 @@ export function AppHeader({
             {isAdmin && (
               <Link
                 to="/admin"
-                className="flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-300 hover:bg-surface transition-all border border-amber-500/25 bg-amber-500/5"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold text-amber-300 hover:bg-surface transition-all border border-amber-500/25 bg-amber-500/5"
                 activeProps={{
                   className: "bg-surface text-amber-300 font-black border-b-2 border-amber-400",
                 }}
@@ -196,10 +195,10 @@ export function AppHeader({
           </nav>
 
           {/* Right Side Controls: Balance snapshot (desktop), VIP, Theme, Language, Notifications */}
-          <div className="flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {/* Desktop Balance Snapshot */}
             {balance !== undefined && (
-              <div className="hidden xl:flex shrink-0 whitespace-nowrap items-center gap-1.5 rounded-full border border-border/80 bg-surface/60 px-3 py-1 text-xs">
+              <div className="hidden lg:flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/60 px-3 py-1 text-xs">
                 <span className="text-muted-foreground text-[11px]">{t("common.balance")}:</span>
                 <span className="font-extrabold text-gold-gradient">${balance.toFixed(2)}</span>
               </div>
@@ -208,7 +207,7 @@ export function AppHeader({
             {vipLevel !== undefined && vipLevel > 0 && (
               <span
                 id="header-vip-badge"
-                className="hidden min-[400px]:flex shrink-0 whitespace-nowrap items-center gap-1 rounded-full border border-vip/50 bg-vip/15 px-2 py-0.5 text-[10px] font-extrabold text-vip-soft"
+                className="flex items-center gap-1 rounded-full border border-vip/50 bg-vip/15 px-2 py-0.5 text-[10px] font-extrabold text-vip-soft shadow-[0_0_10px_oklch(0.72_0.17_310/0.3)]"
               >
                 <Crown className="h-3 w-3 text-gold" />
                 المستوى المميز {vipLevel}
@@ -216,7 +215,7 @@ export function AppHeader({
             )}
 
             {/* Language Switcher */}
-            <LanguageSwitcher compact={true} className="shrink-0" />
+            <LanguageSwitcher compact={true} />
 
             {/* Theme Toggle Button */}
             <ThemeToggle />
@@ -227,18 +226,18 @@ export function AppHeader({
               type="button"
               onClick={() => setNotificationsOpen(true)}
               aria-label={t("rewards.title")}
-              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface border border-border/80 text-foreground hover:border-cyan-glow hover:text-cyan-glow transition-colors active:scale-95"
+              className="relative flex h-8 w-8 items-center justify-center rounded-full bg-surface border border-border/80 text-foreground hover:border-cyan-glow hover:text-cyan-glow transition-all active:scale-95"
             >
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-extrabold text-white">
+                <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-extrabold text-white shadow-[0_0_8px_oklch(0.63_0.24_25/0.8)] animate-pulse">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
             </button>
 
             {/* Desktop Account / Logout button */}
-            <div className="hidden md:flex shrink-0 items-center gap-1">
+            <div className="hidden md:flex items-center gap-1">
               <Link
                 to="/account"
                 className="flex items-center gap-1.5 rounded-full border border-border/80 bg-surface/80 px-2.5 py-1 text-xs font-bold text-foreground hover:border-primary transition-all"
@@ -252,7 +251,7 @@ export function AppHeader({
               <Link
                 id="header-about-btn"
                 to="/about"
-                className="hidden xl:flex shrink-0 whitespace-nowrap items-center gap-1 rounded-full border border-cyan-glow/60 bg-surface/60 px-2.5 py-1 text-[11px] font-bold text-cyan-glow hover:border-cyan-glow hover:bg-surface transition-colors"
+                className="hidden sm:flex shrink-0 items-center gap-1 rounded-full border border-cyan-glow/60 bg-surface/60 px-2.5 py-1 text-[11px] font-bold text-cyan-glow hover:border-cyan-glow hover:bg-surface transition-all shadow-[0_0_12px_oklch(0.82_0.14_205/0.25)]"
               >
                 <Info className="h-3.5 w-3.5" />
                 <span>{t("nav.about")}</span>
@@ -269,7 +268,7 @@ export function AppHeader({
       {drawerOpen && (
         <div
           id="header-drawer-overlay"
-          className="fixed inset-0 z-50 flex justify-start bg-black/75 animate-in fade-in"
+          className="fixed inset-0 z-50 flex justify-start bg-black/75 backdrop-blur-sm animate-in fade-in"
           onClick={() => setDrawerOpen(false)}
         >
           <div
@@ -285,7 +284,7 @@ export function AppHeader({
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted-foreground hover:text-foreground"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
                 </button>
