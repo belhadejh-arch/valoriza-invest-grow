@@ -2023,7 +2023,12 @@ app.get("/api/app/notifications", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
     const result = await query(
-      "SELECT id,title_ar,body_ar,link,is_read,created_at FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30",
+      `SELECT id,title_ar,body_ar,link,is_read,created_at,
+              COUNT(*) FILTER (WHERE is_read=false) OVER () AS unread_count
+       FROM notifications
+       WHERE user_id=$1
+       ORDER BY created_at DESC
+       LIMIT 30`,
       [user.id],
     );
     response.json({
@@ -2036,7 +2041,7 @@ app.get("/api/app/notifications", async (request, response, next) => {
         isRead: row.is_read,
         createdAt: row.created_at,
       })),
-      unreadCount: result.rows.filter((row) => !row.is_read).length,
+      unreadCount: Number(result.rows[0]?.unread_count ?? 0),
     });
   } catch (error) {
     next(error);
@@ -2046,14 +2051,29 @@ app.get("/api/app/notifications", async (request, response, next) => {
 app.post("/api/app/notifications/read", async (request, response, next) => {
   try {
     const user = (request as express.Request & { authUser: { id: string } }).authUser;
-    if (request.body?.markAll)
-      await query("UPDATE notifications SET is_read=true WHERE user_id=$1", [user.id]);
-    else
-      await query("UPDATE notifications SET is_read=true WHERE user_id=$1 AND id=$2", [
-        user.id,
-        request.body?.notificationId,
-      ]);
-    response.json({ ok: true });
+    const { markAll, notificationId } = request.body ?? {};
+    let result;
+
+    if (markAll === true) {
+      result = await query(
+        "UPDATE notifications SET is_read=true WHERE user_id=$1 AND is_read=false RETURNING id",
+        [user.id],
+      );
+    } else {
+      if (typeof notificationId !== "string" || !notificationId.trim()) {
+        response.status(400).json({ error: "notificationId or markAll is required" });
+        return;
+      }
+      result = await query(
+        "UPDATE notifications SET is_read=true WHERE user_id=$1 AND id=$2 AND is_read=false RETURNING id",
+        [
+          user.id,
+          notificationId,
+        ],
+      );
+    }
+
+    response.json({ ok: true, markedCount: result.rowCount ?? result.rows.length });
   } catch (error) {
     next(error);
   }

@@ -84,7 +84,7 @@ export const getUserNotifications = createServerFn({ method: "GET" }).handler(()
 export const markNotificationAsRead = createServerFn({ method: "POST" })
   .validator((data: { notificationId?: string; markAll?: boolean }) => data)
   .handler(({ data }) =>
-    serverBackendRequest("/api/app/notifications/read", {
+    serverBackendRequest<{ ok: boolean; markedCount: number }>("/api/app/notifications/read", {
       method: "POST",
       body: JSON.stringify(data),
     }),

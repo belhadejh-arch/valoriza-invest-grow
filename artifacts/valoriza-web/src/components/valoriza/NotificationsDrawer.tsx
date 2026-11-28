@@ -15,11 +15,19 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 import {
   getUserNotifications,
   markNotificationAsRead,
   type AppNotification,
 } from "@/lib/valoriza-tasks.functions";
+
+const notificationsQueryKey = ["user-notifications"] as const;
+
+type NotificationsData = {
+  notifications: AppNotification[];
+  unreadCount: number;
+};
 
 interface NotificationsDrawerProps {
   open: boolean;
@@ -60,9 +68,10 @@ function formatRelativeTime(dateStr: string) {
 export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { t } = useI18n();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["user-notifications"],
+    queryKey: notificationsQueryKey,
     queryFn: () => getUserNotifications(),
     enabled: open,
     staleTime: 30_000,
@@ -72,8 +81,44 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
 
   const markMutation = useMutation({
     mutationFn: markNotificationAsRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user-notifications"] });
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: notificationsQueryKey });
+      const previousData = queryClient.getQueryData<NotificationsData>(notificationsQueryKey);
+      if (!previousData) return { previousData };
+
+      const wasUnread = variables.markAll
+        ? previousData.unreadCount > 0
+        : previousData.notifications.some(
+            (notification) => notification.id === variables.notificationId && !notification.isRead,
+          );
+      const notifications = previousData.notifications.map((notification) => {
+        if (variables.markAll || notification.id === variables.notificationId) {
+          return { ...notification, isRead: true };
+        }
+        return notification;
+      });
+
+      queryClient.setQueryData<NotificationsData>(notificationsQueryKey, {
+        notifications,
+        unreadCount: variables.markAll
+          ? 0
+          : Math.max(0, previousData.unreadCount - (wasUnread ? 1 : 0)),
+      });
+
+      return { previousData };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousData) {
+        queryClient.setQueryData(notificationsQueryKey, context.previousData);
+      }
+      toast.error(t("common.error"));
+      void queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
+    },
+    onSuccess: async (_result, variables) => {
+      await queryClient.invalidateQueries({ queryKey: notificationsQueryKey });
+      if (variables.markAll) {
+        toast.success("تم تحديد جميع الإشعارات كمقروءة");
+      }
     },
   });
 
@@ -92,10 +137,9 @@ export function NotificationsDrawer({ open, onClose }: NotificationsDrawerProps)
     }
   };
 
-  const handleMarkAllRead = async () => {
-    if (unreadCount === 0) return;
-    await markMutation.mutateAsync({ markAll: true });
-    toast.success("تم تحديد جميع الإشعارات كمقروءة");
+  const handleMarkAllRead = () => {
+    if (unreadCount === 0 || markMutation.isPending) return;
+    markMutation.mutate({ markAll: true });
   };
 
   return (
